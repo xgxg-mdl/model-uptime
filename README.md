@@ -31,11 +31,23 @@ docker compose up -d
 
 首次启动自动生成 `/data/config.yaml`（空服务列表）。在配置页添加监控目标，或直接编辑配置文件后重启。
 
-生产环境建议在 `.env` 中固定版本，例如：
+### 发布镜像
 
-```dotenv
-MODEL_UPTIME_TAG=0.1.0
+镜像只在推送版本 tag 时构建。发布新版本：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
 ```
+
+tag 推送后 GitHub Actions 自动构建并发布到 GHCR，生成以下标签：
+
+- `ghcr.io/xgxg-mdl/model-uptime:latest`
+- `ghcr.io/xgxg-mdl/model-uptime:0.1.0`
+- `ghcr.io/xgxg-mdl/model-uptime:0.1`
+- `ghcr.io/xgxg-mdl/model-uptime:0`
+
+服务器固定版本：在 `.env` 中设置 `MODEL_UPTIME_TAG=0.1.0`，然后 `docker compose pull && docker compose up -d`。
 
 常用运维命令：
 
