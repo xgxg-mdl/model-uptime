@@ -1,20 +1,16 @@
-# model-uptime 一键部署
-# 用法：docker compose up -d --build
-# 管理令牌：编辑 .env（复制自 .env.example）设置 ADMIN_TOKEN
+# model-uptime image deployment
+# Pulls ghcr.io/xgxg-mdl/model-uptime directly; no source checkout is required.
 services:
   model-uptime:
-    build: .
-    image: model-uptime:latest
+    image: ghcr.io/xgxg-mdl/model-uptime:${MODEL_UPTIME_TAG:-latest}
     container_name: model-uptime
     ports:
-      - "8080:8080"
+      - "${HOST_PORT:-8080}:8080"
     environment:
-      # 管理令牌：优先从 .env 读取；未设置时容器内启动会生成随机令牌并打印日志
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
-      - PORT=8080
-      - DATA_DIR=/data
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      PORT: "8080"
+      DATA_DIR: /data
     volumes:
-      # 命名卷：SQLite 数据库 + config.yaml 持久化（Docker 会按镜像内所有权初始化，非 root 可写）
       - model-uptime-data:/data
     restart: unless-stopped
 

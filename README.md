@@ -7,31 +7,49 @@
 - **配置页**：在线管理监控目标与页面显示配置（标题、历史窗口、统计维度开关），修改即时热重载
 - **Docker Compose 一键部署**：Go 单二进制 + SQLite，最终镜像约 15MB
 
-## 服务器部署（Docker Compose）
+## 服务器部署（预构建镜像）
 
-在服务器上克隆仓库后：
+服务器无需安装 Go，也无需克隆源码。创建部署目录并准备 Compose 文件：
 
 ```bash
-cp .env.example .env        # 修改 ADMIN_TOKEN
-docker compose up -d --build
+mkdir model-uptime && cd model-uptime
+curl -fsSLO https://raw.githubusercontent.com/xgxg-mdl/model-uptime/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/xgxg-mdl/model-uptime/main/.env.example
+mv .env.example .env
 ```
 
+编辑 `.env`，至少设置一个强管理员密码；然后拉取并启动镜像：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+- 镜像：`ghcr.io/xgxg-mdl/model-uptime:latest`
 - 状态页：`http://<服务器>:8080/`
 - 配置页：`http://<服务器>:8080/admin/`
 
-首次启动自动生成 `data/config.yaml`（空服务列表）。在配置页添加监控目标，或直接编辑配置文件后重启。
+首次启动自动生成 `/data/config.yaml`（空服务列表）。在配置页添加监控目标，或直接编辑配置文件后重启。
+
+生产环境建议在 `.env` 中固定版本，例如：
+
+```dotenv
+MODEL_UPTIME_TAG=0.1.0
+```
 
 常用运维命令：
 
 ```bash
-docker compose logs -f          # 查看日志
-docker compose restart          # 重启
+docker compose logs -f                 # 查看日志
 docker compose pull && docker compose up -d   # 更新镜像
+docker compose restart                 # 重启
 ```
+
+配置和探测历史保存在 Docker 命名卷 `model-uptime-data` 中。升级镜像不会删除数据；不要执行 `docker compose down -v`，除非确认要删除所有配置和历史。
 
 > 镜像内以非 root（nobody, uid 65534）运行。使用命名卷时 entrypoint 会自动初始化目录权限；若改用绑定挂载（`./data:/data`），需保证宿主目录对 uid 65534 可写：`sudo chown -R 65534:65534 data`。
 
-> 管理密码优先级：环境变量 `ADMIN_TOKEN` > 配置文件 `admin_token`。两者均为空（默认）时，**首次访问 `/admin/` 会在页面设置管理密码**，设置后写入 `data/config.yaml` 持久化，之后用该密码登录。也可直接在 `.env` 或配置文件里预设。
+> 管理密码优先级：环境变量 `ADMIN_TOKEN` > 配置文件 `admin_token`。两者均为空（默认）时，**首次访问 `/admin/` 会在页面设置管理密码**，设置后写入 `/data/config.yaml` 持久化，之后用该密码登录。
 
 ## 本地运行
 
