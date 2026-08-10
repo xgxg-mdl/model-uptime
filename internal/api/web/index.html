@@ -285,9 +285,13 @@
 
       <div class="block">
         <div class="line">
-          <span class="prompt">~ $</span> <span class="cmd">monitor</span> <span class="flag">--watch</span><span class="cmd" id="cmd-models"></span><span class="cursor"></span>
+          <span class="prompt">~ $</span> <span class="cmd">monitor</span> <span class="flag">--watch</span><span id="cmd-models"></span>
         </div>
         <div class="out" id="svc-out"></div>
+      </div>
+
+      <div class="block">
+        <div class="line"><span class="prompt">~ $</span><span class="cursor"></span></div>
       </div>
 
       <div class="foot">
@@ -372,7 +376,14 @@ function renderBarsHtml(service, historyLen) {
 
 function renderServices(services, page) {
   const out = document.getElementById('svc-out');
-  document.getElementById('cmd-models').textContent = ' ' + services.map(s => s.model).join(' ');
+  document.getElementById('cmd-models').innerHTML = services.length
+    ? ' ' + services.map(svc => {
+        const last = svc.last;
+        let cls = 'warn';
+        if (last) cls = last.ok ? 'ok' : 'bad';
+        return `<span class="${cls}">${svc.model}</span>`;
+      }).join(' ')
+    : ' (no services)';
 
   out.innerHTML = services.map(svc => {
     const last = svc.last;
