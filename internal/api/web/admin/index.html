@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>model-uptime · manage</title>
+<style>
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal; font-weight: 400; font-display: swap;
+    src: url('../fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal; font-weight: 700; font-display: swap;
+    src: url('../fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  }
+  :root {
+    --bg: #1a1a1e; --panel: #0d0d10; --line: #24242a; --line2: #2a2a30;
+    --fg: #d4d4d4; --dim: #8a8a94; --mute: #55555e;
+    --ok: #5eff9c; --bad: #ff5e7a; --warn: #ffc857; --info: #7afcff;
+    --accent: #7afcff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 16px 60px;
+    background: var(--bg);
+    background-image: radial-gradient(ellipse at top, #26262d 0%, #1a1a1e 60%, #141418 100%);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; margin-bottom: 20px;
+    background: var(--panel); border: 1px solid var(--line2); border-radius: 10px;
+  }
+  header h1 { font-size: 14px; margin: 0; }
+  header .sub { color: var(--mute); font-size: 11px; margin-left: 10px; }
+  .btn {
+    background: #222228; color: var(--fg); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 6px 12px; font-family: inherit; font-size: 12px;
+    cursor: pointer; transition: filter .1s ease;
+  }
+  .btn:hover { filter: brightness(1.3); }
+  .btn.ok { color: var(--ok); border-color: rgba(94,255,156,.35); }
+  .btn.bad { color: var(--bad); border-color: rgba(255,94,122,.35); }
+  .btn.primary { background: rgba(122,252,255,.12); color: var(--info); border-color: rgba(122,252,255,.4); }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line2); border-radius: 10px;
+    margin-bottom: 20px; overflow: hidden;
+  }
+  .panel > h2 {
+    margin: 0; padding: 10px 16px; font-size: 12px; letter-spacing: .3px;
+    color: var(--dim); background: linear-gradient(to bottom, #3a3a42, #2a2a30);
+    border-bottom: 1px solid var(--line); text-transform: uppercase;
+  }
+  .panel-body { padding: 14px 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--mute); font-weight: 400; font-size: 11px; }
+  tr:last-child td { border-bottom: none; }
+  .tag { color: var(--info); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.on { background: var(--ok); } .dot.off { background: var(--mute); }
+  .actions { display: flex; gap: 6px; }
+  .actions .btn { padding: 3px 8px; font-size: 11px; }
+
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { color: var(--dim); font-size: 11px; }
+  .field input, .field select, .field textarea {
+    background: #15151a; color: var(--fg); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 7px 10px; font-family: inherit; font-size: 12px;
+  }
+  .field textarea { resize: vertical; min-height: 60px; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+  .field .hint { color: var(--mute); font-size: 10px; }
+  .check-row { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px; }
+  .check-row input { accent-color: var(--ok); }
+
+  .form-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 4px; align-items: center; }
+  .test-result { font-size: 12px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line2); flex: 1; }
+  .test-result.ok { color: var(--ok); border-color: rgba(94,255,156,.35); }
+  .test-result.bad { color: var(--bad); border-color: rgba(255,94,122,.35); }
+  .test-result .mute { color: var(--mute); }
+
+  .login-card { max-width: 360px; margin: 80px auto; }
+  .login-card form { display: flex; gap: 10px; }
+  .login-card form.vertical { flex-direction: column; }
+  .login-card input {
+    flex: 1; background: #15151a; color: var(--fg); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 9px 12px; font-family: inherit; font-size: 13px;
+  }
+  .login-card input:focus { outline: none; border-color: var(--accent); }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #000; border: 1px solid rgba(255,255,255,.15); color: var(--fg);
+    padding: 9px 16px; border-radius: 6px; font-size: 12px; z-index: 100;
+    opacity: 0; transition: opacity .2s ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .hidden { display: none; }
+  .empty { color: var(--mute); text-align: center; padding: 20px 0; font-size: 12px; }
+
+  @media (max-width: 640px) {
+    form { grid-template-columns: 1fr; }
+    body { padding: 16px 8px 48px; }
+    .actions { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>model-uptime <span class="sub">manage</span></h1>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/">← status</a>
+      <button class="btn bad" id="logout-btn" hidden>logout</button>
+    </div>
+  </header>
+
+  <!-- 登录视图 -->
+  <div class="panel login-card" id="login-view" hidden>
+    <div class="panel-body">
+      <form id="login-form">
+        <input type="password" id="login-token" placeholder="admin password" autocomplete="current-password" />
+        <button class="btn primary" type="submit">enter</button>
+      </form>
+      <p class="hint" style="color:var(--mute);margin-top:10px;font-size:11px;">令牌在会话中生效（关闭标签页后失效）。</p>
+    </div>
+  </div>
+
+  <!-- 首次设置密码视图（仅当服务未配置管理密码时显示） -->
+  <div class="panel login-card" id="setup-view" hidden>
+    <div class="panel-body">
+      <form class="vertical" id="setup-form">
+        <input type="password" id="setup-token" placeholder="new admin password（至少 8 位）" autocomplete="new-password" />
+        <input type="password" id="setup-confirm" placeholder="confirm password" autocomplete="new-password" />
+        <button class="btn primary" type="submit">set password</button>
+      </form>
+      <p class="hint" style="color:var(--mute);margin-top:10px;font-size:11px;">首次部署：设置后将写入配置文件持久化，之后用该密码登录。</p>
+    </div>
+  </div>
+
+  <!-- 主视图 -->
+  <main id="app-view" hidden>
+    <!-- 服务管理 -->
+    <section class="panel">
+      <h2>monitor services</h2>
+      <div class="panel-body">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+          <button class="btn primary" id="new-btn">+ new service</button>
+        </div>
+        <table>
+          <thead><tr><th>name</th><th>protocol</th><th>model</th><th>provider</th><th>interval</th><th>enabled</th><th></th></tr></thead>
+          <tbody id="svc-table"><tr><td colspan="7" class="empty">loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 服务编辑表单 -->
+    <section class="panel hidden" id="editor">
+      <h2 id="editor-title">new service</h2>
+      <div class="panel-body">
+        <form id="svc-form">
+          <input type="hidden" id="f-id" />
+          <div class="field">
+            <label>ID（留空自动生成）</label>
+            <input id="f-id-input" placeholder="auto" autocomplete="off" />
+            <span class="hint">唯一标识，创建后不可修改</span>
+          </div>
+          <div class="field">
+            <label>Name *</label>
+            <input id="f-name" required autocomplete="off" />
+            <span class="hint">状态页显示的模型名</span>
+          </div>
+          <div class="field">
+            <label>Protocol *</label>
+            <select id="f-protocol">
+              <option value="chat">chat — OpenAI chat/completions</option>
+              <option value="response">response — OpenAI responses</option>
+              <option value="message">message — Anthropic messages</option>
+              <option value="http">http — generic</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Provider</label>
+            <input id="f-provider" placeholder="OpenAI / Anthropic / xAI …" autocomplete="off" />
+            <span class="hint">仅展示用标签</span>
+          </div>
+          <div class="field llm">
+            <label>Model</label>
+            <input id="f-model" placeholder="gpt-4o" autocomplete="off" />
+          </div>
+          <div class="field full">
+            <label>Base URL *</label>
+            <input id="f-base" required autocomplete="off" placeholder="https://api.openai.com/v1" />
+            <span class="hint">http 协议填完整地址；LLM 协议可含或不含 /v1，自动补全</span>
+          </div>
+          <div class="field">
+            <label>API Key</label>
+            <input id="f-key" type="password" placeholder="留空保持不变" autocomplete="new-password" />
+            <span class="hint">编辑时留空保留原密钥</span>
+          </div>
+          <div class="field llm">
+            <label>Path override</label>
+            <input id="f-path" placeholder="可选，覆盖默认端点" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Interval (s)</label>
+            <input id="f-interval" type="number" min="5" step="1" value="60" />
+          </div>
+          <div class="field">
+            <label>Timeout (s)</label>
+            <input id="f-timeout" type="number" min="1" max="300" step="1" value="15" />
+          </div>
+          <div class="field http hidden">
+            <label>Method</label>
+            <select id="f-method"><option>GET</option><option>POST</option><option>HEAD</option><option>PUT</option><option>DELETE</option></select>
+          </div>
+          <div class="field http hidden">
+            <label>Expect Status</label>
+            <input id="f-expect" type="number" min="100" max="599" value="200" />
+          </div>
+          <div class="field http hidden">
+            <label>Headers (JSON)</label>
+            <textarea id="f-headers" placeholder='{"X-Key": "value"}'></textarea>
+          </div>
+          <div class="field http hidden full">
+            <label>Body</label>
+            <textarea id="f-body" placeholder="可选请求体"></textarea>
+          </div>
+          <div class="field check-row">
+            <input type="checkbox" id="f-enabled" checked />
+            <label for="f-enabled">enabled</label>
+          </div>
+          <div class="form-actions">
+            <button class="btn primary" type="submit" id="save-btn">save</button>
+            <button class="btn" type="button" id="cancel-btn">cancel</button>
+            <button class="btn" type="button" id="test-btn">test connection</button>
+            <span class="test-result hidden" id="test-result"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 页面显示配置 -->
+    <section class="panel">
+      <h2>page display</h2>
+      <div class="panel-body">
+        <form id="page-form">
+          <div class="field">
+            <label>Title</label>
+            <input id="p-title" autocomplete="off" />
+            <span class="hint">浏览器标签标题</span>
+          </div>
+          <div class="field">
+            <label>Subtitle</label>
+            <input id="p-subtitle" autocomplete="off" />
+            <span class="hint">终端标题栏文本</span>
+          </div>
+          <div class="field full">
+            <label>Probe Comment</label>
+            <input id="p-comment" autocomplete="off" />
+            <span class="hint">顶部 # 注释行</span>
+          </div>
+          <div class="field">
+            <label>History Length</label>
+            <input id="p-history" type="number" min="1" max="200" step="1" />
+            <span class="hint">状态条数量 / 历史窗口（分钟）</span>
+          </div>
+          <div class="field">
+            <label>Refresh (s)</label>
+            <input id="p-refresh" type="number" min="1" max="60" step="1" />
+            <span class="hint">状态页轮询间隔</span>
+          </div>
+          <div class="field full">
+            <span class="hint" style="color:var(--dim);">统计维度开关：</span>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;">
+              <label class="check-row"><input type="checkbox" id="p-uptime" /> uptime%</label>
+              <label class="check-row"><input type="checkbox" id="p-samples" /> samples</label>
+              <label class="check-row"><input type="checkbox" id="p-latency" /> latency</label>
+              <label class="check-row"><input type="checkbox" id="p-avload" /> avg load</label>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn primary" type="submit">save display config</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN_KEY = 'admin_token';
+let editingID = null;
+
+function token() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
+function logout() { sessionStorage.removeItem(TOKEN_KEY); location.reload(); }
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + token(),
+  }, opts.headers || {});
+  const res = await fetch(path, { ...opts, headers });
+  if (res.status === 401) { logout(); throw new Error('unauthorized'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ---------- 登录 / 首次设置 ----------
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tk = document.getElementById('login-token').value.trim();
+  try {
+    const r = await fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: tk }),
+    });
+    if (!r.ok) { toast('密码无效'); return; }
+    sessionStorage.setItem(TOKEN_KEY, tk);
+    enterApp();
+  } catch (err) { toast(err.message); }
+});
+
+document.getElementById('setup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tk = document.getElementById('setup-token').value.trim();
+  const cf = document.getElementById('setup-confirm').value.trim();
+  if (tk.length < 8) { toast('密码至少 8 个字符'); return; }
+  if (tk !== cf) { toast('两次输入的密码不一致'); return; }
+  try {
+    const r = await fetch('/api/admin/setup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: tk }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); toast(d.error || '设置失败'); return; }
+    sessionStorage.setItem(TOKEN_KEY, tk);
+    enterApp();
+  } catch (err) { toast(err.message); }
+});
+
+// 初始化：已有会话令牌直接进入；否则探测服务端是否已配置密码，
+// 决定显示登录还是首次设置视图。
+async function initView() {
+  if (token()) { enterApp(); return; }
+  let configured = true;
+  try {
+    const r = await fetch('/api/admin/setup-status', { cache: 'no-store' });
+    const d = await r.json();
+    configured = !!d.token_configured;
+  } catch (err) {
+    configured = true; // 探测失败时默认走登录视图
+  }
+  document.getElementById(configured ? 'login-view' : 'setup-view').hidden = false;
+}
+
+function enterApp() {
+  document.getElementById('login-view').hidden = true;
+  document.getElementById('setup-view').hidden = true;
+  document.getElementById('app-view').hidden = false;
+  document.getElementById('logout-btn').hidden = false;
+  loadServices();
+  loadPage();
+}
+
+// ---------- 服务管理 ----------
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function loadServices() {
+  const tbody = document.getElementById('svc-table');
+  try {
+    const data = await api('/api/admin/services');
+    if (!data.services.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">no services yet — add one below</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.services.map(s => `
+      <tr>
+        <td><b>${esc(s.name)}</b> <span class="tag">#${esc(s.id)}</span></td>
+        <td>${esc(s.protocol)}</td>
+        <td>${esc(s.model || '—')}</td>
+        <td>${esc(s.provider || '—')}</td>
+        <td>${s.interval_sec || 60}s</td>
+        <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span>${s.enabled ? 'on' : 'off'}</td>
+        <td><div class="actions">
+          <button class="btn" data-act="edit" data-id="${esc(s.id)}">edit</button>
+          <button class="btn" data-act="test" data-id="${esc(s.id)}">test</button>
+          <button class="btn bad" data-act="del" data-id="${esc(s.id)}">del</button>
+        </div></td>
+      </tr>`).join('');
+    tbody.querySelectorAll('button[data-act]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const svc = data.services.find(x => x.id === btn.dataset.id);
+        if (btn.dataset.act === 'edit') openEditor(svc);
+        else if (btn.dataset.act === 'test') testService(btn.dataset.id);
+        else if (btn.dataset.act === 'del') deleteService(btn.dataset.id);
+      });
+    });
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(err.message)}</td></tr>`;
+  }
+}
+
+function deleteService(id) {
+  if (!confirm('删除服务 ' + id + '？此操作不可恢复。')) return;
+  api('/api/admin/services/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(() => { toast('已删除'); loadServices(); })
+    .catch(err => toast(err.message));
+}
+
+function testService(id) {
+  const el = document.getElementById('test-result');
+  el.hidden = false;
+  el.className = 'test-result';
+  el.textContent = 'probing…';
+  api('/api/admin/services/' + encodeURIComponent(id) + '/test', { method: 'POST' })
+    .then(r => {
+      el.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
+      el.innerHTML = (r.ok ? '✓ OK' : '✗ FAIL') + ` · <span class="mute">${r.latency_ms}ms</span>` +
+        (r.error ? ' · ' + esc(r.error) : '');
+    })
+    .catch(err => { el.className = 'test-result bad'; el.textContent = err.message; });
+}
+
+// ---------- 编辑表单 ----------
+function showHttpFields(protocol) {
+  document.querySelectorAll('.llm').forEach(el => el.classList.toggle('hidden', protocol === 'http'));
+  document.querySelectorAll('.http').forEach(el => el.classList.toggle('hidden', protocol !== 'http'));
+}
+document.getElementById('f-protocol').addEventListener('change', e => showHttpFields(e.target.value));
+
+function openEditor(svc) {
+  editingID = svc.id;
+  document.getElementById('editor').classList.remove('hidden');
+  document.getElementById('editor-title').textContent = 'edit service · ' + svc.id;
+  document.getElementById('f-id-input').value = svc.id;
+  document.getElementById('f-id-input').disabled = true;
+  document.getElementById('f-name').value = svc.name || '';
+  document.getElementById('f-provider').value = svc.provider || '';
+  document.getElementById('f-protocol').value = svc.protocol || 'chat';
+  document.getElementById('f-model').value = svc.model || '';
+  document.getElementById('f-base').value = svc.base_url || '';
+  document.getElementById('f-key').value = '';      // 留空=保留
+  document.getElementById('f-path').value = svc.path || '';
+  document.getElementById('f-interval').value = svc.interval_sec || 60;
+  document.getElementById('f-timeout').value = svc.timeout_sec || 15;
+  document.getElementById('f-enabled').checked = svc.enabled;
+  document.getElementById('f-method').value = (svc.method || 'GET').toUpperCase();
+  document.getElementById('f-expect').value = svc.expect_status || 200;
+  document.getElementById('f-headers').value = svc.headers ? JSON.stringify(svc.headers, null, 2) : '';
+  document.getElementById('f-body').value = svc.body || '';
+  showHttpFields(svc.protocol);
+  document.getElementById('test-result').hidden = true;
+  document.getElementById('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openNew() {
+  editingID = null;
+  document.getElementById('editor').classList.remove('hidden');
+  document.getElementById('editor-title').textContent = 'new service';
+  document.getElementById('f-id-input').value = '';
+  document.getElementById('f-id-input').disabled = false;
+  ['f-name','f-provider','f-model','f-base','f-key','f-path','f-headers','f-body'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-protocol').value = 'chat';
+  document.getElementById('f-interval').value = 60;
+  document.getElementById('f-timeout').value = 15;
+  document.getElementById('f-enabled').checked = true;
+  document.getElementById('f-method').value = 'GET';
+  document.getElementById('f-expect').value = 200;
+  showHttpFields('chat');
+  document.getElementById('test-result').hidden = true;
+  document.getElementById('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('new-btn').addEventListener('click', openNew);
+document.getElementById('cancel-btn').addEventListener('click', () => document.getElementById('editor').classList.add('hidden'));
+document.getElementById('test-btn').addEventListener('click', () => {
+  const id = editingID;
+  if (!id) { toast('先保存服务再测试'); return; }
+  testService(id);
+});
+
+function collectService() {
+  const headersRaw = document.getElementById('f-headers').value.trim();
+  let headers;
+  if (headersRaw) {
+    try { headers = JSON.parse(headersRaw); }
+    catch { throw new Error('Headers 不是合法 JSON'); }
+  }
+  const protocol = document.getElementById('f-protocol').value;
+  const svc = {
+    id: document.getElementById('f-id-input').value.trim(),
+    name: document.getElementById('f-name').value.trim(),
+    provider: document.getElementById('f-provider').value.trim(),
+    protocol,
+    model: protocol === 'http' ? '' : document.getElementById('f-model').value.trim(),
+    base_url: document.getElementById('f-base').value.trim(),
+    api_key: document.getElementById('f-key').value,
+    path: protocol === 'http' ? '' : document.getElementById('f-path').value.trim(),
+    interval_sec: parseInt(document.getElementById('f-interval').value) || 60,
+    timeout_sec: parseInt(document.getElementById('f-timeout').value) || 15,
+    enabled: document.getElementById('f-enabled').checked,
+    method: protocol === 'http' ? document.getElementById('f-method').value : '',
+    expect_status: protocol === 'http' ? (parseInt(document.getElementById('f-expect').value) || 200) : 0,
+    headers: protocol === 'http' ? headers : undefined,
+    body: protocol === 'http' ? document.getElementById('f-body').value : '',
+  };
+  return svc;
+}
+
+document.getElementById('svc-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  let svc;
+  try { svc = collectService(); }
+  catch (err) { toast(err.message); return; }
+  try {
+    if (editingID) {
+      await api('/api/admin/services/' + encodeURIComponent(editingID), { method: 'PUT', body: JSON.stringify(svc) });
+      toast('已保存');
+    } else {
+      await api('/api/admin/services', { method: 'POST', body: JSON.stringify(svc) });
+      toast('已创建');
+    }
+    loadServices();
+  } catch (err) { toast(err.message); }
+});
+
+// ---------- 页面显示配置 ----------
+async function loadPage() {
+  try {
+    const p = await api('/api/admin/page');
+    document.getElementById('p-title').value = p.title || '';
+    document.getElementById('p-subtitle').value = p.subtitle || '';
+    document.getElementById('p-comment').value = p.probe_comment || '';
+    document.getElementById('p-history').value = p.history_len || 60;
+    document.getElementById('p-refresh').value = p.refresh_sec || 5;
+    document.getElementById('p-uptime').checked = !!p.show_uptime;
+    document.getElementById('p-samples').checked = !!p.show_samples;
+    document.getElementById('p-latency').checked = !!p.show_latency;
+    document.getElementById('p-avload').checked = !!p.show_avg_load;
+  } catch (err) { toast(err.message); }
+}
+
+document.getElementById('page-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    title: document.getElementById('p-title').value.trim(),
+    subtitle: document.getElementById('p-subtitle').value.trim(),
+    probe_comment: document.getElementById('p-comment').value.trim(),
+    history_len: parseInt(document.getElementById('p-history').value) || 60,
+    refresh_sec: parseInt(document.getElementById('p-refresh').value) || 5,
+    show_uptime: document.getElementById('p-uptime').checked,
+    show_samples: document.getElementById('p-samples').checked,
+    show_latency: document.getElementById('p-latency').checked,
+    show_avg_load: document.getElementById('p-avload').checked,
+  };
+  try {
+    await api('/api/admin/page', { method: 'PUT', body: JSON.stringify(body) });
+    toast('显示配置已保存');
+  } catch (err) { toast(err.message); }
+});
+
+document.getElementById('logout-btn').addEventListener('click', logout);
+
+// 初始化：进入登录 / 首次设置视图
+initView();
+</script>
+</body>
+</html>

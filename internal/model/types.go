@@ -1,0 +1,184 @@
+// Package model 定义领域模型：监控目标、探测结果、页面显示配置。
+package model
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+// 支持的协议类型。
+const (
+	ProtocolChat     = "chat"     // OpenAI Chat Completions
+	ProtocolResponse = "response" // OpenAI Responses
+	ProtocolMessage  = "message"  // Anthropic Messages
+	ProtocolHTTP     = "http"     // 通用 HTTP
+)
+
+// APIKeySentinel 表示"编辑时保持原密钥不变"的哨兵值。
+// 配置页编辑表单留空或填写该值时，更新接口保留旧密钥。
+const APIKeySentinel = "***unchanged***"
+
+// Service 是一个监控目标。字段同时用于 YAML 配置文件和配置页 JSON API。
+type Service struct {
+	ID          string `yaml:"id" json:"id"`
+	Name        string `yaml:"name" json:"name"`                             // 状态页显示的模型名
+	Provider    string `yaml:"provider,omitempty" json:"provider,omitempty"` // 提供商标签
+	Protocol    string `yaml:"protocol" json:"protocol"`                     // chat|response|message|http
+	Model       string `yaml:"model,omitempty" json:"model,omitempty"`       // 发给 API 的模型 ID
+	BaseURL     string `yaml:"base_url" json:"base_url"`
+	APIKey      string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
+	Path        string `yaml:"path,omitempty" json:"path,omitempty"` // 覆盖默认请求路径
+	IntervalSec int    `yaml:"interval_sec,omitempty" json:"interval_sec,omitempty"`
+	TimeoutSec  int    `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
+	// 指针而非 bool：区分"未配置"（nil，默认启用）与"显式禁用"（false）
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// http 协议专用
+	Method       string            `yaml:"method,omitempty" json:"method,omitempty"`
+	Headers      map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	Body         string            `yaml:"body,omitempty" json:"body,omitempty"`
+	ExpectStatus int               `yaml:"expect_status,omitempty" json:"expect_status,omitempty"`
+}
+
+// IsEnabled 返回服务是否启用（未显式配置时默认启用）。
+func (s *Service) IsEnabled() bool { return s.Enabled == nil || *s.Enabled }
+
+// Normalize 填充默认值并清理字段。
+func (s *Service) Normalize() {
+	s.ID = strings.TrimSpace(s.ID)
+	s.Name = strings.TrimSpace(s.Name)
+	s.Provider = strings.TrimSpace(s.Provider)
+	s.Protocol = strings.ToLower(strings.TrimSpace(s.Protocol))
+	s.BaseURL = strings.TrimRight(strings.TrimSpace(s.BaseURL), "/")
+	s.Method = strings.ToUpper(strings.TrimSpace(s.Method))
+	if s.IntervalSec <= 0 {
+		s.IntervalSec = 60
+	}
+	if s.TimeoutSec <= 0 {
+		s.TimeoutSec = 15
+	}
+	if s.Protocol == ProtocolHTTP {
+		if s.Method == "" {
+			s.Method = "GET"
+		}
+		if s.ExpectStatus == 0 {
+			s.ExpectStatus = 200
+		}
+	}
+}
+
+// Validate 校验服务定义，返回首个错误。
+func (s *Service) Validate() error {
+	if s.ID == "" {
+		return fmt.Errorf("id 不能为空")
+	}
+	if s.Name == "" {
+		return fmt.Errorf("服务 %q: name 不能为空", s.ID)
+	}
+	switch s.Protocol {
+	case ProtocolChat, ProtocolResponse, ProtocolMessage, ProtocolHTTP:
+	default:
+		return fmt.Errorf("服务 %q: 不支持的协议 %q（支持 chat|response|message|http）", s.ID, s.Protocol)
+	}
+	if s.Protocol == ProtocolHTTP {
+		if s.BaseURL == "" {
+			return fmt.Errorf("服务 %q: http 协议需要 base_url", s.ID)
+		}
+		if s.ExpectStatus < 100 || s.ExpectStatus > 599 {
+			return fmt.Errorf("服务 %q: expect_status 必须是合法 HTTP 状态码", s.ID)
+		}
+	} else {
+		if s.BaseURL == "" {
+			return fmt.Errorf("服务 %q: 需要 base_url", s.ID)
+		}
+		if s.Model == "" {
+			return fmt.Errorf("服务 %q: %s 协议需要 model", s.ID, s.Protocol)
+		}
+	}
+	if s.IntervalSec < 5 {
+		return fmt.Errorf("服务 %q: interval_sec 不能小于 5", s.ID)
+	}
+	if s.TimeoutSec < 1 || s.TimeoutSec > 300 {
+		return fmt.Errorf("服务 %q: timeout_sec 需在 1~300 之间", s.ID)
+	}
+	return nil
+}
+
+// ProbeResult 是一次探测的运行时结果。字段由调度器与状态 API 共用。
+type ProbeResult struct {
+	OK        bool   `json:"ok"`
+	TS        int64  `json:"ts"`         // unix 秒
+	LatencyMS int64  `json:"latency_ms"` // 端到端耗时；0 表示极快响应，不省略
+	Error     string `json:"error,omitempty"`
+}
+
+// PageConfig 是探针页的显示配置（"统计维度"开关所在）。
+type PageConfig struct {
+	Title        string `yaml:"title" json:"title"`
+	Subtitle     string `yaml:"subtitle" json:"subtitle"`
+	ProbeComment string `yaml:"probe_comment" json:"probe_comment"`
+	HistoryLen   int    `yaml:"history_len" json:"history_len"`
+	RefreshSec   int    `yaml:"refresh_sec" json:"refresh_sec"`
+	ShowUptime   bool   `yaml:"show_uptime" json:"show_uptime"`
+	ShowSamples  bool   `yaml:"show_samples" json:"show_samples"`
+	ShowLatency  bool   `yaml:"show_latency" json:"show_latency"`
+	ShowAvgLoad  bool   `yaml:"show_avg_load" json:"show_avg_load"`
+}
+
+// Normalize 填充页面显示配置的默认值。
+func (p *PageConfig) Normalize() {
+	if p.Title == "" {
+		p.Title = "model-uptime // status"
+	}
+	if p.Subtitle == "" {
+		p.Subtitle = "model-uptime"
+	}
+	if p.ProbeComment == "" {
+		p.ProbeComment = "model-uptime service monitor · probing every 60s"
+	}
+	if p.HistoryLen <= 0 {
+		p.HistoryLen = 60
+	}
+	if p.RefreshSec <= 0 {
+		p.RefreshSec = 5
+	}
+	if !p.ShowUptime && !p.ShowSamples && !p.ShowLatency && !p.ShowAvgLoad {
+		// 全关会导致页面无统计维度，回退到全开
+		p.ShowUptime, p.ShowSamples, p.ShowLatency, p.ShowAvgLoad = true, true, true, true
+	}
+}
+
+// Validate 校验页面配置。
+func (p *PageConfig) Validate() error {
+	if p.HistoryLen < 1 || p.HistoryLen > 200 {
+		return fmt.Errorf("history_len 需在 1~200 之间")
+	}
+	if p.RefreshSec < 1 || p.RefreshSec > 60 {
+		return fmt.Errorf("refresh_sec 需在 1~60 之间")
+	}
+	return nil
+}
+
+// ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
+type ServiceView struct {
+	Model     string        `json:"model"`
+	Provider  string        `json:"provider,omitempty"`
+	UptimePct float64       `json:"uptime_pct"`
+	Last      *ProbeResult  `json:"last"`
+	History   []ProbeResult `json:"history"`
+}
+
+// StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，
+// 额外携带 page 显示配置供前端渲染。
+type StatusResponse struct {
+	GeneratedAt int64         `json:"generated_at"` // unix 秒
+	AllOK       bool          `json:"all_ok"`
+	Page        *PageConfig   `json:"page,omitempty"`
+	Services    []ServiceView `json:"services"`
+}
+
+// JSON 序列化帮助（供测试与调试）。
+func (r ProbeResult) String() string {
+	b, _ := json.Marshal(r)
+	return string(b)
+}

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>model-uptime // status</title>
+<style>
+  /* JetBrains Mono 自托管（OFL-1.1），woff2 位于 fonts/ */
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal; font-weight: 400; font-display: swap;
+    src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal; font-weight: 500; font-display: swap;
+    src: url('fonts/JetBrainsMono-Medium.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal; font-weight: 700; font-display: swap;
+    src: url('fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  }
+
+  :root {
+    --page-bg:    #1a1a1e;
+    --term-bg:    #0d0d10;
+    --titlebar:   #2a2a30;
+    --titlebar-t: #8a8a94;
+
+    --fg:        #d4d4d4;
+    --fg-dim:    #8a8a94;
+    --fg-mute:   #55555e;
+
+    --prompt:    #5eff9c;
+    --cmd:       #e8e8e8;
+    --flag:      #ffc857;
+    --str:       #ff9eb1;
+    --comment:   #5f6268;
+
+    --ok:        #5eff9c;
+    --bad:       #ff5e7a;
+    --warn:      #ffc857;
+    --info:      #7afcff;
+
+    --btn-close:   #ff5f57;
+    --btn-min:     #febc2e;
+    --btn-max:     #28c840;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-bg);
+    background-image: radial-gradient(ellipse at top, #26262d 0%, #1a1a1e 60%, #141418 100%);
+    background-attachment: fixed;
+    color: var(--fg);
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px 60px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .term {
+    width: 100%;
+    max-width: 860px;
+    background: var(--term-bg);
+    border-radius: 10px;
+    box-shadow:
+      0 30px 60px -15px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.04),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .titlebar {
+    background: linear-gradient(to bottom, #3a3a42, #2a2a30);
+    border-bottom: 1px solid rgba(0,0,0,0.4);
+    height: 30px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0 12px;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .lights { display: flex; gap: 8px; }
+  .light {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(0,0,0,0.2);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .light.close { background: var(--btn-close); }
+  .light.min   { background: var(--btn-min); }
+  .light.max   { background: var(--btn-max); }
+  .title-text {
+    color: var(--titlebar-t);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .title-text .sep { color: #55555e; margin: 0 8px; }
+
+  .body {
+    padding: 16px 18px 20px;
+    min-height: 480px;
+    position: relative;
+  }
+  .body::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.012) 0px,
+      rgba(255,255,255,0.012) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    z-index: 2;
+  }
+
+  .line { word-break: break-word; }
+  .block + .block { margin-top: 18px; }
+
+  .prompt  { color: var(--prompt); font-weight: 700; }
+  .cmd     { color: var(--cmd); }
+  .flag    { color: var(--flag); }
+  .str     { color: var(--str); }
+  .comment { color: var(--comment); font-style: italic; }
+  .ok      { color: var(--ok); }
+  .bad     { color: var(--bad); }
+  .warn    { color: var(--warn); }
+  .dim     { color: var(--fg-dim); }
+  .mute    { color: var(--fg-mute); }
+  .bold    { font-weight: 700; }
+
+  .out { margin: 4px 0 0; }
+
+  .bars {
+    display: flex;
+    gap: 2px;
+    width: 100%;
+    height: 22px;
+    align-items: stretch;
+  }
+  .bar {
+    flex: 1 1 0;
+    min-width: 0;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .bar:hover {
+    transform: scaleY(1.12);
+    filter: brightness(1.25);
+  }
+  .bar.ok    { background: var(--ok); }
+  .bar.bad   { background: var(--bad); }
+  .bar.empty { background: #24242a; cursor: default; }
+  .bar.empty:hover { transform: none; filter: none; }
+
+  .svc-meta {
+    display: flex;
+    gap: 14px;
+    color: var(--fg-dim);
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+  .svc-meta b { color: var(--fg); font-weight: 500; }
+  .svc-meta b.ok  { color: var(--ok); }
+  .svc-meta b.bad { color: var(--bad); }
+  .svc-meta b.warn{ color: var(--warn); }
+
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    color: var(--fg-mute);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 7px; height: 14px;
+    background: var(--fg);
+    vertical-align: text-bottom;
+    margin-left: 2px;
+    animation: blink 1.1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .tip {
+    position: fixed;
+    pointer-events: none;
+    background: #000;
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 8px 11px;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--fg);
+    white-space: nowrap;
+    z-index: 200;
+    opacity: 0;
+    transform: translate(-50%, -100%);
+    transition: opacity 0.1s ease;
+    border-radius: 3px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+    max-width: 90vw;
+  }
+  .tip.show { opacity: 1; }
+  .tip .t-k { color: var(--fg-dim); }
+  .tip .t-status.ok  { color: var(--ok); }
+  .tip .t-status.bad { color: var(--bad); }
+
+  .foot {
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(255,255,255,0.06);
+    color: var(--fg-mute);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .foot a { color: var(--fg-dim); text-decoration: none; }
+  .foot a:hover { color: var(--info); }
+
+  @media (max-width: 640px) {
+    body { padding: 12px 8px 32px; font-size: 12px; }
+    .term { border-radius: 8px; }
+    .body { padding: 14px 12px 16px; min-height: 360px; }
+    .titlebar { height: 26px; padding: 0 10px; }
+    .light { width: 10px; height: 10px; }
+    .title-text { font-size: 10px; }
+    .title-text .sep { margin: 0 4px; }
+    .svc-meta { font-size: 11px; gap: 10px; }
+    .bars { gap: 1px; height: 18px; }
+    .axis .mid-label { display: none; }
+    .axis { font-size: 10px; }
+  }
+  @media (max-width: 400px) {
+    .bars { height: 16px; }
+    .tip { font-size: 10px; padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+  <div class="term" role="application" aria-label="model-uptime status terminal">
+    <div class="titlebar">
+      <div class="lights">
+        <span class="light close"></span>
+        <span class="light min"></span>
+        <span class="light max"></span>
+      </div>
+      <div class="title-text">
+        <span class="mute">—</span> <span id="term-subtitle">model-uptime</span> <span class="mute">—</span>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="body">
+      <div class="block">
+        <div class="line"><span class="comment" id="probe-comment"># …</span></div>
+        <div class="line"><span class="comment"># Last login: <span id="login-time">—</span></span></div>
+      </div>
+
+      <div class="block">
+        <div class="line"><span class="prompt">~ $</span> <span class="cmd">uptime</span></div>
+        <div class="out" id="banner-out"><span class="dim">connecting…</span></div>
+      </div>
+
+      <div class="block">
+        <div class="line">
+          <span class="prompt">~ $</span> <span class="cmd">monitor</span> <span class="flag">--watch</span><span class="cmd" id="cmd-models"></span><span class="cursor"></span>
+        </div>
+        <div class="out" id="svc-out"></div>
+      </div>
+
+      <div class="foot">
+        <span>updated <span id="updated">—</span></span>
+        <span>built with go · <a href="/admin/">manage</a></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" id="tip"></div>
+
+<script>
+function pad(n) { return String(n).padStart(2, '0'); }
+function fmtTime(ts) {
+  const d = new Date(ts * 1000);
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fmtTimeShort(ts) {
+  const d = new Date(ts * 1000);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+document.getElementById('login-time').textContent = fmtTime(Math.floor(Date.now()/1000));
+
+const tip = document.getElementById('tip');
+function showTip(e, html) {
+  tip.innerHTML = html;
+  tip.classList.add('show');
+  const rect = e.currentTarget.getBoundingClientRect();
+  let left = rect.left + rect.width/2;
+  const padPx = 8;
+  const maxLeft = window.innerWidth - padPx;
+  if (left < padPx) left = padPx;
+  if (left > maxLeft) left = maxLeft;
+  tip.style.left = left + 'px';
+  tip.style.top  = (rect.top - 8) + 'px';
+}
+function hideTip() { tip.classList.remove('show'); }
+
+// 根据历史窗口生成时间轴标签：-60m … now，中间按 1/4 步进
+function axisLabels(historyLen) {
+  const q = historyLen / 4;
+  return [0, 1, 2, 3, 4].map(i => {
+    const m = Math.round(historyLen - i * q);
+    return m <= 0 ? 'now' : `-${m}m`;
+  });
+}
+
+function renderBanner(data, page) {
+  const out = document.getElementById('banner-out');
+  const n = data.services.length;
+  const now = fmtTimeShort(data.generated_at);
+  const avgUptime = n > 0
+    ? (data.services.reduce((s, x) => s + x.uptime_pct, 0) / n).toFixed(2)
+    : '100.00';
+  const load = page.show_avg_load ? `, <span class="cmd">avg load <span class="${data.all_ok ? 'ok' : 'warn'}">${avgUptime}%</span></span>` : '';
+
+  if (data.all_ok) {
+    out.innerHTML = `<div class="line"><span class="dim">${now}</span> <span class="ok">up,</span> <span class="cmd">${n} services</span>${load}</div>
+<div class="line ok bold" style="margin-top: 4px;">● all systems operational</div>`;
+  } else {
+    const down = data.services.filter(s => s.last && !s.last.ok).length;
+    out.innerHTML = `<div class="line"><span class="dim">${now}</span> <span class="bad">degraded,</span> <span class="cmd">${n - down}/${n} services up</span>${load}</div>
+<div class="line bad bold" style="margin-top: 4px;">● ${down} service${down===1?'':'s'} failing — check logs below</div>`;
+  }
+}
+
+function renderBarsHtml(service, historyLen) {
+  const history = service.history || [];
+  const padN = historyLen - history.length;
+  const parts = [];
+  for (let i = 0; i < padN; i++) {
+    parts.push(`<span class="bar empty" data-empty="1"></span>`);
+  }
+  for (const r of history) {
+    const cls = r.ok ? 'ok' : 'bad';
+    const payload = JSON.stringify(r).replace(/"/g, '&quot;');
+    parts.push(`<span class="bar ${cls}" data-r="${payload}"></span>`);
+  }
+  return `<div class="bars">${parts.join('')}</div>`;
+}
+
+function renderServices(services, page) {
+  const out = document.getElementById('svc-out');
+  document.getElementById('cmd-models').textContent = ' ' + services.map(s => s.model).join(' ');
+
+  out.innerHTML = services.map(svc => {
+    const last = svc.last;
+    let statusCls = 'warn', statusText = 'pending';
+    if (last) {
+      if (last.ok) { statusCls = 'ok'; statusText = 'online'; }
+      else         { statusCls = 'bad'; statusText = 'failing'; }
+    }
+    const uptimeCls = svc.uptime_pct >= 99 ? 'ok' : (svc.uptime_pct >= 95 ? 'warn' : 'bad');
+
+    const meta = [];
+    if (page.show_uptime) meta.push(`<span>uptime <b class="${uptimeCls}">${svc.uptime_pct.toFixed(2)}%</b></span>`);
+    if (page.show_samples) meta.push(`<span>samples <b>${(svc.history || []).length}/${page.history_len}</b></span>`);
+    if (page.show_latency && last) meta.push(`<span>latency <b class="${last.ok ? 'ok' : 'bad'}">${last.latency_ms}ms</b></span>`);
+
+    return `<div class="line" style="margin-top: 8px;"><span class="mute">→</span> <span class="cmd bold">${svc.model}</span> <span class="dim">·</span> <span class="${statusCls}">● ${statusText}</span></div>
+<div class="svc-meta" style="padding-left: 18px;">${meta.join('')}</div>
+<div style="padding-left: 18px; margin-top: 6px;">${renderBarsHtml(svc, page.history_len)}</div>
+<div class="axis" style="padding-left: 18px;">${axisLabels(page.history_len).map((l, i) => i>0 && i<4 ? `<span class="mid-label">${l}</span>` : `<span>${l}</span>`).join('')}</div>`;
+  }).join('');
+
+  out.querySelectorAll('.bar').forEach(bar => {
+    const showFromBar = () => {
+      if (bar.dataset.empty) return;
+      const r = JSON.parse(bar.dataset.r);
+      const statusCls = r.ok ? 'ok' : 'bad';
+      const statusTxt = r.ok ? 'OK' : 'FAIL';
+      const err = r.error ? `<div><span class="t-k">err</span> ${r.error.slice(0,80).replace(/</g,'&lt;')}</div>` : '';
+      const lat = `<div><span class="t-k">lat</span> ${r.latency_ms}ms</div>`;
+      showTip({ currentTarget: bar }, `
+        <div class="t-status ${statusCls} bold">${statusTxt}</div>
+        <div><span class="t-k">at</span>  ${fmtTime(r.ts)}</div>
+        ${lat}
+        ${err}
+      `);
+    };
+    bar.addEventListener('mouseenter', showFromBar);
+    bar.addEventListener('mouseleave', hideTip);
+    // Mobile: tap to show tooltip for 2.5s
+    bar.addEventListener('click', (e) => {
+      if (bar.dataset.empty) return;
+      showFromBar();
+      setTimeout(hideTip, 2500);
+    });
+  });
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/status', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const page = data.page || {};
+    document.title = page.title || 'model-uptime // status';
+    document.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
+    document.getElementById('probe-comment').textContent = '# ' + (page.probe_comment || 'model-uptime service monitor · probing every 60s');
+    renderBanner(data, page);
+    renderServices(data.services, page);
+    document.getElementById('updated').textContent = fmtTimeShort(data.generated_at);
+  } catch (e) {
+    document.getElementById('banner-out').innerHTML = `<div class="line bad bold">● monitor unreachable</div>`;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

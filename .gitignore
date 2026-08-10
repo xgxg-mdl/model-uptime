@@ -1,0 +1,16 @@
+# 运行时数据（SQLite、config.yaml）
+data/
+
+# 环境变量
+.env
+
+# 构建产物
+bin/
+*.exe
+
+# 系统文件
+.DS_Store
+
+# 编辑器
+.idea/
+.vscode/
