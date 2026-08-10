@@ -19,8 +19,8 @@ var webFS embed.FS
 // Options 是 Server 的依赖注入。
 type Options struct {
 	Scheduler  *scheduler.Scheduler
-	ConfigPath string      // config.yaml 路径（admin 修改后原子写回）
-	AdminToken string      // 已生效的管理令牌（env 优先于配置文件）
+	ConfigPath string // config.yaml 路径（admin 修改后原子写回）
+	AdminToken string // 已生效的管理令牌（env 优先于配置文件）
 	Logger     *slog.Logger
 }
 
@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/admin/services/{id}", s.requireAuth(s.handleUpdateService))
 	mux.Handle("DELETE /api/admin/services/{id}", s.requireAuth(s.handleDeleteService))
 	mux.Handle("POST /api/admin/services/{id}/test", s.requireAuth(s.handleTestService))
+	mux.Handle("POST /api/admin/services/{id}/duplicate", s.requireAuth(s.handleDuplicateService))
 	mux.Handle("GET /api/admin/page", s.requireAuth(s.handleGetPage))
 	mux.Handle("PUT /api/admin/page", s.requireAuth(s.handleUpdatePage))
 

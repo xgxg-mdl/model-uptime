@@ -406,6 +406,7 @@ async function loadServices() {
         <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span>${s.enabled ? 'on' : 'off'}</td>
         <td><div class="actions">
           <button class="btn" data-act="edit" data-id="${esc(s.id)}">edit</button>
+          <button class="btn" data-act="copy" data-id="${esc(s.id)}">copy</button>
           <button class="btn" data-act="test" data-id="${esc(s.id)}">test</button>
           <button class="btn bad" data-act="del" data-id="${esc(s.id)}">del</button>
         </div></td>
@@ -414,6 +415,7 @@ async function loadServices() {
       btn.addEventListener('click', () => {
         const svc = data.services.find(x => x.id === btn.dataset.id);
         if (btn.dataset.act === 'edit') openEditor(svc);
+        else if (btn.dataset.act === 'copy') duplicateService(btn.dataset.id);
         else if (btn.dataset.act === 'test') testService(btn.dataset.id);
         else if (btn.dataset.act === 'del') deleteService(btn.dataset.id);
       });
@@ -427,6 +429,12 @@ function deleteService(id) {
   if (!confirm('删除服务 ' + id + '？此操作不可恢复。')) return;
   api('/api/admin/services/' + encodeURIComponent(id), { method: 'DELETE' })
     .then(() => { toast('已删除'); loadServices(); })
+    .catch(err => toast(err.message));
+}
+
+function duplicateService(id) {
+  api('/api/admin/services/' + encodeURIComponent(id) + '/duplicate', { method: 'POST' })
+    .then(() => { toast('已复制'); loadServices(); })
     .catch(err => toast(err.message));
 }
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -114,6 +115,79 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"service": maskService(in)})
+}
+
+// handleDuplicateService 复制一个已存在的服务，生成不冲突的新 id 与 name。
+// 用于"复制"按钮：前端列表里的 api_key 已脱敏，无法拿到明文密钥，
+// 因此复制必须由服务端读取明文配置后深拷贝完成。
+func (s *Server) handleDuplicateService(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	cfg := s.currentConfig()
+	idx := -1
+	for i, ex := range cfg.Services {
+		if ex.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		writeErr(w, http.StatusNotFound, "服务不存在: "+id)
+		return
+	}
+	src := cfg.Services[idx]
+
+	// 深拷贝：headers 是 map 引用，直接赋值会与原服务共享底层 map，
+	// 后续编辑其中一个会污染另一个。
+	dup := src
+	dup.Headers = cloneStringMap(src.Headers)
+	dup.Enabled = cloneBoolPtr(src.Enabled)
+
+	// 生成唯一 id：在原 id 后加 -copy / -copy2 / -copy3 …，避免 slug 碰撞。
+	base := src.ID + "-copy"
+	dup.ID = base
+	for n := 2; ; n++ {
+		taken := false
+		for _, ex := range cfg.Services {
+			if ex.ID == dup.ID {
+				taken = true
+				break
+			}
+		}
+		if !taken {
+			break
+		}
+		dup.ID = fmt.Sprintf("%s%d", base, n)
+	}
+	dup.Name = src.Name + " (copy)"
+
+	cfg.Services = append(cfg.Services, dup)
+	if err := s.updateConfig(&cfg); err != nil {
+		writeErr(w, http.StatusInternalServerError, "保存配置失败: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"service": maskService(dup)})
+}
+
+// cloneStringMap 返回 map 的深拷贝，避免共享底层 map。
+func cloneStringMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+// cloneBoolPtr 返回 *bool 的拷贝，避免复制后两个服务共享同一指针。
+func cloneBoolPtr(b *bool) *bool {
+	if b == nil {
+		return nil
+	}
+	v := *b
+	return &v
 }
 
 // handleDeleteService 删除服务。
