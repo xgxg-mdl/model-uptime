@@ -142,6 +142,7 @@ func (s *Server) handleDuplicateService(w http.ResponseWriter, r *http.Request) 
 	dup := src
 	dup.Headers = cloneStringMap(src.Headers)
 	dup.Enabled = cloneBoolPtr(src.Enabled)
+	dup.Stream = cloneBoolPtr(src.Stream)
 
 	// 生成唯一 id：在原 id 后加 -copy / -copy2 / -copy3 …，避免 slug 碰撞。
 	base := src.ID + "-copy"

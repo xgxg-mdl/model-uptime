@@ -222,6 +222,11 @@
             <label>Timeout (s)</label>
             <input id="f-timeout" type="number" min="1" max="300" step="1" value="15" />
           </div>
+          <div class="field llm check-row">
+            <input type="checkbox" id="f-stream" checked />
+            <label for="f-stream">streaming</label>
+            <span class="hint">Validate the SSE streaming path by default</span>
+          </div>
           <div class="field http hidden">
             <label>Method</label>
             <select id="f-method"><option>GET</option><option>POST</option><option>HEAD</option><option>PUT</option><option>DELETE</option></select>
@@ -475,6 +480,7 @@ function openEditor(svc) {
   document.getElementById('f-interval').value = svc.interval_sec || 60;
   document.getElementById('f-timeout').value = svc.timeout_sec || 15;
   document.getElementById('f-enabled').checked = svc.enabled;
+  document.getElementById('f-stream').checked = svc.stream !== false;
   document.getElementById('f-method').value = (svc.method || 'GET').toUpperCase();
   document.getElementById('f-expect').value = svc.expect_status || 200;
   document.getElementById('f-headers').value = svc.headers ? JSON.stringify(svc.headers, null, 2) : '';
@@ -495,6 +501,7 @@ function openNew() {
   document.getElementById('f-interval').value = 60;
   document.getElementById('f-timeout').value = 15;
   document.getElementById('f-enabled').checked = true;
+  document.getElementById('f-stream').checked = true;
   document.getElementById('f-method').value = 'GET';
   document.getElementById('f-expect').value = 200;
   showHttpFields('chat');
@@ -530,6 +537,7 @@ function collectService() {
     interval_sec: parseInt(document.getElementById('f-interval').value) || 60,
     timeout_sec: parseInt(document.getElementById('f-timeout').value) || 15,
     enabled: document.getElementById('f-enabled').checked,
+    stream: protocol === 'http' ? undefined : document.getElementById('f-stream').checked,
     method: protocol === 'http' ? document.getElementById('f-method').value : '',
     expect_status: protocol === 'http' ? (parseInt(document.getElementById('f-expect').value) || 200) : 0,
     headers: protocol === 'http' ? headers : undefined,

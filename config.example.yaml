@@ -37,6 +37,8 @@ services:
     interval_sec: 60
     timeout_sec: 15
     enabled: true
+    # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
+    stream: true
 
   - id: anthropic-claude-sonnet
     name: claude-sonnet-5
@@ -48,6 +50,8 @@ services:
     interval_sec: 60
     timeout_sec: 15
     enabled: true
+    # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
+    stream: true
 
   - id: xai-grok-4
     name: grok-4
@@ -59,6 +63,8 @@ services:
     interval_sec: 60
     timeout_sec: 15
     enabled: true
+    # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
+    stream: true
 
   # 通用 HTTP 探针示例：监控任意 API / 网站可用性
   - id: health-page

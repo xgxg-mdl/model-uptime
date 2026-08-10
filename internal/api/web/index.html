@@ -331,13 +331,16 @@ function showTip(e, html) {
 }
 function hideTip() { tip.classList.remove('show'); }
 
-// 根据历史窗口生成时间轴标签：-60m … now，中间按 1/4 步进
-function axisLabels(historyLen) {
-  const q = historyLen / 4;
-  return [0, 1, 2, 3, 4].map(i => {
-    const m = Math.round(historyLen - i * q);
-    return m <= 0 ? 'now' : `-${m}m`;
-  });
+// 根据服务实际采样间隔生成时间轴标签。
+function axisLabels(historyLen, intervalSec) {
+  const windowSec = historyLen * intervalSec;
+  const formatAgo = seconds => {
+    if (seconds <= 0) return 'now';
+    if (seconds % 3600 === 0) return `-${seconds / 3600}h`;
+    if (seconds >= 3600) return `-${(seconds / 3600).toFixed(1)}h`;
+    return `-${Math.round(seconds / 60)}m`;
+  };
+  return [0, 1, 2, 3, 4].map(i => formatAgo(Math.round(windowSec * (4 - i) / 4)));
 }
 
 function renderBanner(data, page) {
@@ -359,22 +362,26 @@ function renderBanner(data, page) {
   }
 }
 
-function renderBarsHtml(service, historyLen) {
-  const history = service.history || [];
-  const padN = historyLen - history.length;
-  const parts = [];
-  for (let i = 0; i < padN; i++) {
-    parts.push(`<span class="bar empty" data-empty="1"></span>`);
+function renderBarsHtml(service, historyLen, generatedAt) {
+  const intervalSec = Math.max(1, service.interval_sec || 60);
+  const slots = Array(historyLen).fill(null);
+  const windowStart = generatedAt - historyLen * intervalSec;
+  for (const r of service.history || []) {
+    const index = Math.floor((r.ts - windowStart) / intervalSec);
+    if (index < 0 || index >= historyLen) continue;
+    // 同一时间桶只展示最新结果，避免重试或手动探测挤占相邻时间。
+    if (!slots[index] || slots[index].ts <= r.ts) slots[index] = r;
   }
-  for (const r of history) {
+  const parts = slots.map(r => {
+    if (!r) return `<span class="bar empty" data-empty="1"></span>`;
     const cls = r.ok ? 'ok' : 'bad';
     const payload = JSON.stringify(r).replace(/"/g, '&quot;');
-    parts.push(`<span class="bar ${cls}" data-r="${payload}"></span>`);
-  }
+    return `<span class="bar ${cls}" data-r="${payload}"></span>`;
+  });
   return `<div class="bars">${parts.join('')}</div>`;
 }
 
-function renderServices(services, page) {
+function renderServices(services, page, generatedAt) {
   const out = document.getElementById('svc-out');
   document.getElementById('cmd-models').innerHTML = services.length
     ? ' ' + services.map(svc => {
@@ -401,8 +408,8 @@ function renderServices(services, page) {
 
     return `<div class="line" style="margin-top: 8px;"><span class="mute">→</span> <span class="cmd bold">${svc.model}</span> <span class="dim">·</span> <span class="${statusCls}">● ${statusText}</span></div>
 <div class="svc-meta" style="padding-left: 18px;">${meta.join('')}</div>
-<div style="padding-left: 18px; margin-top: 6px;">${renderBarsHtml(svc, page.history_len)}</div>
-<div class="axis" style="padding-left: 18px;">${axisLabels(page.history_len).map((l, i) => i>0 && i<4 ? `<span class="mid-label">${l}</span>` : `<span>${l}</span>`).join('')}</div>`;
+<div style="padding-left: 18px; margin-top: 6px;">${renderBarsHtml(svc, page.history_len, generatedAt)}</div>
+<div class="axis" style="padding-left: 18px;">${axisLabels(page.history_len, svc.interval_sec || 60).map((l, i) => i>0 && i<4 ? `<span class="mid-label">${l}</span>` : `<span>${l}</span>`).join('')}</div>`;
   }).join('');
 
   out.querySelectorAll('.bar').forEach(bar => {
@@ -441,7 +448,7 @@ async function refresh() {
     document.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
     document.getElementById('probe-comment').textContent = '# ' + (page.probe_comment || 'model-uptime service monitor · probing every 60s');
     renderBanner(data, page);
-    renderServices(data.services, page);
+    renderServices(data.services, page, data.generated_at);
     document.getElementById('updated').textContent = fmtTimeShort(data.generated_at);
   } catch (e) {
     document.getElementById('banner-out').innerHTML = `<div class="line bad bold">● monitor unreachable</div>`;

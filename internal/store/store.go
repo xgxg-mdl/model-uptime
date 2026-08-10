@@ -100,6 +100,17 @@ func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]mod
 	return out, nil
 }
 
+// DeleteHistory 删除某个服务的全部历史，用于终止观测生命周期。
+// 返回删除行数。
+func (s *Store) DeleteHistory(ctx context.Context, svcID string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM probe_results WHERE service_id = ?`, svcID)
+	if err != nil {
+		return 0, fmt.Errorf("删除服务历史失败: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // PurgeBefore 删除早于截止时间的记录，用于历史保留窗口清理。
 // 返回删除行数。
 func (s *Store) PurgeBefore(ctx context.Context, cutoff time.Time) (int64, error) {

@@ -31,8 +31,11 @@ type Service struct {
 	Path        string `yaml:"path,omitempty" json:"path,omitempty"` // 覆盖默认请求路径
 	IntervalSec int    `yaml:"interval_sec,omitempty" json:"interval_sec,omitempty"`
 	TimeoutSec  int    `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
-	// 指针而非 bool：区分"未配置"（nil，默认启用）与"显式禁用"（false）
+	// 指针而非 bool：区分“未配置”（nil，默认启用）与“显式禁用”（false）
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// LLM 协议默认走流式 SSE；显式 false 保持同步 JSON 兼容模式。
+	// http 协议忽略此字段。
+	Stream *bool `yaml:"stream,omitempty" json:"stream,omitempty"`
 	// http 协议专用
 	Method       string            `yaml:"method,omitempty" json:"method,omitempty"`
 	Headers      map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
@@ -42,6 +45,11 @@ type Service struct {
 
 // IsEnabled 返回服务是否启用（未显式配置时默认启用）。
 func (s *Service) IsEnabled() bool { return s.Enabled == nil || *s.Enabled }
+
+// IsStreaming 返回 LLM 探针是否走流式 SSE（未显式配置时默认流式）。
+func (s *Service) IsStreaming() bool {
+	return s.Protocol != ProtocolHTTP && (s.Stream == nil || *s.Stream)
+}
 
 // Normalize 填充默认值并清理字段。
 func (s *Service) Normalize() {
@@ -161,11 +169,12 @@ func (p *PageConfig) Validate() error {
 
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
-	Model     string        `json:"model"`
-	Provider  string        `json:"provider,omitempty"`
-	UptimePct float64       `json:"uptime_pct"`
-	Last      *ProbeResult  `json:"last"`
-	History   []ProbeResult `json:"history"`
+	Model       string        `json:"model"`
+	Provider    string        `json:"provider,omitempty"`
+	IntervalSec int           `json:"interval_sec"`
+	UptimePct   float64       `json:"uptime_pct"`
+	Last        *ProbeResult  `json:"last"`
+	History     []ProbeResult `json:"history"`
 }
 
 // StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，

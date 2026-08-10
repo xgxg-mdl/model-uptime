@@ -1,11 +1,5 @@
 // Package scheduler 负责按间隔调度并发探测、维护每服务的历史窗口，
 // 并向状态 API 提供聚合快照。
-//
-// 设计要点：
-//   - 1s 级 ticker 检查各服务是否到期，到期即启动独立 goroutine 探测，
-//     服务之间互不阻塞；
-//   - lastProbe 在探测启动前更新，防止探测耗时长于间隔时重复触发；
-//   - Reload 热重载配置时按 id 保留历史，新建服务从 SQLite 恢复历史。
 package scheduler
 
 import (
@@ -20,61 +14,50 @@ import (
 	"github.com/lefachao/model-uptime/internal/store"
 )
 
-// tickInterval 调度器的主循环精度。间隔远小于最小探测间隔(5s)，开销可忽略。
 const tickInterval = time.Second
 
-// purgeInterval / retention 历史清理：SQLite 仅用于重启恢复，无需长期保留。
 const (
 	purgeInterval = time.Hour
 	retention     = 30 * 24 * time.Hour
 )
 
-// ServiceState 是调度器维护的某个服务的运行时状态。
+// ServiceState 是调度器维护的某个服务的运行时状态。generation 区分同一 ID 的观测生命周期。
 type ServiceState struct {
-	svc       model.Service
-	last      *model.ProbeResult
-	history   []model.ProbeResult // 升序，最新在末尾
-	lastProbe time.Time
+	svc        model.Service
+	last       *model.ProbeResult
+	history    []model.ProbeResult
+	lastProbe  time.Time
+	generation uint64
+}
+
+type probeJob struct {
+	svc        model.Service
+	generation uint64
 }
 
 // Scheduler 调度并聚合探测。
 type Scheduler struct {
-	mu      sync.RWMutex
-	states  map[string]*ServiceState
-	order   []string // 保持配置顺序，供状态页稳定输出
-	page    model.PageConfig
-	store   *store.Store
-	probeFn func(context.Context, *model.Service) prober.Result
-	logger  *slog.Logger
-	done    chan struct{}
-	wg      sync.WaitGroup
+	mu             sync.RWMutex
+	states         map[string]*ServiceState
+	order          []string
+	page           model.PageConfig
+	store          *store.Store
+	probeFn        func(context.Context, *model.Service) prober.Result
+	logger         *slog.Logger
+	nextGeneration uint64
+	done           chan struct{}
+	wg             sync.WaitGroup
 }
 
-// New 创建调度器。store 可为 nil（纯内存运行），logger 可为 nil。
 func New(st *store.Store, logger *slog.Logger) *Scheduler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Scheduler{
-		states:  make(map[string]*ServiceState),
-		store:   st,
-		probeFn: prober.Probe,
-		logger:  logger,
-		done:    make(chan struct{}),
-	}
+	return &Scheduler{states: make(map[string]*ServiceState), store: st, probeFn: prober.Probe, logger: logger, done: make(chan struct{})}
 }
 
-// Start 启动后台调度循环。
-func (s *Scheduler) Start() {
-	s.wg.Add(1)
-	go s.run()
-}
-
-// Stop 停止调度循环并等待在途探测结束。
-func (s *Scheduler) Stop() {
-	close(s.done)
-	s.wg.Wait()
-}
+func (s *Scheduler) Start() { s.wg.Add(1); go s.run() }
+func (s *Scheduler) Stop()  { close(s.done); s.wg.Wait() }
 
 func (s *Scheduler) run() {
 	defer s.wg.Done()
@@ -95,7 +78,7 @@ func (s *Scheduler) run() {
 	}
 }
 
-// Reload 热重载服务列表与页面配置：按 id 保留历史与 last 状态。
+// Reload 保留普通同 ID 更新的历史；禁用后重新启用、删除服务均开启新的观测生命周期。
 func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,132 +86,147 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) {
 
 	next := make(map[string]*ServiceState, len(services))
 	order := make([]string, 0, len(services))
-	ctx := context.Background()
+	seen := make(map[string]bool, len(services))
 	for i := range services {
 		svc := services[i]
-		st, ok := s.states[svc.ID]
-		if !ok {
-			st = &ServiceState{svc: svc}
-			// 新建服务：从持久化恢复历史，避免重启后状态条清零
-			if s.store != nil {
-				if hist, err := s.store.LoadHistory(ctx, svc.ID, page.HistoryLen); err != nil {
-					s.logger.Warn("恢复历史失败", "svc", svc.ID, "err", err)
-				} else if len(hist) > 0 {
-					st.history = hist
-					last := hist[len(hist)-1]
-					st.last = &last
-				}
-			}
+		seen[svc.ID] = true
+		st, exists := s.states[svc.ID]
+		if !exists {
+			st = s.newStateLocked(svc, page)
+		} else if !st.svc.IsEnabled() && svc.IsEnabled() {
+			// 停用期的结果不能与新的观测窗口混合。
+			s.resetStateLocked(st, svc)
 		} else {
-			st.svc = svc // 配置更新，历史保留
+			st.svc = svc
 		}
 		next[svc.ID] = st
 		order = append(order, svc.ID)
 	}
-	s.states = next
-	s.order = order
+	for id := range s.states {
+		if !seen[id] {
+			s.deleteHistoryLocked(id)
+		}
+	}
+	s.states, s.order = next, order
 }
 
-// checkDue 找出到期服务并启动探测。同步锁内标记 lastProbe，避免重复触发。
+func (s *Scheduler) newStateLocked(svc model.Service, page model.PageConfig) *ServiceState {
+	s.nextGeneration++
+	st := &ServiceState{svc: svc, generation: s.nextGeneration}
+	if s.store == nil {
+		return st
+	}
+	hist, err := s.store.LoadHistory(context.Background(), svc.ID, page.HistoryLen)
+	if err != nil {
+		s.logger.Warn("恢复历史失败", "svc", svc.ID, "err", err)
+		return st
+	}
+	if len(hist) > 0 {
+		st.history = hist
+		last := hist[len(hist)-1]
+		st.last = &last
+	}
+	return st
+}
+
+func (s *Scheduler) resetStateLocked(st *ServiceState, svc model.Service) {
+	s.nextGeneration++
+	st.svc, st.last, st.history, st.lastProbe, st.generation = svc, nil, nil, time.Time{}, s.nextGeneration
+	s.deleteHistoryLocked(svc.ID)
+}
+
+func (s *Scheduler) deleteHistoryLocked(id string) {
+	if s.store == nil {
+		return
+	}
+	if _, err := s.store.DeleteHistory(context.Background(), id); err != nil {
+		s.logger.Warn("删除服务历史失败", "svc", id, "err", err)
+	}
+}
+
 func (s *Scheduler) checkDue() {
 	now := time.Now()
 	s.mu.Lock()
-	var due []*ServiceState
+	var due []probeJob
 	for _, st := range s.states {
-		if !st.svc.IsEnabled() {
+		if !st.svc.IsEnabled() || now.Sub(st.lastProbe) < time.Duration(st.svc.IntervalSec)*time.Second {
 			continue
 		}
-		if now.Sub(st.lastProbe) >= time.Duration(st.svc.IntervalSec)*time.Second {
-			st.lastProbe = now
-			due = append(due, st)
-		}
+		st.lastProbe = now
+		due = append(due, probeJob{svc: st.svc, generation: st.generation})
 	}
 	s.mu.Unlock()
-
-	for _, st := range due {
-		go s.probe(st)
+	for _, job := range due {
+		go s.probe(job)
 	}
 }
 
-// probe 执行一次探测并把结果写入内存历史与 SQLite。
-func (s *Scheduler) probe(st *ServiceState) {
-	svc := st.svc // 快照配置，探测期间配置变更不影响本次请求
-	res := s.probeFn(context.Background(), &svc)
-	r := model.ProbeResult{
-		OK:        res.OK,
-		TS:        time.Now().Unix(),
-		LatencyMS: res.LatencyMS,
-		Error:     res.Error,
-	}
-	s.record(svc.ID, r)
+func (s *Scheduler) probe(job probeJob) {
+	res := s.probeFn(context.Background(), &job.svc)
+	s.recordGeneration(job.svc.ID, job.generation, model.ProbeResult{OK: res.OK, TS: time.Now().Unix(), LatencyMS: res.LatencyMS, Error: res.Error})
 }
 
-// record 更新内存状态并异步持久化。
+// record 为包内测试与同步调用保留的快捷入口。
 func (s *Scheduler) record(id string, r model.ProbeResult) {
-	s.mu.Lock()
-	st, ok := s.states[id]
-	if ok {
-		st.history = append(st.history, r)
-		if n := s.page.HistoryLen; len(st.history) > n {
-			st.history = st.history[len(st.history)-n:]
-		}
-		st.last = &r
+	s.mu.RLock()
+	st := s.states[id]
+	var generation uint64
+	if st != nil {
+		generation = st.generation
 	}
-	s.mu.Unlock()
-
-	if ok && s.store != nil {
-		go func() {
-			if err := s.store.AppendResult(context.Background(), id, r); err != nil {
-				s.logger.Warn("持久化探测结果失败", "svc", id, "err", err)
-			}
-		}()
+	s.mu.RUnlock()
+	if generation != 0 {
+		s.recordGeneration(id, generation, r)
 	}
 }
 
-// ProbeNow 立即探测指定服务（配置页"测试连接"用），结果也计入历史。
+// recordGeneration 只有在服务仍处于启动该探测时的生命周期且已启用时才接受结果。
+// 持久化在相同互斥边界内完成，避免删除历史后旧异步写入重新污染数据库。
+func (s *Scheduler) recordGeneration(id string, generation uint64, r model.ProbeResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.states[id]
+	if !ok || !st.svc.IsEnabled() || st.generation != generation {
+		return
+	}
+	st.history = append(st.history, r)
+	if n := s.page.HistoryLen; len(st.history) > n {
+		st.history = st.history[len(st.history)-n:]
+	}
+	st.last = &r
+	if s.store != nil {
+		if err := s.store.AppendResult(context.Background(), id, r); err != nil {
+			s.logger.Warn("持久化探测结果失败", "svc", id, "err", err)
+		}
+	}
+}
+
 func (s *Scheduler) ProbeNow(id string) (*model.ProbeResult, error) {
 	s.mu.RLock()
-	st, ok := s.states[id]
-	s.mu.RUnlock()
-	if !ok {
+	st := s.states[id]
+	if st == nil {
+		s.mu.RUnlock()
 		return nil, fmt.Errorf("服务不存在: %s", id)
 	}
-	svc := st.svc
-	res := s.probeFn(context.Background(), &svc)
-	r := model.ProbeResult{
-		OK:        res.OK,
-		TS:        time.Now().Unix(),
-		LatencyMS: res.LatencyMS,
-		Error:     res.Error,
-	}
-	s.record(id, r)
+	job := probeJob{svc: st.svc, generation: st.generation}
+	s.mu.RUnlock()
+	res := s.probeFn(context.Background(), &job.svc)
+	r := model.ProbeResult{OK: res.OK, TS: time.Now().Unix(), LatencyMS: res.LatencyMS, Error: res.Error}
+	s.recordGeneration(id, job.generation, r)
 	return &r, nil
 }
 
-// Snapshot 生成 /api/status 所需的聚合快照。
 func (s *Scheduler) Snapshot() model.StatusResponse {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	page := s.page
-	resp := model.StatusResponse{
-		GeneratedAt: time.Now().Unix(),
-		AllOK:       true,
-		Page:        &page,
-		Services:    make([]model.ServiceView, 0, len(s.order)),
-	}
+	resp := model.StatusResponse{GeneratedAt: time.Now().Unix(), AllOK: true, Page: &page, Services: make([]model.ServiceView, 0, len(s.order))}
 	for _, id := range s.order {
-		st, ok := s.states[id]
-		if !ok || !st.svc.IsEnabled() {
+		st := s.states[id]
+		if st == nil || !st.svc.IsEnabled() {
 			continue
 		}
-		view := model.ServiceView{
-			Model:     st.svc.Name,
-			Provider:  st.svc.Provider,
-			UptimePct: uptimePct(st.history),
-			Last:      st.last,
-			History:   append([]model.ProbeResult(nil), st.history...),
-		}
+		view := model.ServiceView{Model: st.svc.Name, Provider: st.svc.Provider, IntervalSec: st.svc.IntervalSec, UptimePct: uptimePct(st.history), Last: st.last, History: append([]model.ProbeResult(nil), st.history...)}
 		resp.Services = append(resp.Services, view)
 		if st.last != nil && !st.last.OK {
 			resp.AllOK = false
@@ -237,10 +235,9 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 	return resp
 }
 
-// uptimePct 计算历史窗口内的可用率百分比。空窗口（pending）按 100 处理。
 func uptimePct(history []model.ProbeResult) float64 {
 	if len(history) == 0 {
-		return 100.0
+		return 100
 	}
 	ok := 0
 	for _, r := range history {
@@ -248,10 +245,9 @@ func uptimePct(history []model.ProbeResult) float64 {
 			ok++
 		}
 	}
-	return float64(ok) / float64(len(history)) * 100.0
+	return float64(ok) / float64(len(history)) * 100
 }
 
-// purge 清理超过保留期的历史记录。
 func (s *Scheduler) purge() {
 	if s.store == nil {
 		return

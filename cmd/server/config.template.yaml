@@ -14,4 +14,5 @@ page:
   show_latency: true
   show_avg_load: true
 
+# LLM services use streaming SSE probes by default. Set stream: false per service for synchronous JSON compatibility.
 services: []

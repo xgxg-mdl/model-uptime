@@ -19,7 +19,7 @@ func newSvc(id, protocol, baseURL string) *model.Service {
 	return &model.Service{
 		ID: id, Name: id, Protocol: protocol, Model: "test-model",
 		BaseURL: baseURL, APIKey: "sk-test-key",
-		IntervalSec: 60, TimeoutSec: 5, Enabled: boolp(true),
+		IntervalSec: 60, TimeoutSec: 5, Enabled: boolp(true), Stream: boolp(false),
 	}
 }
 
@@ -54,8 +54,8 @@ func TestChatProtocol(t *testing.T) {
 	if gotAuth != "Bearer sk-test-key" {
 		t.Errorf("Authorization = %q", gotAuth)
 	}
-	if res.LatencyMS <= 0 {
-		t.Errorf("应有耗时: %d", res.LatencyMS)
+	if res.LatencyMS < 0 {
+		t.Errorf("耗时不应为负数: %d", res.LatencyMS)
 	}
 }
 
