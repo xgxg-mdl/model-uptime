@@ -214,7 +214,7 @@ func validateBody(protocol string, body []byte) error {
 		return fmt.Errorf("响应不是有效 JSON: %s", previewBody(body))
 	}
 	// API 层错误（如 401 却返回 200 的网关）同样视为失败
-	if e, ok := m["error"]; ok {
+	if e, ok := m["error"]; ok && e != nil {
 		return fmt.Errorf("API 错误: %s", previewBody([]byte(fmt.Sprint(e))))
 	}
 	switch protocol {
