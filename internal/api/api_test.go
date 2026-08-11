@@ -32,7 +32,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		Page:       model.PageConfig{HistoryLen: 60, RefreshSec: 5},
 		Services: []model.Service{{
 			ID: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
-			BaseURL: "http://example.com", Enabled: boolp(true),
+			BaseURL: "http://example.com", IntervalSec: 60, Enabled: boolp(true),
 		}},
 	}
 	srv, err := New(Options{
@@ -96,6 +96,9 @@ func TestStatusEndpoint(t *testing.T) {
 	}
 	if svc["uptime_pct"] == nil {
 		t.Error("缺少 uptime_pct")
+	}
+	if got, ok := svc["interval_sec"].(float64); !ok || got != 60 {
+		t.Errorf("interval_sec = %v，期望 60", svc["interval_sec"])
 	}
 	page, ok := out["page"].(map[string]any)
 	if !ok || page["history_len"] == nil {

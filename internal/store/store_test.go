@@ -78,6 +78,40 @@ func TestLoadHistoryLimit(t *testing.T) {
 	}
 }
 
+func TestDeleteHistoryOnlyAffectsRequestedService(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if err := s.AppendResult(ctx, "svc-a", model.ProbeResult{OK: true, TS: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendResult(ctx, "svc-b", model.ProbeResult{OK: true, TS: 2}); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := s.DeleteHistory(ctx, "svc-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("删除行数 = %d，期望 1", n)
+	}
+	for _, tc := range []struct {
+		id   string
+		want int
+	}{
+		{"svc-a", 0},
+		{"svc-b", 1},
+	} {
+		hist, err := s.LoadHistory(ctx, tc.id, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hist) != tc.want {
+			t.Errorf("%s 历史数 = %d，期望 %d", tc.id, len(hist), tc.want)
+		}
+	}
+}
+
 func TestPurgeBefore(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

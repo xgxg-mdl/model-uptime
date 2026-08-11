@@ -255,7 +255,8 @@ func validateSSE(protocol string, body []byte) error {
 		if err := json.Unmarshal([]byte(payload), &m); err != nil {
 			return fmt.Errorf("流式事件不是有效 JSON: %s", previewBody([]byte(payload)))
 		}
-		if e, ok := m["error"]; ok && e != nil || event == "error" || m["type"] == "error" {
+		e, hasError := m["error"]
+		if (hasError && e != nil) || event == "error" || m["type"] == "error" {
 			return fmt.Errorf("流式 API 错误: %s", previewBody([]byte(payload)))
 		}
 		if streamEventValid(protocol, m) {

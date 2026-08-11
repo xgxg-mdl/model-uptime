@@ -61,8 +61,8 @@ services:
 	if svc.IntervalSec != 60 || svc.TimeoutSec != 15 {
 		t.Errorf("服务默认 interval/timeout = %d/%d", svc.IntervalSec, svc.TimeoutSec)
 	}
-	if !svc.IsEnabled() {
-		t.Error("服务默认应启用")
+	if !svc.IsStreaming() {
+		t.Error("LLM 服务未配置 stream 时应默认流式")
 	}
 	if strings.HasSuffix(svc.BaseURL, "/") {
 		t.Errorf("BaseURL 应去除末尾斜杠: %q", svc.BaseURL)

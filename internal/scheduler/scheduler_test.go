@@ -124,6 +124,52 @@ func TestHistoryWindowTruncation(t *testing.T) {
 	}
 }
 
+func TestReloadStartsNewLifecycleAndDropsOldProbe(t *testing.T) {
+	s := New(nil, nil)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	var calls atomic.Int64
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+			close(finished)
+		}
+		return prober.Result{OK: false, Error: "old lifecycle"}
+	}
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+
+	s.checkDue()
+	<-started
+
+	// 禁用后重新启用必须开启新的 generation，旧探测结果不能写回。
+	s.Reload([]model.Service{testSvc("s1", false)}, defaultPage())
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	close(release)
+	<-finished
+
+	deadline := time.After(time.Second)
+	for {
+		snap := s.Snapshot()
+		if snap.Services[0].Last == nil {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("旧生命周期结果不应写入: %+v", snap.Services[0])
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	s.record("s1", model.ProbeResult{OK: true, TS: 2, LatencyMS: 5})
+	snap := s.Snapshot()
+	if snap.Services[0].Last == nil || !snap.Services[0].Last.OK || len(snap.Services[0].History) != 1 {
+		t.Errorf("新生命周期应只记录新结果: %+v", snap.Services[0])
+	}
+}
+
 func TestCheckDueTriggersOnce(t *testing.T) {
 	s := New(nil, nil)
 	var calls atomic.Int64
@@ -135,7 +181,7 @@ func TestCheckDueTriggersOnce(t *testing.T) {
 	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
 
 	s.checkDue()
-	s.checkDue() // 第二次调用：lastProbe 已更新，不应重复触发
+	s.checkDue()                      // 第二次调用：lastProbe 已更新，不应重复触发
 	time.Sleep(20 * time.Millisecond) // 等待 goroutine 完成
 
 	if got := calls.Load(); got != 1 {

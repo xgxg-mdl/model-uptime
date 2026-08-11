@@ -40,6 +40,10 @@ func TestChatProtocol(t *testing.T) {
 		if body["model"] != "test-model" {
 			t.Errorf("请求体 model = %v", body["model"])
 		}
+		if _, ok := body["stream"]; ok {
+			t.Errorf("同步兼容路径不应发送 stream: %#v", body["stream"])
+		}
+		time.Sleep(20 * time.Millisecond)
 		writeJSON(t, w, map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": "ok"}}}})
 	}))
 	defer srv.Close()
@@ -54,8 +58,73 @@ func TestChatProtocol(t *testing.T) {
 	if gotAuth != "Bearer sk-test-key" {
 		t.Errorf("Authorization = %q", gotAuth)
 	}
-	if res.LatencyMS < 0 {
-		t.Errorf("耗时不应为负数: %d", res.LatencyMS)
+	if res.LatencyMS < 10 {
+		t.Errorf("耗时 = %dms，期望至少 10ms", res.LatencyMS)
+	}
+}
+
+func TestProbeStreamingSSE(t *testing.T) {
+	cases := []struct {
+		name     string
+		protocol string
+		payload  string
+	}{
+		{"chat", model.ProtocolChat, `data: {"choices":[{"delta":{"content":"ok"}}]}` + "\n\ndata: [DONE]\n\n"},
+		{"response", model.ProtocolResponse, "event: response.created\ndata: {\"type\":\"response.created\"}\n\n"},
+		{"message", model.ProtocolMessage, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Errorf("解析请求体: %v", err)
+				}
+				if streaming, ok := body["stream"].(bool); !ok || !streaming {
+					t.Errorf("stream = %#v，期望 true", body["stream"])
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(tc.payload))
+			}))
+			defer srv.Close()
+
+			svc := newSvc("s1", tc.protocol, srv.URL)
+			svc.Stream = nil // 缺省配置必须默认验证 SSE 链路。
+			if res := Probe(context.Background(), svc); !res.OK {
+				t.Fatalf("流式探测应成功: %+v", res)
+			}
+		})
+	}
+}
+
+func TestProbeStreamingSSEFailures(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		want    string
+	}{
+		{"only done", "data: [DONE]\n\n", "未包含有效协议事件"},
+		{"invalid JSON", "data: not-json\n\n", "不是有效 JSON"},
+		{"error after valid event", "data: {\"choices\":[{}]}\n\nevent: error\ndata: {\"error\":{\"message\":\"rate limited\"}}\n\n", "流式 API 错误"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(tc.payload))
+			}))
+			defer srv.Close()
+
+			svc := newSvc("s1", model.ProtocolChat, srv.URL)
+			svc.Stream = nil
+			res := Probe(context.Background(), svc)
+			if res.OK {
+				t.Fatalf("流式探测应失败: %+v", res)
+			}
+			if !strings.Contains(res.Error, tc.want) {
+				t.Errorf("错误 = %q，应包含 %q", res.Error, tc.want)
+			}
+		})
 	}
 }
 

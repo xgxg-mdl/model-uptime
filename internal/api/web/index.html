@@ -362,16 +362,22 @@ function renderBanner(data, page) {
   }
 }
 
-function renderBarsHtml(service, historyLen, generatedAt) {
-  const intervalSec = Math.max(1, service.interval_sec || 60);
+function projectHistorySlots(history, historyLen, intervalSec, generatedAt) {
   const slots = Array(historyLen).fill(null);
   const windowStart = generatedAt - historyLen * intervalSec;
-  for (const r of service.history || []) {
-    const index = Math.floor((r.ts - windowStart) / intervalSec);
-    if (index < 0 || index >= historyLen) continue;
+  for (const r of history || []) {
+    if (r.ts < windowStart || r.ts > generatedAt) continue;
+    // generated_at 是窗口的闭区间右边界，归入最后一个桶。
+    const index = Math.min(historyLen - 1, Math.floor((r.ts - windowStart) / intervalSec));
     // 同一时间桶只展示最新结果，避免重试或手动探测挤占相邻时间。
     if (!slots[index] || slots[index].ts <= r.ts) slots[index] = r;
   }
+  return slots;
+}
+
+function renderBarsHtml(service, historyLen, generatedAt) {
+  const intervalSec = Math.max(1, service.interval_sec || 60);
+  const slots = projectHistorySlots(service.history, historyLen, intervalSec, generatedAt);
   const parts = slots.map(r => {
     if (!r) return `<span class="bar empty" data-empty="1"></span>`;
     const cls = r.ok ? 'ok' : 'bad';

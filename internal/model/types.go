@@ -66,6 +66,7 @@ func (s *Service) Normalize() {
 		s.TimeoutSec = 15
 	}
 	if s.Protocol == ProtocolHTTP {
+		s.Stream = nil
 		if s.Method == "" {
 			s.Method = "GET"
 		}
