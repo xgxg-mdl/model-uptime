@@ -78,7 +78,8 @@ func (s *Scheduler) run() {
 	}
 }
 
-// Reload 保留普通同 ID 更新的历史；禁用后重新启用、删除服务均开启新的观测生命周期。
+// Reload 保留同 ID 服务的观测历史；启用状态切换被视为暂停或恢复，而非新生命周期，
+// 因此 last/history 与持久化记录始终保留。仅当服务从配置中移除时才终止观测并删除其历史。
 func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -93,11 +94,18 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) {
 		st, exists := s.states[svc.ID]
 		if !exists {
 			st = s.newStateLocked(svc, page)
-		} else if !st.svc.IsEnabled() && svc.IsEnabled() {
-			// 停用期的结果不能与新的观测窗口混合。
-			s.resetStateLocked(st, svc)
 		} else {
-			st.svc = svc
+			prevEnabled, nextEnabled := st.svc.IsEnabled(), svc.IsEnabled()
+			switch {
+			case prevEnabled && !nextEnabled:
+				// 暂停：推进 generation 使在飞探测失效，但保留历史与持久化记录。
+				s.pauseStateLocked(st, svc)
+			case !prevEnabled && nextEnabled:
+				// 恢复：再次推进 generation 隔离停用期的在飞探测，并尽快重新调度。
+				s.resumeStateLocked(st, svc)
+			default:
+				st.svc = svc
+			}
 		}
 		next[svc.ID] = st
 		order = append(order, svc.ID)
@@ -129,12 +137,27 @@ func (s *Scheduler) newStateLocked(svc model.Service, page model.PageConfig) *Se
 	return st
 }
 
-func (s *Scheduler) resetStateLocked(st *ServiceState, svc model.Service) {
+// advanceGenerationLocked 递增 generation 并应用到状态，使此前启动的在飞探测无法写回。
+func (s *Scheduler) advanceGenerationLocked(st *ServiceState) {
 	s.nextGeneration++
-	st.svc, st.last, st.history, st.lastProbe, st.generation = svc, nil, nil, time.Time{}, s.nextGeneration
-	s.deleteHistoryLocked(svc.ID)
+	st.generation = s.nextGeneration
 }
 
+// pauseStateLocked 切换到禁用：推进 generation 失效在飞探测，但保留历史与持久化记录。
+func (s *Scheduler) pauseStateLocked(st *ServiceState, svc model.Service) {
+	s.advanceGenerationLocked(st)
+	st.svc = svc
+}
+
+// resumeStateLocked 切换到重新启用：再次推进 generation 隔离停用期的在飞探测，
+// 清零 lastProbe 使下一次调度立即触发，历史与持久化记录保持不变。
+func (s *Scheduler) resumeStateLocked(st *ServiceState, svc model.Service) {
+	s.advanceGenerationLocked(st)
+	st.svc = svc
+	st.lastProbe = time.Time{}
+}
+
+// deleteHistoryLocked 删除服务从配置中移除时的全部持久化历史。
 func (s *Scheduler) deleteHistoryLocked(id string) {
 	if s.store == nil {
 		return

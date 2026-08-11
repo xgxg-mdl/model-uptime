@@ -2,12 +2,14 @@ package scheduler
 
 import (
 	"context"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/lefachao/model-uptime/internal/model"
 	"github.com/lefachao/model-uptime/internal/prober"
+	"github.com/lefachao/model-uptime/internal/store"
 )
 
 func boolp(b bool) *bool { return &b }
@@ -21,6 +23,16 @@ func testSvc(id string, enabled bool) model.Service {
 
 func defaultPage() model.PageConfig {
 	return model.PageConfig{HistoryLen: 60, RefreshSec: 5, ShowUptime: true}
+}
+
+func openTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	s, err := store.Open(filepath.Join(t.TempDir(), "scheduler.db"))
+	if err != nil {
+		t.Fatalf("打开测试 store 失败: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	return s
 }
 
 func TestUptimePct(t *testing.T) {
@@ -124,7 +136,7 @@ func TestHistoryWindowTruncation(t *testing.T) {
 	}
 }
 
-func TestReloadStartsNewLifecycleAndDropsOldProbe(t *testing.T) {
+func TestReloadPauseAndResumePreservesHistoryAndDropsOldProbe(t *testing.T) {
 	s := New(nil, nil)
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -140,10 +152,12 @@ func TestReloadStartsNewLifecycleAndDropsOldProbe(t *testing.T) {
 	}
 	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
 
+	// 先写入旧历史，作为暂停前已存在的观测状态。
+	s.record("s1", model.ProbeResult{OK: true, TS: 1, LatencyMS: 10})
 	s.checkDue()
 	<-started
 
-	// 禁用后重新启用必须开启新的 generation，旧探测结果不能写回。
+	// 暂停后恢复：两次转换都推进 generation，旧 in-flight 探测不能再写回。
 	s.Reload([]model.Service{testSvc("s1", false)}, defaultPage())
 	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
 	close(release)
@@ -152,21 +166,26 @@ func TestReloadStartsNewLifecycleAndDropsOldProbe(t *testing.T) {
 	deadline := time.After(time.Second)
 	for {
 		snap := s.Snapshot()
-		if snap.Services[0].Last == nil {
+		if len(snap.Services) != 1 {
+			t.Fatalf("恢复后服务应可见: %+v", snap.Services)
+		}
+		// 旧异步失败既不能覆盖 Last，也不能新增历史。
+		if (snap.Services[0].Last == nil || snap.Services[0].Last.OK) && len(snap.Services[0].History) == 1 {
 			break
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("旧生命周期结果不应写入: %+v", snap.Services[0])
+			t.Fatalf("旧生命周期结果不应写回: %+v", snap.Services[0])
 		default:
 			time.Sleep(time.Millisecond)
 		}
 	}
 
+	// 新 generation 的探测结果应正常追加，旧历史仍在。
 	s.record("s1", model.ProbeResult{OK: true, TS: 2, LatencyMS: 5})
 	snap := s.Snapshot()
-	if snap.Services[0].Last == nil || !snap.Services[0].Last.OK || len(snap.Services[0].History) != 1 {
-		t.Errorf("新生命周期应只记录新结果: %+v", snap.Services[0])
+	if snap.Services[0].Last == nil || !snap.Services[0].Last.OK || len(snap.Services[0].History) != 2 {
+		t.Errorf("恢复后应保留旧历史并追加新结果: %+v", snap.Services[0])
 	}
 }
 
@@ -246,5 +265,146 @@ func TestSnapshotPageCopy(t *testing.T) {
 	snap := s.Snapshot()
 	if snap.Page == nil || snap.Page.HistoryLen != 42 {
 		t.Errorf("快照应携带页面配置: %+v", snap.Page)
+	}
+}
+
+// 暂停/恢复必须保留持久化历史，并允许恢复后立即重新调度。
+func TestReloadPauseResumePersistsHistoryAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+
+	// 预置持久化历史，模拟暂停前已有的观测记录。
+	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: 100, LatencyMS: 12}); err != nil {
+		t.Fatalf("预置历史失败: %v", err)
+	}
+	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: 200, LatencyMS: 8}); err != nil {
+		t.Fatalf("预置历史失败: %v", err)
+	}
+
+	s := New(st, nil)
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	before := s.Snapshot()
+	if len(before.Services) != 1 || len(before.Services[0].History) != 2 {
+		t.Fatalf("恢复应加载全部历史: %+v", before.Services)
+	}
+
+	// 暂停：禁用服务不展示，但历史不得被删除。
+	s.Reload([]model.Service{testSvc("s1", false)}, defaultPage())
+	if paused := s.Snapshot(); len(paused.Services) != 0 {
+		t.Errorf("禁用服务不应展示: %+v", paused.Services)
+	}
+	if hist, err := st.LoadHistory(ctx, "s1", 10); err != nil || len(hist) != 2 {
+		t.Errorf("暂停后持久化历史不应减少: hist=%+v err=%v", hist, err)
+	}
+
+	// 恢复：历史与最近状态与暂停前一致。
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	resumed := s.Snapshot()
+	if len(resumed.Services) != 1 || len(resumed.Services[0].History) != 2 {
+		t.Errorf("恢复后历史应保留: %+v", resumed.Services)
+	}
+	if resumed.Services[0].Last == nil || resumed.Services[0].Last.TS != 200 {
+		t.Errorf("恢复后 Last 应为暂停前最新结果: %+v", resumed.Services[0].Last)
+	}
+	if resumed.Services[0].UptimePct != 100.0 {
+		t.Errorf("恢复后 uptime 应与暂停前一致: %v", resumed.Services[0].UptimePct)
+	}
+
+	// lastProbe 被清零，恢复后第一次调度应立即触发。
+	var calls atomic.Int64
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		calls.Add(1)
+		return prober.Result{OK: true, LatencyMS: 3}
+	}
+	s.checkDue()
+	time.Sleep(20 * time.Millisecond)
+	if calls.Load() != 1 {
+		t.Errorf("恢复后应立即调度一次，实际 %d", calls.Load())
+	}
+}
+
+// 从配置移除服务仍应彻底删除持久化历史，并在飞的旧探测不能回写。
+func TestReloadRemoveServiceDeletesHistoryAndDropsInFlight(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	var calls atomic.Int64
+	s := New(st, nil)
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+			close(finished)
+		}
+		return prober.Result{OK: false, Error: "removed lifecycle"}
+	}
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: 10, LatencyMS: 5}); err != nil {
+		t.Fatalf("预置历史失败: %v", err)
+	}
+
+	s.checkDue()
+	<-started
+
+	// 服务从配置中移除：历史应被删除。
+	s.Reload(nil, defaultPage())
+	close(release)
+	<-finished
+
+	if snap := s.Snapshot(); len(snap.Services) != 0 {
+		t.Errorf("移除后不应再展示服务: %+v", snap.Services)
+	}
+	if hist, err := st.LoadHistory(ctx, "s1", 10); err != nil || len(hist) != 0 {
+		t.Errorf("移除服务应清空持久化历史: hist=%+v err=%v", hist, err)
+	}
+}
+
+// 在飞的手动探测（ProbeNow）在恢复后不能写回新生命周期。
+func TestProbeNowInFlightDroppedAfterPauseResume(t *testing.T) {
+	s := New(nil, nil)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	var calls atomic.Int64
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+			close(finished)
+		}
+		return prober.Result{OK: false, Error: "stale manual probe"}
+	}
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	s.record("s1", model.ProbeResult{OK: true, TS: 1, LatencyMS: 10})
+
+	var probeResult *model.ProbeResult
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r, err := s.ProbeNow("s1")
+		if err == nil {
+			probeResult = r
+		}
+	}()
+	<-started
+
+	// 手动探测在飞行期间执行暂停 → 恢复。
+	s.Reload([]model.Service{testSvc("s1", false)}, defaultPage())
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	close(release)
+	<-finished
+	<-done
+
+	// ProbeNow 仍可把测连结果返回给调用方，但其结果不应污染当前生命周期。
+	snap := s.Snapshot()
+	if len(snap.Services) != 1 || len(snap.Services[0].History) != 1 ||
+		snap.Services[0].Last == nil || !snap.Services[0].Last.OK {
+		t.Errorf("旧手动探测不应写回: %+v", snap.Services)
+	}
+	if probeResult == nil {
+		t.Error("ProbeNow 应返回自身结果")
 	}
 }
