@@ -107,6 +107,9 @@
   .toast.show { opacity: 1; }
   .hidden { display: none; }
   .empty { color: var(--mute); text-align: center; padding: 20px 0; font-size: 12px; }
+  .bulk-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .bulk-bar .actions .btn { padding: 5px 10px; font-size: 11px; }
+  .bulk-bar .check-row { font-size: 12px; color: var(--dim); }
 
   @media (max-width: 640px) {
     form { grid-template-columns: 1fr; }
@@ -156,13 +159,57 @@
     <section class="panel">
       <h2>monitor services</h2>
       <div class="panel-body">
+        <div class="bulk-bar">
+          <label class="check-row" style="white-space:nowrap;">
+            <input type="checkbox" id="select-all" />
+            <span id="bulk-count">0 selected</span>
+          </label>
+          <div class="actions">
+            <button class="btn ok" id="bulk-enable" disabled>enable selected</button>
+            <button class="btn" id="bulk-disable" disabled>disable selected</button>
+            <button class="btn primary" id="bulk-settings" disabled>bulk settings…</button>
+          </div>
+        </div>
         <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
           <button class="btn primary" id="new-btn">+ new service</button>
         </div>
         <table>
-          <thead><tr><th>name</th><th>protocol</th><th>model</th><th>provider</th><th>interval</th><th>enabled</th><th></th></tr></thead>
-          <tbody id="svc-table"><tr><td colspan="7" class="empty">loading…</td></tr></tbody>
+          <thead><tr><th style="width:28px;"></th><th>name</th><th>protocol</th><th>model</th><th>provider</th><th>interval</th><th>enabled</th><th></th></tr></thead>
+          <tbody id="svc-table"><tr><td colspan="8" class="empty">loading…</td></tr></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- 批量设置 -->
+    <section class="panel hidden" id="bulk-editor">
+      <h2>bulk settings</h2>
+      <div class="panel-body">
+        <p class="hint" style="margin:0 0 12px;color:var(--dim);">仅填写的字段会被更新，留空保持不变。应用到 <b id="bulk-editor-count">0</b> 个选中服务。</p>
+        <form id="bulk-form">
+          <div class="field">
+            <label>Interval (s)</label>
+            <input id="b-interval" type="number" min="5" step="1" placeholder="不改" />
+            <span class="hint">采样间隔，最小 5</span>
+          </div>
+          <div class="field">
+            <label>Timeout (s)</label>
+            <input id="b-timeout" type="number" min="1" max="300" step="1" placeholder="不改" />
+            <span class="hint">单次探测超时，1~300</span>
+          </div>
+          <div class="field">
+            <label>Streaming</label>
+            <select id="b-stream">
+              <option value="">不改</option>
+              <option value="true">on（流式 SSE）</option>
+              <option value="false">off（同步 JSON）</option>
+            </select>
+            <span class="hint">仅 LLM 协议生效</span>
+          </div>
+          <div class="form-actions">
+            <button class="btn primary" type="submit">apply</button>
+            <button class="btn" type="button" id="bulk-cancel">cancel</button>
+          </div>
+        </form>
       </div>
     </section>
 
@@ -398,11 +445,13 @@ async function loadServices() {
   try {
     const data = await api('/api/admin/services');
     if (!data.services.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">no services yet — add one below</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">no services yet — add one below</td></tr>';
+      updateBulkBar();
       return;
     }
     tbody.innerHTML = data.services.map(s => `
       <tr>
+        <td><input type="checkbox" class="row-check" data-id="${esc(s.id)}" /></td>
         <td><b>${esc(s.name)}</b> <span class="tag">#${esc(s.id)}</span></td>
         <td>${esc(s.protocol)}</td>
         <td>${esc(s.model || '—')}</td>
@@ -425,10 +474,89 @@ async function loadServices() {
         else if (btn.dataset.act === 'del') deleteService(btn.dataset.id);
       });
     });
+    tbody.querySelectorAll('.row-check').forEach(cb => {
+      cb.addEventListener('change', updateBulkBar);
+    });
+    document.getElementById('select-all').checked = false;
+    updateBulkBar();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">${esc(err.message)}</td></tr>`;
+    updateBulkBar();
   }
 }
+
+// ---------- 批量操作 ----------
+function selectedIDs() {
+  return Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.dataset.id);
+}
+
+function updateBulkBar() {
+  const ids = selectedIDs();
+  const n = ids.length;
+  document.getElementById('bulk-count').textContent = `${n} selected`;
+  ['bulk-enable', 'bulk-disable', 'bulk-settings'].forEach(id => {
+    document.getElementById(id).disabled = n === 0;
+  });
+  const checks = document.querySelectorAll('.row-check');
+  document.getElementById('select-all').checked = checks.length > 0 && n === checks.length;
+  document.getElementById('bulk-editor-count').textContent = n;
+}
+
+document.getElementById('select-all').addEventListener('change', e => {
+  document.querySelectorAll('.row-check').forEach(cb => { cb.checked = e.target.checked; });
+  updateBulkBar();
+});
+
+function bulkSetEnabled(enabled) {
+  const ids = selectedIDs();
+  if (!ids.length) return;
+  bulkUpdate(ids, { enabled }).then(() => {
+    toast(ids.length + ' 个服务已' + (enabled ? '启用' : '禁用'));
+    loadServices();
+  }).catch(err => toast(err.message));
+}
+
+async function bulkUpdate(ids, patch) {
+  return api('/api/admin/services', { method: 'PATCH', body: JSON.stringify({ ids, patch }) });
+}
+
+document.getElementById('bulk-enable').addEventListener('click', () => bulkSetEnabled(true));
+document.getElementById('bulk-disable').addEventListener('click', () => bulkSetEnabled(false));
+
+document.getElementById('bulk-settings').addEventListener('click', () => {
+  const editor = document.getElementById('bulk-editor');
+  editor.classList.remove('hidden');
+  ['b-interval', 'b-timeout'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('b-stream').value = '';
+  document.getElementById('bulk-editor-count').textContent = selectedIDs().length;
+  editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+document.getElementById('bulk-cancel').addEventListener('click', () => {
+  document.getElementById('bulk-editor').classList.add('hidden');
+});
+
+document.getElementById('bulk-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const ids = selectedIDs();
+  if (!ids.length) { toast('请先选择服务'); return; }
+  const patch = {};
+  const iv = document.getElementById('b-interval').value.trim();
+  if (iv) patch.interval_sec = parseInt(iv, 10);
+  const to = document.getElementById('b-timeout').value.trim();
+  if (to) patch.timeout_sec = parseInt(to, 10);
+  const st = document.getElementById('b-stream').value;
+  if (st === 'true') patch.stream = true;
+  else if (st === 'false') patch.stream = false;
+  if (!Object.keys(patch).length) { toast('请至少填写一项要批量修改的字段'); return; }
+  try {
+    await bulkUpdate(ids, patch);
+    toast('已批量更新 ' + ids.length + ' 个服务');
+    document.getElementById('bulk-editor').classList.add('hidden');
+    loadServices();
+  } catch (err) { toast(err.message); }
+});
+
 
 function deleteService(id) {
   if (!confirm('删除服务 ' + id + '？此操作不可恢复。')) return;

@@ -227,6 +227,100 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// bulkPatch 是批量更新请求中可覆盖的字段集合。
+// 所有字段用指针，区分"未提供（不改）"与"显式提供零值"。
+// 只放开跨服务通用的运行参数；身份与凭据字段不在批量范围内。
+type bulkPatch struct {
+	Enabled     *bool `json:"enabled,omitempty"`
+	IntervalSec *int  `json:"interval_sec,omitempty"`
+	TimeoutSec  *int  `json:"timeout_sec,omitempty"`
+	Stream      *bool `json:"stream,omitempty"`
+}
+
+// handleBulkUpdateServices 批量更新运行参数（enabled/interval/timeout/stream）。
+// 事务性：任一 id 缺失或字段非法则整体失败，不修改任何配置。
+func (s *Server) handleBulkUpdateServices(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs   []string  `json:"ids"`
+		Patch bulkPatch `json:"patch"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体不是有效 JSON")
+		return
+	}
+	if len(req.IDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "ids 不能为空")
+		return
+	}
+
+	cfg := s.currentConfig()
+	// 预校验所有 id 存在，避免部分落盘。
+	missing := missingIDs(cfg.Services, req.IDs)
+	if len(missing) > 0 {
+		writeErr(w, http.StatusNotFound, "服务不存在: "+strings.Join(missing, ", "))
+		return
+	}
+
+	for i := range cfg.Services {
+		svc := &cfg.Services[i]
+		if !contains(req.IDs, svc.ID) {
+			continue
+		}
+		applyPatch(svc, req.Patch)
+	}
+	// Normalize + Validate 在 updateConfig 内完成；http 协议的 Stream 会被清空。
+	if err := s.updateConfig(&cfg); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	applied := s.currentConfig()
+	out := make([]model.Service, len(applied.Services))
+	for i, svc := range applied.Services {
+		out[i] = maskService(svc)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"services": out})
+}
+
+// applyPatch 将 patch 中提供的字段覆盖到服务上，nil 字段保持原值。
+func applyPatch(svc *model.Service, p bulkPatch) {
+	if p.Enabled != nil {
+		svc.Enabled = p.Enabled
+	}
+	if p.IntervalSec != nil {
+		svc.IntervalSec = *p.IntervalSec
+	}
+	if p.TimeoutSec != nil {
+		svc.TimeoutSec = *p.TimeoutSec
+	}
+	if p.Stream != nil {
+		svc.Stream = p.Stream
+	}
+}
+
+func missingIDs(services []model.Service, ids []string) []string {
+	have := make(map[string]struct{}, len(services))
+	for _, s := range services {
+		have[s.ID] = struct{}{}
+	}
+	var out []string
+	for _, id := range ids {
+		if _, ok := have[id]; !ok {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}
+
 // handleGetPage 返回页面显示配置。
 func (s *Server) handleGetPage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.currentConfig().Page)

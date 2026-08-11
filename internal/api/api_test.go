@@ -417,6 +417,124 @@ func TestDuplicateService(t *testing.T) {
 	_ = cfg
 }
 
+func boolPtr(b bool) *bool { return &b }
+
+func TestBulkUpdateServices(t *testing.T) {
+	ts := newTestServer(t)
+
+	// 准备 3 个服务：1 个 http + 2 个 LLM，便于覆盖协议差异。全部显式启用。
+	mk := func(id string, protocol string) map[string]any {
+		m := map[string]any{"name": id, "protocol": protocol, "base_url": "http://x", "enabled": true}
+		if protocol != "http" {
+			m["model"] = "m"
+		}
+		return m
+	}
+	for _, s := range []struct{ id, proto string }{
+		{"a", "http"}, {"b", "chat"}, {"c", "message"},
+	} {
+		if code, out := doJSON(t, ts, http.MethodPost, "/api/admin/services", testToken, mk(s.id, s.proto)); code != http.StatusCreated {
+			t.Fatalf("创建 %s = %d, %v", s.id, code, out)
+		}
+	}
+
+	list := func() map[string]map[string]any {
+		_, out := doJSON(t, ts, http.MethodGet, "/api/admin/services", testToken, nil)
+		m := map[string]map[string]any{}
+		for _, raw := range out["services"].([]any) {
+			row := raw.(map[string]any)
+			m[row["id"].(string)] = row
+		}
+		return m
+	}
+
+	// 批量禁用 b、c
+	code, out := doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"b", "c"}, "patch": map[string]any{"enabled": false},
+	})
+	if code != http.StatusOK {
+		t.Fatalf("批量禁用 = %d, %v", code, out)
+	}
+	rows := list()
+	if rows["a"]["enabled"] != true || rows["b"]["enabled"] != false || rows["c"]["enabled"] != false {
+		t.Errorf("批量禁用结果异常: a=%v b=%v c=%v", rows["a"]["enabled"], rows["b"]["enabled"], rows["c"]["enabled"])
+	}
+
+	// 批量设 interval + timeout，a 未在 ids 中应保持不变
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"b", "c"}, "patch": map[string]any{"interval_sec": 30, "timeout_sec": 8},
+	})
+	if code != http.StatusOK {
+		t.Fatal("批量设置字段失败")
+	}
+	rows = list()
+	if int(rows["b"]["interval_sec"].(float64)) != 30 || int(rows["c"]["timeout_sec"].(float64)) != 8 {
+		t.Errorf("字段未生效: b.interval=%v c.timeout=%v", rows["b"]["interval_sec"], rows["c"]["timeout_sec"])
+	}
+	if int(rows["a"]["interval_sec"].(float64)) == 30 {
+		t.Error("未选中的 a 不应被修改")
+	}
+
+	// 批量设 stream=true：http 服务 a 仍应保持 stream=nil（Normalize 清空）
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"a", "b"}, "patch": map[string]any{"stream": true},
+	})
+	if code != http.StatusOK {
+		t.Fatal("批量设 stream 失败")
+	}
+	rows = list()
+	if rows["a"]["stream"] != nil {
+		t.Errorf("http 服务 stream 应被清空，got %v", rows["a"]["stream"])
+	}
+	if rows["b"]["stream"] != true {
+		t.Errorf("LLM 服务 stream 应为 true，got %v", rows["b"]["stream"])
+	}
+
+	// patch 为空对象：应成功且不改动
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"b"}, "patch": map[string]any{},
+	})
+	if code != http.StatusOK {
+		t.Errorf("空 patch 应成功，got %d", code)
+	}
+
+	// 不存在的 id → 404，整体不落盘
+	code, out = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"b", "nope"}, "patch": map[string]any{"enabled": true},
+	})
+	if code != http.StatusNotFound {
+		t.Errorf("部分 id 缺失应 404，got %d", code)
+	}
+	rows = list()
+	if rows["b"]["enabled"] != false {
+		t.Error("404 时不应落盘任何修改")
+	}
+
+	// 空 ids → 400
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{}, "patch": map[string]any{"enabled": true},
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("空 ids 应 400，got %d", code)
+	}
+
+	// 非法 interval → 400（updateConfig 校验）
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"b"}, "patch": map[string]any{"interval_sec": 1},
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("非法 interval 应 400，got %d", code)
+	}
+
+	// 未认证 → 401
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", "", map[string]any{
+		"ids": []string{"b"}, "patch": map[string]any{"enabled": true},
+	})
+	if code != http.StatusUnauthorized {
+		t.Errorf("未认证应 401，got %d", code)
+	}
+}
+
 func TestTestEndpoint(t *testing.T) {
 	// 探测端点指向一个真实返回 200 的 mock 服务
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

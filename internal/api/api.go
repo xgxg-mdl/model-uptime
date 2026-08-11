@@ -71,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/setup", s.handleSetup)
 	mux.Handle("GET /api/admin/services", s.requireAuth(s.handleListServices))
 	mux.Handle("POST /api/admin/services", s.requireAuth(s.handleCreateService))
+	mux.Handle("PATCH /api/admin/services", s.requireAuth(s.handleBulkUpdateServices))
 	mux.Handle("PUT /api/admin/services/{id}", s.requireAuth(s.handleUpdateService))
 	mux.Handle("DELETE /api/admin/services/{id}", s.requireAuth(s.handleDeleteService))
 	mux.Handle("POST /api/admin/services/{id}/test", s.requireAuth(s.handleTestService))
