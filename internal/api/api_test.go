@@ -104,6 +104,12 @@ func TestStatusEndpoint(t *testing.T) {
 	if !ok || page["history_len"] == nil {
 		t.Errorf("缺少 page 配置: %v", out["page"])
 	}
+	// 默认未暂停时 services[].pauses 不出现或为空。
+	if _, hasPauses := svc["pauses"]; hasPauses {
+		if pauses, ok := svc["pauses"].([]any); ok && len(pauses) != 0 {
+			t.Errorf("未暂停时 pauses 应为空，got %v", pauses)
+		}
+	}
 }
 
 func TestAdminAuthRequired(t *testing.T) {

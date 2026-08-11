@@ -22,12 +22,14 @@ const (
 )
 
 // ServiceState 是调度器维护的某个服务的运行时状态。generation 区分同一 ID 的观测生命周期。
+// pauses 记录运行时禁用区间，用于状态页显式渲染暂停空档；不持久化。
 type ServiceState struct {
 	svc        model.Service
 	last       *model.ProbeResult
 	history    []model.ProbeResult
 	lastProbe  time.Time
 	generation uint64
+	pauses     []model.PauseSpan
 }
 
 type probeJob struct {
@@ -143,18 +145,29 @@ func (s *Scheduler) advanceGenerationLocked(st *ServiceState) {
 	st.generation = s.nextGeneration
 }
 
-// pauseStateLocked 切换到禁用：推进 generation 失效在飞探测，但保留历史与持久化记录。
+// pauseStateLocked 切换到禁用：推进 generation 失效在飞探测，记录暂停起点，
+// 但保留历史与持久化记录。
 func (s *Scheduler) pauseStateLocked(st *ServiceState, svc model.Service) {
 	s.advanceGenerationLocked(st)
 	st.svc = svc
+	st.pauses = append(st.pauses, model.PauseSpan{From: time.Now().Unix()})
 }
 
 // resumeStateLocked 切换到重新启用：再次推进 generation 隔离停用期的在飞探测，
-// 清零 lastProbe 使下一次调度立即触发，历史与持久化记录保持不变。
+// 关闭上一个未闭合的暂停区间，清零 lastProbe 使下一次调度立即触发，
+// 历史与持久化记录保持不变。
 func (s *Scheduler) resumeStateLocked(st *ServiceState, svc model.Service) {
 	s.advanceGenerationLocked(st)
 	st.svc = svc
 	st.lastProbe = time.Time{}
+	now := time.Now().Unix()
+	// 关闭最后一个未闭合的暂停区间（To == 0）。
+	for i := len(st.pauses) - 1; i >= 0; i-- {
+		if st.pauses[i].To == 0 {
+			st.pauses[i].To = now
+			break
+		}
+	}
 }
 
 // deleteHistoryLocked 删除服务从配置中移除时的全部持久化历史。
@@ -243,13 +256,26 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	page := s.page
-	resp := model.StatusResponse{GeneratedAt: time.Now().Unix(), AllOK: true, Page: &page, Services: make([]model.ServiceView, 0, len(s.order))}
+	now := time.Now().Unix()
+	resp := model.StatusResponse{GeneratedAt: now, AllOK: true, Page: &page, Services: make([]model.ServiceView, 0, len(s.order))}
 	for _, id := range s.order {
 		st := s.states[id]
 		if st == nil || !st.svc.IsEnabled() {
 			continue
 		}
-		view := model.ServiceView{Model: st.svc.Name, Provider: st.svc.Provider, IntervalSec: st.svc.IntervalSec, UptimePct: uptimePct(st.history), Last: st.last, History: append([]model.ProbeResult(nil), st.history...)}
+		view := model.ServiceView{
+			Model: st.svc.Name, Provider: st.svc.Provider, IntervalSec: st.svc.IntervalSec,
+			UptimePct: uptimePct(st.history), Last: st.last,
+			History: append([]model.ProbeResult(nil), st.history...),
+		}
+		// 输出暂停区间；进行中的区间（To == 0）以当前时刻闭合，供前端渲染当前暂停状态。
+		for _, p := range st.pauses {
+			to := p.To
+			if to == 0 {
+				to = now
+			}
+			view.Pauses = append(view.Pauses, model.PauseSpan{From: p.From, To: to})
+		}
 		resp.Services = append(resp.Services, view)
 		if st.last != nil && !st.last.OK {
 			resp.AllOK = false

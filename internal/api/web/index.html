@@ -169,6 +169,10 @@
   }
   .bar.ok    { background: var(--ok); }
   .bar.bad   { background: var(--bad); }
+  .bar.paused { background: #3a3a42; }
+  .bar.paused:hover { filter: brightness(1.25); }
+  .bar.none  { background: transparent; cursor: default; }
+  .bar.none:hover { transform: none; filter: none; }
   .bar.empty { background: #24242a; cursor: default; }
   .bar.empty:hover { transform: none; filter: none; }
 
@@ -362,28 +366,37 @@ function renderBanner(data, page) {
   }
 }
 
-function projectHistorySlots(history, historyLen, intervalSec, generatedAt) {
-  const slots = Array(historyLen).fill(null);
-  const windowStart = generatedAt - historyLen * intervalSec;
+// buildBarEvents 把样本与暂停区间合并为按时间升序的渲染事件。
+// 样本渲染为 ok/bad 格，暂停区间渲染为 paused 格；两者按时间戳交错排列。
+function buildBarEvents(history, pauses) {
+  const events = [];
   for (const r of history || []) {
-    if (r.ts < windowStart || r.ts > generatedAt) continue;
-    // generated_at 是窗口的闭区间右边界，归入最后一个桶。
-    const index = Math.min(historyLen - 1, Math.floor((r.ts - windowStart) / intervalSec));
-    // 同一时间桶只展示最新结果，避免重试或手动探测挤占相邻时间。
-    if (!slots[index] || slots[index].ts <= r.ts) slots[index] = r;
+    events.push({ ts: r.ts, kind: r.ok ? 'ok' : 'bad', result: r });
   }
-  return slots;
+  for (const p of pauses || []) {
+    // 暂停区间以恢复时间作为排序键，使其落在恢复后的样本之前。
+    events.push({ ts: p.to, kind: 'paused', pause: p });
+  }
+  events.sort((a, b) => a.ts - b.ts);
+  return events;
 }
 
 function renderBarsHtml(service, historyLen, generatedAt) {
-  const intervalSec = Math.max(1, service.interval_sec || 60);
-  const slots = projectHistorySlots(service.history, historyLen, intervalSec, generatedAt);
-  const parts = slots.map(r => {
-    if (!r) return `<span class="bar empty" data-empty="1"></span>`;
-    const cls = r.ok ? 'ok' : 'bad';
-    const payload = JSON.stringify(r).replace(/"/g, '&quot;');
-    return `<span class="bar ${cls}" data-r="${payload}"></span>`;
-  });
+  const events = buildBarEvents(service.history, service.pauses);
+  // 只保留最近 historyLen 个事件，左侧不足部分用透明占位填充。
+  const recent = events.slice(-historyLen);
+  const padCount = historyLen - recent.length;
+  const parts = [];
+  for (let i = 0; i < padCount; i++) parts.push('<span class="bar none"></span>');
+  for (const e of recent) {
+    if (e.kind === 'paused') {
+      const payload = JSON.stringify({ paused: true, from: e.pause.from, to: e.pause.to }).replace(/"/g, '&quot;');
+      parts.push(`<span class="bar paused" data-r="${payload}"></span>`);
+    } else {
+      const payload = JSON.stringify(e.result).replace(/"/g, '&quot;');
+      parts.push(`<span class="bar ${e.kind}" data-r="${payload}"></span>`);
+  }
+  }
   return `<div class="bars">${parts.join('')}</div>`;
 }
 
@@ -420,8 +433,16 @@ function renderServices(services, page, generatedAt) {
 
   out.querySelectorAll('.bar').forEach(bar => {
     const showFromBar = () => {
-      if (bar.dataset.empty) return;
+      if (bar.classList.contains('none')) return;
       const r = JSON.parse(bar.dataset.r);
+      if (r.paused) {
+        showTip({ currentTarget: bar }, `
+          <div class="t-status warn bold">PAUSED</div>
+          <div><span class="t-k">from</span> ${fmtTime(r.from)}</div>
+          <div><span class="t-k">to</span>&nbsp;&nbsp;${fmtTime(r.to)}</div>
+        `);
+        return;
+      }
       const statusCls = r.ok ? 'ok' : 'bad';
       const statusTxt = r.ok ? 'OK' : 'FAIL';
       const err = r.error ? `<div><span class="t-k">err</span> ${r.error.slice(0,80).replace(/</g,'&lt;')}</div>` : '';
@@ -437,7 +458,7 @@ function renderServices(services, page, generatedAt) {
     bar.addEventListener('mouseleave', hideTip);
     // Mobile: tap to show tooltip for 2.5s
     bar.addEventListener('click', (e) => {
-      if (bar.dataset.empty) return;
+      if (bar.classList.contains('none')) return;
       showFromBar();
       setTimeout(hideTip, 2500);
     });

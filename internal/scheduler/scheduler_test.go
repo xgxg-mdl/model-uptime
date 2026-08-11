@@ -309,6 +309,12 @@ func TestReloadPauseResumePersistsHistoryAcrossRestart(t *testing.T) {
 	if resumed.Services[0].UptimePct != 100.0 {
 		t.Errorf("恢复后 uptime 应与暂停前一致: %v", resumed.Services[0].UptimePct)
 	}
+	// 恢复后应记录一个已闭合的暂停区间。
+	if pauses := resumed.Services[0].Pauses; len(pauses) != 1 {
+		t.Errorf("恢复后应有 1 个暂停区间，got %d", len(pauses))
+	} else if pauses[0].From == 0 || pauses[0].To == 0 || pauses[0].To < pauses[0].From {
+		t.Errorf("暂停区间应已闭合且合法: %+v", pauses[0])
+	}
 
 	// lastProbe 被清零，恢复后第一次调度应立即触发。
 	var calls atomic.Int64
@@ -406,5 +412,35 @@ func TestProbeNowInFlightDroppedAfterPauseResume(t *testing.T) {
 	}
 	if probeResult == nil {
 		t.Error("ProbeNow 应返回自身结果")
+	}
+}
+
+// 连续多次暂停/恢复应记录多个独立暂停区间，且全部已闭合。
+func TestReloadMultiplePausesRecorded(t *testing.T) {
+	s := New(nil, nil)
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+
+	// 第一轮暂停 → 恢复
+	s.Reload([]model.Service{testSvc("s1", false)}, defaultPage())
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	// 第二轮暂停 → 恢复
+	s.Reload([]model.Service{testSvc("s1", false)}, defaultPage())
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+
+	snap := s.Snapshot()
+	if len(snap.Services) != 1 {
+		t.Fatalf("服务应可见: %+v", snap.Services)
+	}
+	pauses := snap.Services[0].Pauses
+	if len(pauses) != 2 {
+		t.Fatalf("应记录 2 个暂停区间，got %d: %+v", len(pauses), pauses)
+	}
+	for i, p := range pauses {
+		if p.From == 0 || p.To == 0 || p.To < p.From {
+			t.Errorf("暂停区间 %d 应已闭合且合法: %+v", i, p)
+		}
+	}
+	if pauses[1].From < pauses[0].To {
+		t.Errorf("第二个暂停应在第一个之后: %+v", pauses)
 	}
 }

@@ -168,6 +168,13 @@ func (p *PageConfig) Validate() error {
 	return nil
 }
 
+// PauseSpan 表示一段暂停区间，用于状态页显式渲染禁用空档。
+// 区间在运行时由 scheduler 记录，不持久化：重启后历史样本本身已表达那段时间的状态。
+type PauseSpan struct {
+	From int64 `json:"from"` // 暂停起始 unix 秒
+	To   int64 `json:"to"`   // 恢复 unix 秒（闭区间右边界）
+}
+
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
 	Model       string        `json:"model"`
@@ -176,6 +183,7 @@ type ServiceView struct {
 	UptimePct   float64       `json:"uptime_pct"`
 	Last        *ProbeResult  `json:"last"`
 	History     []ProbeResult `json:"history"`
+	Pauses      []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
 }
 
 // StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，
