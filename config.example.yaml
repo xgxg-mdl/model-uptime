@@ -21,6 +21,40 @@ page:
   show_latency: true   # 最近一次探测延迟
   show_avg_load: true  # 顶部 banner 的平均负载
 
+# Telegram 模型状态订阅。所有订阅共用一个 Bot Token，每个订阅可配置独立的
+# Chat ID、模型集合和消息模板。只有模型在 up/down 之间切换时才发送；同一轮
+# 探测中的多个变化会按订阅合并为一条消息，持续异常不会重复发送。
+telegram:
+  bot_token: "123456789:replace-with-your-bot-token"
+  subscriptions:
+    - id: operations
+      name: Operations
+      enabled: true
+      chat_id: "-1001234567890"
+      # 可引用下方任意服务，包括 enabled: false 的服务；禁用期间不会探测或通知，
+      # 重新启用并产生状态变化后会继续参与该订阅的聚合消息。
+      service_ids:
+        - openai-gpt54
+        - anthropic-claude-sonnet
+        - xai-grok-4
+      # 留空时自动使用以下默认模板。模板采用 Go html/template 语法，消息以
+      # Telegram HTML 发送；变量值会自动转义。
+      template: |
+        <b>MODEL STATUS UPDATE</b>
+        <code>{{.ChangedAt}}</code>
+
+        <b>OVERVIEW</b>
+        🔴 Down <b>{{.DownCount}}</b>   🟢 Recovered <b>{{.RecoveryCount}}</b>   Total <b>{{.TotalChanges}}</b>
+
+        {{if .DownModels}}<b>🔴 DOWN</b>
+        {{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+          {{if .Error}}<code>{{.Error}}</code>{{else}}<code>Probe failed</code>{{end}}
+        {{end}}
+        {{end}}{{if .RecoveredModels}}<b>🟢 RECOVERED</b>
+        {{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+          Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
+        {{end}}{{end}}
+
 # 监控目标。协议支持：
 #   chat     -> POST {base_url}/v1/chat/completions (OpenAI)
 #   response -> POST {base_url}/v1/responses         (OpenAI Responses)

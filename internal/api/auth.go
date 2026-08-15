@@ -32,6 +32,12 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "管理密码至少需要 8 个字符")
 		return
 	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	if s.getAdminToken() != "" {
+		writeErr(w, http.StatusConflict, "管理密码已设置，请直接登录")
+		return
+	}
 	cfg := s.currentConfig()
 	cfg.AdminToken = token
 	if err := s.updateConfig(&cfg); err != nil {

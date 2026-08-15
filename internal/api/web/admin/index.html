@@ -110,11 +110,40 @@
   .bulk-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
   .bulk-bar .actions .btn { padding: 5px 10px; font-size: 11px; }
   .bulk-bar .check-row { font-size: 12px; color: var(--dim); }
+  .telegram-head { display: flex; align-items: end; gap: 10px; margin-bottom: 14px; }
+  .telegram-head .field { flex: 1; }
+  .subscription-list { border-top: 1px solid var(--line); margin: 14px -16px 0; }
+  .subscription-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px;
+    align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  .subscription-row:last-child { border-bottom: none; }
+  .subscription-meta { min-width: 0; }
+  .subscription-meta b { display: block; overflow-wrap: anywhere; }
+  .subscription-summary { color: var(--mute); font-size: 10px; margin-top: 2px; overflow-wrap: anywhere; }
+  .subscription-editor { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .model-picker {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px;
+    max-height: 210px; overflow-y: auto; padding: 8px 10px;
+    background: #15151a; border: 1px solid var(--line2); border-radius: 6px;
+  }
+  .model-picker .check-row { min-width: 0; align-items: flex-start; }
+  .model-picker .model-label { min-width: 0; overflow-wrap: anywhere; }
+  .model-picker .disabled-label { color: var(--mute); }
+  .template-help {
+    color: var(--mute); font-size: 10px; line-height: 1.65; padding: 8px 10px;
+    background: #15151a; border: 1px solid var(--line); border-radius: 6px;
+  }
+  .template-help code { color: var(--info); overflow-wrap: anywhere; }
+  #tg-template { min-height: 260px; line-height: 1.5; }
 
   @media (max-width: 640px) {
     form { grid-template-columns: 1fr; }
     body { padding: 16px 8px 48px; }
     .actions { flex-direction: column; }
+    .telegram-head { align-items: stretch; flex-direction: column; }
+    .model-picker { grid-template-columns: 1fr; }
+    .subscription-row { align-items: start; }
   }
 </style>
 </head>
@@ -304,6 +333,74 @@
       </div>
     </section>
 
+    <!-- Telegram 聚合订阅 -->
+    <section class="panel">
+      <h2>Telegram notifications</h2>
+      <div class="panel-body">
+        <div class="telegram-head">
+          <div class="field">
+            <label>Bot token</label>
+            <input id="tg-bot-token" type="password" placeholder="not configured" autocomplete="new-password" />
+            <span class="hint">Leave blank to keep the configured token.</span>
+          </div>
+          <button class="btn primary" type="button" id="tg-new-btn">+ new subscription</button>
+        </div>
+        <div id="tg-subscription-list" class="subscription-list">
+          <div class="empty">loading…</div>
+        </div>
+
+        <div class="subscription-editor hidden" id="tg-editor">
+          <form id="tg-subscription-form">
+            <div class="field">
+              <label>Subscription ID *</label>
+              <input id="tg-id" required autocomplete="off" placeholder="operations" />
+              <span class="hint">Unique identifier; cannot be changed after saving.</span>
+            </div>
+            <div class="field">
+              <label>Name *</label>
+              <input id="tg-name" required autocomplete="off" placeholder="Operations" />
+            </div>
+            <div class="field">
+              <label>Chat ID *</label>
+              <input id="tg-chat-id" required autocomplete="off" placeholder="-1001234567890" />
+              <span class="hint">A user, group, or channel chat ID.</span>
+            </div>
+            <div class="field check-row">
+              <input id="tg-enabled" type="checkbox" checked />
+              <label for="tg-enabled">enabled</label>
+            </div>
+            <div class="field full">
+              <label>Models *</label>
+              <div class="model-picker" id="tg-model-picker"></div>
+              <span class="hint">Disabled monitors remain selectable and notify again after monitoring resumes.</span>
+            </div>
+            <div class="field full">
+              <label>Aggregated message template *</label>
+              <textarea id="tg-template" required spellcheck="false"></textarea>
+              <span class="hint">Telegram HTML is supported. Values are HTML-escaped automatically.</span>
+            </div>
+            <div class="field full">
+              <div class="template-help">
+                Summary: <code>{{.ChangedAt}}</code> <code>{{.DownCount}}</code> <code>{{.RecoveryCount}}</code> <code>{{.TotalChanges}}</code><br />
+                Lists: <code>{{range .DownModels}}…{{end}}</code> <code>{{range .RecoveredModels}}…{{end}}</code> <code>{{range .Changes}}…{{end}}</code><br />
+                Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn primary" type="submit">apply subscription</button>
+              <button class="btn" type="button" id="tg-editor-cancel">cancel</button>
+              <button class="btn" type="button" id="tg-test-btn">send test</button>
+              <span class="test-result hidden" id="tg-test-result"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="form-actions" style="margin-top:14px;">
+          <button class="btn primary" type="button" id="tg-save-btn">save Telegram config</button>
+        </div>
+      </div>
+    </section>
+
     <!-- 页面显示配置 -->
     <section class="panel">
       <h2>page display</h2>
@@ -357,6 +454,25 @@
 <script>
 const TOKEN_KEY = 'admin_token';
 let editingID = null;
+let adminServices = [];
+let telegramConfig = { bot_token: '', subscriptions: [] };
+let editingTelegramIndex = null;
+let telegramTokenConfigured = false;
+
+const DEFAULT_TELEGRAM_TEMPLATE = `<b>MODEL STATUS UPDATE</b>
+<code>{{.ChangedAt}}</code>
+
+<b>OVERVIEW</b>
+🔴 Down <b>{{.DownCount}}</b>   🟢 Recovered <b>{{.RecoveryCount}}</b>   Total <b>{{.TotalChanges}}</b>
+
+{{if .DownModels}}<b>🔴 DOWN</b>
+{{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+  {{if .Error}}<code>{{.Error}}</code>{{else}}<code>Probe failed</code>{{end}}
+{{end}}
+{{end}}{{if .RecoveredModels}}<b>🟢 RECOVERED</b>
+{{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+  Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
+{{end}}{{end}}`;
 
 function token() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
 function logout() { sessionStorage.removeItem(TOKEN_KEY); location.reload(); }
@@ -434,6 +550,7 @@ function enterApp() {
   document.getElementById('app-view').hidden = false;
   document.getElementById('logout-btn').hidden = false;
   loadServices();
+  loadTelegram();
   loadPage();
 }
 
@@ -444,6 +561,8 @@ async function loadServices() {
   const tbody = document.getElementById('svc-table');
   try {
     const data = await api('/api/admin/services');
+    adminServices = data.services || [];
+    renderTelegramModelPicker(telegramSelectionForServiceRefresh());
     if (!data.services.length) {
       tbody.innerHTML = '<tr><td colspan="8" class="empty">no services yet — add one below</td></tr>';
       updateBulkBar();
@@ -480,6 +599,8 @@ async function loadServices() {
     document.getElementById('select-all').checked = false;
     updateBulkBar();
   } catch (err) {
+    adminServices = [];
+    renderTelegramModelPicker(telegramSelectionForServiceRefresh());
     tbody.innerHTML = `<tr><td colspan="8" class="empty">${esc(err.message)}</td></tr>`;
     updateBulkBar();
   }
@@ -561,7 +682,7 @@ document.getElementById('bulk-form').addEventListener('submit', async (e) => {
 function deleteService(id) {
   if (!confirm('删除服务 ' + id + '？此操作不可恢复。')) return;
   api('/api/admin/services/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(() => { toast('已删除'); loadServices(); })
+    .then(() => { toast('已删除'); loadServices(); loadTelegram(); })
     .catch(err => toast(err.message));
 }
 
@@ -689,6 +810,226 @@ document.getElementById('svc-form').addEventListener('submit', async (e) => {
     }
     loadServices();
   } catch (err) { toast(err.message); }
+});
+
+// ---------- Telegram 聚合订阅 ----------
+function selectedTelegramServiceIDs() {
+  return Array.from(document.querySelectorAll('#tg-model-picker input:checked')).map(input => input.value);
+}
+
+function telegramSelectionForServiceRefresh() {
+  const choices = document.querySelectorAll('#tg-model-picker input');
+  if (choices.length || editingTelegramIndex === null) return selectedTelegramServiceIDs();
+  return telegramConfig.subscriptions[editingTelegramIndex]?.service_ids || [];
+}
+
+function renderTelegramModelPicker(selectedIDs = []) {
+  const picker = document.getElementById('tg-model-picker');
+  if (!picker) return;
+  const selected = new Set(selectedIDs);
+  if (!adminServices.length) {
+    picker.innerHTML = '<div class="empty" style="grid-column:1/-1;">no models available</div>';
+    return;
+  }
+  picker.innerHTML = adminServices.map(service => {
+    const displayModel = service.model || service.name || service.id;
+    const detail = service.name && service.name !== displayModel ? ` · ${service.name}` : '';
+    const disabled = service.enabled ? '' : ' · disabled';
+    return `<label class="check-row ${service.enabled ? '' : 'disabled-label'}">
+      <input type="checkbox" value="${esc(service.id)}" ${selected.has(service.id) ? 'checked' : ''} />
+      <span class="model-label"><b>${esc(displayModel)}</b>${esc(detail)} <span class="tag">#${esc(service.id)}</span>${disabled}</span>
+    </label>`;
+  }).join('');
+}
+
+function normalizeTelegramSubscription(subscription) {
+  return {
+    id: subscription.id || '',
+    name: subscription.name || '',
+    enabled: subscription.enabled !== false,
+    chat_id: String(subscription.chat_id || ''),
+    service_ids: Array.isArray(subscription.service_ids) ? subscription.service_ids.slice() : [],
+    template: subscription.template || DEFAULT_TELEGRAM_TEMPLATE,
+  };
+}
+
+function renderTelegramSubscriptions() {
+  const list = document.getElementById('tg-subscription-list');
+  const subscriptions = telegramConfig.subscriptions || [];
+  if (!subscriptions.length) {
+    list.innerHTML = '<div class="empty">no subscriptions yet</div>';
+    return;
+  }
+  list.innerHTML = subscriptions.map((subscription, index) => {
+    const serviceCount = subscription.service_ids ? subscription.service_ids.length : 0;
+    return `<div class="subscription-row">
+      <div class="subscription-meta">
+        <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${esc(subscription.name || subscription.id)}</b>
+        <div class="subscription-summary">#${esc(subscription.id)} · chat ${esc(subscription.chat_id)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" data-tg-action="edit" data-index="${index}">edit</button>
+        <button class="btn" type="button" data-tg-action="test" data-index="${index}">test</button>
+        <button class="btn bad" type="button" data-tg-action="delete" data-index="${index}">del</button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-tg-action]').forEach(button => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.index);
+      if (button.dataset.tgAction === 'edit') openTelegramEditor(index);
+      else if (button.dataset.tgAction === 'test') testTelegramSubscription(index);
+      else if (button.dataset.tgAction === 'delete') deleteTelegramSubscription(index);
+    });
+  });
+}
+
+async function loadTelegram() {
+  try {
+    const response = await api('/api/admin/telegram');
+    const config = response.telegram || response;
+    telegramConfig = {
+      bot_token: '',
+      subscriptions: (config.subscriptions || []).map(normalizeTelegramSubscription),
+    };
+    telegramTokenConfigured = !!(config.bot_token || config.token_configured);
+    document.getElementById('tg-bot-token').value = '';
+    document.getElementById('tg-bot-token').placeholder = telegramTokenConfigured
+      ? 'configured — leave blank to keep'
+      : 'not configured';
+    renderTelegramSubscriptions();
+    if (editingTelegramIndex !== null) {
+      const current = telegramConfig.subscriptions[editingTelegramIndex];
+      if (current) openTelegramEditor(editingTelegramIndex);
+      else closeTelegramEditor();
+    }
+  } catch (err) {
+    document.getElementById('tg-subscription-list').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+  }
+}
+
+function openTelegramEditor(index = null) {
+  editingTelegramIndex = index;
+  const subscription = index === null
+    ? normalizeTelegramSubscription({})
+    : telegramConfig.subscriptions[index];
+  document.getElementById('tg-id').value = subscription.id;
+  document.getElementById('tg-id').disabled = index !== null;
+  document.getElementById('tg-name').value = subscription.name;
+  document.getElementById('tg-chat-id').value = subscription.chat_id;
+  document.getElementById('tg-enabled').checked = subscription.enabled;
+  document.getElementById('tg-template').value = subscription.template || DEFAULT_TELEGRAM_TEMPLATE;
+  document.getElementById('tg-test-result').className = 'test-result hidden';
+  renderTelegramModelPicker(subscription.service_ids);
+  const editor = document.getElementById('tg-editor');
+  editor.classList.remove('hidden');
+  editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeTelegramEditor() {
+  editingTelegramIndex = null;
+  document.getElementById('tg-editor').classList.add('hidden');
+}
+
+function collectTelegramSubscription() {
+  const subscription = normalizeTelegramSubscription({
+    id: document.getElementById('tg-id').value.trim(),
+    name: document.getElementById('tg-name').value.trim(),
+    enabled: document.getElementById('tg-enabled').checked,
+    chat_id: document.getElementById('tg-chat-id').value.trim(),
+    service_ids: selectedTelegramServiceIDs(),
+    template: document.getElementById('tg-template').value.trim(),
+  });
+  if (!subscription.id || !subscription.name || !subscription.chat_id || !subscription.template) {
+    throw new Error('ID, name, chat ID, and template are required');
+  }
+  if (!subscription.service_ids.length) throw new Error('Select at least one model');
+  const duplicateIndex = telegramConfig.subscriptions.findIndex(item => item.id === subscription.id);
+  if (duplicateIndex !== -1 && duplicateIndex !== editingTelegramIndex) {
+    throw new Error('Subscription ID must be unique');
+  }
+  return subscription;
+}
+
+function applyTelegramEditor() {
+  const subscription = collectTelegramSubscription();
+  if (editingTelegramIndex === null) telegramConfig.subscriptions.push(subscription);
+  else telegramConfig.subscriptions[editingTelegramIndex] = subscription;
+  renderTelegramSubscriptions();
+  closeTelegramEditor();
+  return subscription;
+}
+
+async function saveTelegramConfig(options = {}) {
+  const tokenInput = document.getElementById('tg-bot-token');
+  const body = {
+    bot_token: tokenInput.value.trim(),
+    subscriptions: telegramConfig.subscriptions,
+  };
+  await api('/api/admin/telegram', { method: 'PUT', body: JSON.stringify(body) });
+  if (body.bot_token) telegramTokenConfigured = true;
+  tokenInput.value = '';
+  tokenInput.placeholder = telegramTokenConfigured ? 'configured — leave blank to keep' : 'not configured';
+  if (!options.quiet) toast('Telegram config saved');
+}
+
+async function testTelegramSubscription(index) {
+  const subscription = telegramConfig.subscriptions[index];
+  if (!subscription) return;
+  const result = document.getElementById('tg-test-result');
+  result.className = 'test-result';
+  result.textContent = 'sending…';
+  try {
+    // 先持久化草稿，确保测试使用的 Token、模板和模型选择与界面一致。
+    await saveTelegramConfig({ quiet: true });
+    await api('/api/admin/telegram/test', {
+      method: 'POST',
+      body: JSON.stringify({ subscription_id: subscription.id }),
+    });
+    result.className = 'test-result ok';
+    result.textContent = 'test message sent';
+    toast(`Test message sent for ${subscription.name || subscription.id}`);
+  } catch (err) {
+    result.className = 'test-result bad';
+    result.textContent = err.message;
+    toast(err.message);
+  }
+}
+
+function deleteTelegramSubscription(index) {
+  const subscription = telegramConfig.subscriptions[index];
+  if (!subscription || !confirm(`Delete subscription ${subscription.name || subscription.id}?`)) return;
+  telegramConfig.subscriptions.splice(index, 1);
+  if (editingTelegramIndex === index) closeTelegramEditor();
+  else if (editingTelegramIndex !== null && editingTelegramIndex > index) editingTelegramIndex--;
+  renderTelegramSubscriptions();
+  toast('Subscription removed from draft');
+}
+
+document.getElementById('tg-new-btn').addEventListener('click', () => openTelegramEditor());
+document.getElementById('tg-editor-cancel').addEventListener('click', closeTelegramEditor);
+document.getElementById('tg-subscription-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  try {
+    applyTelegramEditor();
+    toast('Subscription applied to draft');
+  } catch (err) { toast(err.message); }
+});
+document.getElementById('tg-test-btn').addEventListener('click', async () => {
+  try {
+    const index = editingTelegramIndex === null
+      ? telegramConfig.subscriptions.length
+      : editingTelegramIndex;
+    applyTelegramEditor();
+    await testTelegramSubscription(index);
+  } catch (err) { toast(err.message); }
+});
+document.getElementById('tg-save-btn').addEventListener('click', async () => {
+  try {
+    if (!document.getElementById('tg-editor').classList.contains('hidden')) applyTelegramEditor();
+    await saveTelegramConfig();
+  }
+  catch (err) { toast(err.message); }
 });
 
 // ---------- 页面显示配置 ----------

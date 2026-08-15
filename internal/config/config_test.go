@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 )
 
 func TestLoadDefaultsOnMissingFile(t *testing.T) {
@@ -106,6 +107,12 @@ func TestSaveRoundTrip(t *testing.T) {
 			ID: "s1", Name: "svc-1", Protocol: model.ProtocolHTTP,
 			BaseURL: "https://example.com/health",
 		}},
+		Telegram: notifier.Config{
+			BotToken: "bot-token",
+			Subscriptions: []notifier.Subscription{{
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "-100", ServiceIDs: []string{"s1"},
+			}},
+		},
 	}
 	if err := c.Save(path); err != nil {
 		t.Fatalf("Save err = %v", err)
@@ -119,5 +126,60 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 	if len(got.Services) != 1 || got.Services[0].ID != "s1" {
 		t.Errorf("round-trip services 不一致: %+v", got.Services)
+	}
+	if got.Telegram.BotToken != "bot-token" || len(got.Telegram.Subscriptions) != 1 {
+		t.Errorf("round-trip Telegram 配置不一致: %+v", got.Telegram)
+	}
+	if got.Telegram.Subscriptions[0].Template != notifier.DefaultTemplate {
+		t.Error("空通知模板应填充默认卡片")
+	}
+}
+
+func TestValidateTelegramSubscriptions(t *testing.T) {
+	service := model.Service{ID: "s1", Name: "svc", Protocol: model.ProtocolHTTP, BaseURL: "https://example.com"}
+	cases := []struct {
+		name     string
+		telegram notifier.Config
+	}{
+		{
+			name: "启用订阅缺少 token",
+			telegram: notifier.Config{Subscriptions: []notifier.Subscription{{
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"s1"},
+			}}},
+		},
+		{
+			name: "引用不存在服务",
+			telegram: notifier.Config{BotToken: "token", Subscriptions: []notifier.Subscription{{
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"missing"},
+			}}},
+		},
+		{
+			name: "模板语法错误",
+			telegram: notifier.Config{BotToken: "token", Subscriptions: []notifier.Subscription{{
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"s1"}, Template: "{{",
+			}}},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Config{Services: []model.Service{service}, Telegram: test.telegram}
+			cfg.Normalize()
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("期望 Telegram 配置校验失败")
+			}
+		})
+	}
+}
+
+func TestExampleConfigLoads(t *testing.T) {
+	config, err := Load(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("示例配置必须保持可加载: %v", err)
+	}
+	if len(config.Telegram.Subscriptions) != 1 {
+		t.Fatalf("示例配置应包含 Telegram 聚合订阅: %+v", config.Telegram)
+	}
+	if strings.TrimSpace(config.Telegram.Subscriptions[0].Template) != strings.TrimSpace(notifier.DefaultTemplate) {
+		t.Error("示例配置中的模板必须与内置默认卡片一致")
 	}
 }

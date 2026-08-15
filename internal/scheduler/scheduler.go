@@ -6,10 +6,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/prober"
 	"github.com/lefachao/model-uptime/internal/store"
 )
@@ -35,6 +37,16 @@ type ServiceState struct {
 type probeJob struct {
 	svc        model.Service
 	generation uint64
+	cycleID    uint64
+}
+
+type probeCycle struct {
+	remaining int
+	changes   map[string]notifier.Change
+}
+
+type batchNotifier interface {
+	Notify(notifier.Batch) error
 }
 
 // Scheduler 调度并聚合探测。
@@ -47,6 +59,12 @@ type Scheduler struct {
 	probeFn        func(context.Context, *model.Service) prober.Result
 	logger         *slog.Logger
 	nextGeneration uint64
+	nextCycleID    uint64
+	cycles         map[uint64]*probeCycle
+	notifier       batchNotifier
+	manualChanges  map[string]notifier.Change
+	manualTimer    *time.Timer
+	manualDebounce time.Duration
 	done           chan struct{}
 	wg             sync.WaitGroup
 }
@@ -55,11 +73,26 @@ func New(st *store.Store, logger *slog.Logger) *Scheduler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Scheduler{states: make(map[string]*ServiceState), store: st, probeFn: prober.Probe, logger: logger, done: make(chan struct{})}
+	return &Scheduler{
+		states: make(map[string]*ServiceState), cycles: make(map[uint64]*probeCycle),
+		manualChanges: make(map[string]notifier.Change), store: st, probeFn: prober.Probe,
+		logger: logger, manualDebounce: 3 * time.Second, done: make(chan struct{}),
+	}
 }
 
 func (s *Scheduler) Start() { s.wg.Add(1); go s.run() }
-func (s *Scheduler) Stop()  { close(s.done); s.wg.Wait() }
+func (s *Scheduler) Stop() {
+	close(s.done)
+	s.wg.Wait()
+	s.flushManualChanges()
+}
+
+// SetNotifier 设置状态变更接收器。nil 表示禁用通知。
+func (s *Scheduler) SetNotifier(n batchNotifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.notifier = n
+}
 
 func (s *Scheduler) run() {
 	defer s.wg.Done()
@@ -106,6 +139,12 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) {
 				// 恢复：再次推进 generation 隔离停用期的在飞探测，并尽快重新调度。
 				s.resumeStateLocked(st, svc)
 			default:
+				if !reflect.DeepEqual(st.svc, svc) {
+					// 任意服务定义变化都使在途结果失效，避免旧端点的结果使用
+					// 新名称、Provider 或模型信息写入并触发错误归因的通知。
+					s.advanceGenerationLocked(st)
+					st.lastProbe = time.Time{}
+				}
 				st.svc = svc
 			}
 		}
@@ -191,15 +230,30 @@ func (s *Scheduler) checkDue() {
 		st.lastProbe = now
 		due = append(due, probeJob{svc: st.svc, generation: st.generation})
 	}
+	if len(due) > 0 {
+		// 同一次 tick 选出的 due 服务构成通知聚合边界。remaining 统计所有任务，
+		// 包括随后因 reload 失效的任务，保证慢任务结束后批次仍能确定关闭。
+		s.nextCycleID++
+		cycleID := s.nextCycleID
+		s.cycles[cycleID] = &probeCycle{remaining: len(due), changes: make(map[string]notifier.Change)}
+		for i := range due {
+			due[i].cycleID = cycleID
+		}
+	}
 	s.mu.Unlock()
 	for _, job := range due {
-		go s.probe(job)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.probe(job)
+		}()
 	}
 }
 
 func (s *Scheduler) probe(job probeJob) {
 	res := s.probeFn(context.Background(), &job.svc)
-	s.recordGeneration(job.svc.ID, job.generation, model.ProbeResult{OK: res.OK, TS: time.Now().Unix(), LatencyMS: res.LatencyMS, Error: res.Error})
+	change := s.recordGeneration(job.svc.ID, job.generation, model.ProbeResult{OK: res.OK, TS: time.Now().Unix(), LatencyMS: res.LatencyMS, Error: res.Error})
+	s.completeCycle(job.cycleID, change)
 }
 
 // record 为包内测试与同步调用保留的快捷入口。
@@ -212,19 +266,20 @@ func (s *Scheduler) record(id string, r model.ProbeResult) {
 	}
 	s.mu.RUnlock()
 	if generation != 0 {
-		s.recordGeneration(id, generation, r)
+		_ = s.recordGeneration(id, generation, r)
 	}
 }
 
 // recordGeneration 只有在服务仍处于启动该探测时的生命周期且已启用时才接受结果。
 // 持久化在相同互斥边界内完成，避免删除历史后旧异步写入重新污染数据库。
-func (s *Scheduler) recordGeneration(id string, generation uint64, r model.ProbeResult) {
+func (s *Scheduler) recordGeneration(id string, generation uint64, r model.ProbeResult) *notifier.Change {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.states[id]
 	if !ok || !st.svc.IsEnabled() || st.generation != generation {
-		return
+		return nil
 	}
+	previous := st.last
 	st.history = append(st.history, r)
 	if n := s.page.HistoryLen; len(st.history) > n {
 		st.history = st.history[len(st.history)-n:]
@@ -234,6 +289,22 @@ func (s *Scheduler) recordGeneration(id string, generation uint64, r model.Probe
 		if err := s.store.AppendResult(context.Background(), id, r); err != nil {
 			s.logger.Warn("持久化探测结果失败", "svc", id, "err", err)
 		}
+	}
+	if previous == nil || previous.OK == r.OK {
+		return nil
+	}
+	previousStatus, status := "down", "up"
+	if previous.OK {
+		previousStatus, status = "up", "down"
+	}
+	modelName := st.svc.Model
+	if modelName == "" {
+		modelName = st.svc.Name
+	}
+	return &notifier.Change{
+		ServiceID: id, Model: modelName, Provider: st.svc.Provider, Protocol: st.svc.Protocol,
+		OK: r.OK, LatencyMS: r.LatencyMS, Error: r.Error, UptimePct: uptimePct(st.history),
+		Samples: len(st.history), PreviousStatus: previousStatus, Status: status, LastTS: r.TS,
 	}
 }
 
@@ -248,8 +319,80 @@ func (s *Scheduler) ProbeNow(id string) (*model.ProbeResult, error) {
 	s.mu.RUnlock()
 	res := s.probeFn(context.Background(), &job.svc)
 	r := model.ProbeResult{OK: res.OK, TS: time.Now().Unix(), LatencyMS: res.LatencyMS, Error: res.Error}
-	s.recordGeneration(id, job.generation, r)
+	if change := s.recordGeneration(id, job.generation, r); change != nil {
+		s.queueManualChange(*change)
+	}
 	return &r, nil
+}
+
+// completeCycle 在本轮每个探测结束时调用；最后一个任务负责把净变化整批提交。
+func (s *Scheduler) completeCycle(cycleID uint64, change *notifier.Change) {
+	if cycleID == 0 {
+		return
+	}
+	s.mu.Lock()
+	cycle := s.cycles[cycleID]
+	if cycle == nil {
+		s.mu.Unlock()
+		return
+	}
+	if change != nil {
+		cycle.changes[change.ServiceID] = *change
+	}
+	cycle.remaining--
+	if cycle.remaining > 0 {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.cycles, cycleID)
+	changes := changeValues(cycle.changes)
+	n := s.notifier
+	s.mu.Unlock()
+	s.notify(n, changes)
+}
+
+// queueManualChange 为不属于调度轮次的 ProbeNow 使用防抖窗口，避免连续手动探测
+// 将多个模型的变化拆成多条 Telegram 消息。
+func (s *Scheduler) queueManualChange(change notifier.Change) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if previous, exists := s.manualChanges[change.ServiceID]; exists {
+		// 防抖窗口按首次旧状态与最终新状态判断净变化，up → down → up
+		// 不应被误报为一次恢复。
+		change.PreviousStatus = previous.PreviousStatus
+	}
+	s.manualChanges[change.ServiceID] = change
+	if s.manualTimer != nil {
+		s.manualTimer.Stop()
+	}
+	s.manualTimer = time.AfterFunc(s.manualDebounce, s.flushManualChanges)
+}
+
+func (s *Scheduler) flushManualChanges() {
+	s.mu.Lock()
+	changes := changeValues(s.manualChanges)
+	s.manualChanges = make(map[string]notifier.Change)
+	s.manualTimer = nil
+	n := s.notifier
+	s.mu.Unlock()
+	s.notify(n, changes)
+}
+
+func changeValues(changes map[string]notifier.Change) []notifier.Change {
+	out := make([]notifier.Change, 0, len(changes))
+	for _, change := range changes {
+		out = append(out, change)
+	}
+	return out
+}
+
+func (s *Scheduler) notify(n batchNotifier, changes []notifier.Change) {
+	if n == nil || len(changes) == 0 {
+		return
+	}
+	if err := n.Notify(notifier.Batch{ChangedAt: time.Now(), Changes: changes}); err != nil {
+		s.logger.Warn("提交状态变更通知失败", "err", err, "changes", len(changes))
+	}
 }
 
 func (s *Scheduler) Snapshot() model.StatusResponse {

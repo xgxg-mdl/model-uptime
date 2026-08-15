@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/lefachao/model-uptime/internal/config"
+	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/scheduler"
 )
 
@@ -19,6 +21,7 @@ var webFS embed.FS
 // Options 是 Server 的依赖注入。
 type Options struct {
 	Scheduler  *scheduler.Scheduler
+	Notifier   *notifier.Notifier
 	ConfigPath string // config.yaml 路径（admin 修改后原子写回）
 	AdminToken string // 已生效的管理令牌（env 优先于配置文件）
 	Logger     *slog.Logger
@@ -30,6 +33,9 @@ type Server struct {
 	log   *slog.Logger
 	cfgMu sync.RWMutex
 	cfg   *config.Config // 运行时配置快照，admin 修改后同步落盘
+	// updateMu 覆盖“读取当前配置 → 修改 → 落盘 → 热更新”的完整事务，
+	// 避免并发管理请求互相覆盖并造成磁盘与运行时状态分叉。
+	updateMu sync.Mutex
 	// 生效中的管理令牌。初值来自 opt.AdminToken；首次设置（/api/admin/setup）
 	// 会写入配置文件并更新此字段，无需重启即生效。
 	tokenMu    sync.RWMutex
@@ -78,6 +84,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/admin/services/{id}/duplicate", s.requireAuth(s.handleDuplicateService))
 	mux.Handle("GET /api/admin/page", s.requireAuth(s.handleGetPage))
 	mux.Handle("PUT /api/admin/page", s.requireAuth(s.handleUpdatePage))
+	mux.Handle("GET /api/admin/telegram", s.requireAuth(s.handleGetTelegram))
+	mux.Handle("PUT /api/admin/telegram", s.requireAuth(s.handleUpdateTelegram))
+	mux.Handle("POST /api/admin/telegram/test", s.requireAuth(s.handleTestTelegram))
 
 	// 静态页面（状态页 + 配置页 + 字体）。webFS 根含 web/ 前缀，需 Sub 到内容根，
 	// 使 / 正确落到 index.html，而非显示 embed 目录结构。
@@ -110,8 +119,18 @@ func (s *Server) page(name string) http.HandlerFunc {
 func (s *Server) currentConfig() config.Config {
 	s.cfgMu.RLock()
 	defer s.cfgMu.RUnlock()
-	// config.Config 含切片字段，浅拷贝即可（写路径总是整体替换切片）
-	return *s.cfg
+	out := *s.cfg
+	out.Services = append([]model.Service(nil), s.cfg.Services...)
+	for i := range out.Services {
+		out.Services[i].Headers = cloneStringMap(out.Services[i].Headers)
+		out.Services[i].Enabled = cloneBoolPtr(out.Services[i].Enabled)
+		out.Services[i].Stream = cloneBoolPtr(out.Services[i].Stream)
+	}
+	out.Telegram.Subscriptions = append([]notifier.Subscription(nil), s.cfg.Telegram.Subscriptions...)
+	for i := range out.Telegram.Subscriptions {
+		out.Telegram.Subscriptions[i].ServiceIDs = append([]string(nil), out.Telegram.Subscriptions[i].ServiceIDs...)
+	}
+	return out
 }
 
 // updateConfig 校验、落盘并应用新配置，随后通知调度器热重载。
@@ -123,6 +142,11 @@ func (s *Server) updateConfig(next *config.Config) error {
 	}
 	if err := next.Save(s.opt.ConfigPath); err != nil {
 		return err
+	}
+	if s.opt.Notifier != nil {
+		if err := s.opt.Notifier.UpdateConfig(next.Telegram); err != nil {
+			return err
+		}
 	}
 	s.cfgMu.Lock()
 	s.cfg = next

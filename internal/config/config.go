@@ -10,13 +10,15 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 )
 
 // Config 是完整的服务配置。
 type Config struct {
-	AdminToken string            `yaml:"admin_token"`
-	Page       model.PageConfig  `yaml:"page"`
-	Services   []model.Service   `yaml:"services"`
+	AdminToken string           `yaml:"admin_token"`
+	Page       model.PageConfig `yaml:"page"`
+	Services   []model.Service  `yaml:"services"`
+	Telegram   notifier.Config  `yaml:"telegram"`
 }
 
 // Load 从文件读取配置，填充默认值并校验。
@@ -43,6 +45,7 @@ func Load(path string) (*Config, error) {
 // Normalize 填充各层默认值。
 func (c *Config) Normalize() {
 	c.Page.Normalize()
+	notifier.NormalizeConfig(&c.Telegram)
 	for i := range c.Services {
 		c.Services[i].Normalize()
 	}
@@ -63,6 +66,24 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("服务 id 重复: %q", svc.ID)
 		}
 		seen[svc.ID] = true
+	}
+	if err := notifier.ValidateConfig(c.Telegram); err != nil {
+		return err
+	}
+	for _, subscription := range c.Telegram.Subscriptions {
+		if subscription.Name == "" {
+			return fmt.Errorf("Telegram 订阅 %q: name 不能为空", subscription.ID)
+		}
+		references := make(map[string]bool, len(subscription.ServiceIDs))
+		for _, id := range subscription.ServiceIDs {
+			if id == "" || !seen[id] {
+				return fmt.Errorf("Telegram 订阅 %q 引用了不存在的服务 %q", subscription.ID, id)
+			}
+			if references[id] {
+				return fmt.Errorf("Telegram 订阅 %q 重复引用服务 %q", subscription.ID, id)
+			}
+			references[id] = true
+		}
 	}
 	return nil
 }

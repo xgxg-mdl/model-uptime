@@ -4,6 +4,7 @@
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
 - **终端风格状态页**：60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
+- **Telegram 聚合通知**：按订阅合并同一调度轮的多模型变化，仅在异常/恢复切换时发送可自定义 HTML 消息
 - **配置页**：在线管理监控目标与页面显示配置（标题、历史窗口、统计维度开关），修改即时热重载
 - **Docker Compose 一键部署**：Go 单二进制 + SQLite，最终镜像约 15MB
 
@@ -100,6 +101,17 @@ page:                    # 状态页显示配置
   show_latency: true
   show_avg_load: true
 
+telegram:
+  bot_token: "123456789:replace-with-your-bot-token"
+  subscriptions:
+    - id: operations     # 订阅唯一 ID
+      name: Operations
+      enabled: true
+      chat_id: "-1001234567890"
+      service_ids:       # 可包含 enabled: false 的服务
+        - openai-gpt54
+      template: ""       # 留空使用默认聚合模板
+
 services:                # 监控目标
   - id: openai-gpt54     # 唯一 ID，创建后不可改
     name: gpt-5.4        # 状态页显示名
@@ -115,12 +127,35 @@ services:                # 监控目标
 
 `http` 协议额外支持 `method` / `headers`（JSON 对象）/ `body` / `expect_status`。
 
+## Telegram 聚合订阅
+
+Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中的任意服务，包括当前已禁用的服务。禁用期间该服务不会被探测，也不会产生空通知；重新启用后，它会在实际状态发生变化时继续参与订阅。
+
+通知规则：
+
+- 首次有效探测只建立状态基线，不发送通知。
+- 只有 `up → down` 和 `down → up` 会发送；持续异常或持续正常不重复发送。
+- 同一调度轮中，每个订阅最多发送一条消息，异常模型和恢复模型分区展示。
+- 管理页的手动测试连接使用 3 秒聚合窗口，连续测试多个模型时不会逐条刷屏。
+
+每个订阅可使用 Go `html/template` 自定义消息。通知以 Telegram HTML 模式发送，模板变量会自动转义，最长 4096 个字符。`template` 留空时使用内置的默认模板：标题和时间在顶部，中间给出 Down/Recovered/Total 摘要，下方分别展示异常原因与恢复后的延迟、可用率，适合手机阅读。
+
+| 模板变量 | 说明 |
+|---|---|
+| `.ChangedAt` | 该批状态变化时间 |
+| `.DownCount` / `.RecoveryCount` / `.TotalChanges` | 异常数、恢复数和总变化数 |
+| `.DownModels` / `.RecoveredModels` | 异常模型列表和恢复模型列表 |
+| `.Changes` | 本条订阅消息中的全部状态变化 |
+
+`.DownModels`、`.RecoveredModels` 和 `.Changes` 的每个元素包含 `.ServiceID`、`.Model`、`.Provider`、`.Protocol`、`.OK`、`.LatencyMS`、`.Error`、`.UptimePct`、`.Samples`、`.PreviousStatus`、`.Status` 和 `.LastTS`。完整的默认模板可直接参考 [config.example.yaml](config.example.yaml)。
+
 ## 配置页
 
 `/admin/`，用管理密码登录（会话内有效）。首次部署未设置密码时，进入页面会提示**设置管理密码**，之后用该密码登录。功能：
 
 - **监控服务**：增删改、测试连接（立即探测一次并显示结果）、启停
 - **页面显示**：标题、副标题、探针注释、历史窗口、轮询间隔、四个统计维度开关
+- **Telegram 订阅**：Bot Token 脱敏编辑、订阅增删改/启停、多模型选择、聚合模板编辑与测试发送
 - **API Key 脱敏**：列表只显示掩码；编辑时留空即保留原密钥
 
 所有修改原子写回配置文件并即时热重载，无需重启。
@@ -137,6 +172,8 @@ services:                # 监控目标
 | `/api/admin/services/{id}` | PUT / DELETE | Bearer | 更新 / 删除 |
 | `/api/admin/services/{id}/test` | POST | Bearer | 立即探测一次 |
 | `/api/admin/page` | GET / PUT | Bearer | 页面显示配置 |
+| `/api/admin/telegram` | GET / PUT | Bearer | 获取（Token 脱敏）/ 更新 Telegram 配置 |
+| `/api/admin/telegram/test` | POST | Bearer | 按 `{"subscription_id": "operations"}` 同步发送聚合测试消息 |
 
 ## 存储与数据
 
@@ -159,6 +196,7 @@ internal/
   store/             SQLite 历史持久化（纯 Go，无 cgo）
   prober/            协议探针适配器（chat / response / message / http）
   scheduler/         1s 级调度、并发探测、历史窗口、聚合快照
+  notifier/          Telegram 聚合模板、异步发送与失败重试
   api/               HTTP 路由、管理 API、token 认证、embed 前端
     web/             前端：状态页（复刻）+ 配置页 + JetBrains Mono 字体
 ```
@@ -169,4 +207,4 @@ internal/
 go test ./...
 ```
 
-覆盖：各协议探测成功/失败/超时/路径拼接/鉴权头、配置加载与校验、SQLite 读写、调度与聚合、管理 API 全流程（认证、CRUD、密钥保留、热重载）。
+覆盖：各协议探测成功/失败/超时/路径拼接/鉴权头、配置加载与校验、SQLite 读写、调度轮次聚合、Telegram 模板与重试、管理 API 全流程（认证、CRUD、密钥保留、热重载）。

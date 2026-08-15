@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 )
 
 // decodeJSON 解析请求体 JSON。
@@ -48,6 +49,8 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
 	cfg := s.currentConfig()
 	for _, ex := range cfg.Services {
@@ -64,7 +67,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"service": maskService(svc)})
 }
 
-// handleUpdateService 更新服务。id 从路径取，请求体内的 id 仅用于改名校验。
+// handleUpdateService 更新服务。id 从路径取，创建后保持不可变，确保历史与订阅引用稳定。
 // API key 留空或填哨兵值时保留原密钥（配置页脱敏显示的前提）。
 func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -73,6 +76,8 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求体不是有效 JSON")
 		return
 	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
 	cfg := s.currentConfig()
 	idx := -1
@@ -95,13 +100,8 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 		in.ID = old.ID
 	}
 	if in.ID != id {
-		// 不允许改名成已存在的其他 id
-		for i, ex := range cfg.Services {
-			if i != idx && ex.ID == in.ID {
-				writeErr(w, http.StatusConflict, "服务 id 已存在: "+in.ID)
-				return
-			}
-		}
+		writeErr(w, http.StatusBadRequest, "服务 id 创建后不可修改")
+		return
 	}
 	in.Normalize()
 	if err := in.Validate(); err != nil {
@@ -122,6 +122,8 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 // 因此复制必须由服务端读取明文配置后深拷贝完成。
 func (s *Server) handleDuplicateService(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
 	cfg := s.currentConfig()
 	idx := -1
@@ -194,6 +196,8 @@ func cloneBoolPtr(b *bool) *bool {
 // handleDeleteService 删除服务。
 func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 	cfg := s.currentConfig()
 	kept := cfg.Services[:0]
 	found := false
@@ -209,6 +213,16 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg.Services = kept
+	for i := range cfg.Telegram.Subscriptions {
+		subscription := &cfg.Telegram.Subscriptions[i]
+		selected := subscription.ServiceIDs[:0]
+		for _, serviceID := range subscription.ServiceIDs {
+			if serviceID != id {
+				selected = append(selected, serviceID)
+			}
+		}
+		subscription.ServiceIDs = selected
+	}
 	if err := s.updateConfig(&cfg); err != nil {
 		writeErr(w, http.StatusInternalServerError, "保存配置失败: "+err.Error())
 		return
@@ -252,6 +266,8 @@ func (s *Server) handleBulkUpdateServices(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusBadRequest, "ids 不能为空")
 		return
 	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
 	cfg := s.currentConfig()
 	// 预校验所有 id 存在，避免部分落盘。
@@ -338,6 +354,8 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 	cfg := s.currentConfig()
 	cfg.Page = page
 	if err := s.updateConfig(&cfg); err != nil {
@@ -347,9 +365,71 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+// handleGetTelegram 返回脱敏后的 Telegram 通知配置。
+func (s *Server) handleGetTelegram(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, telegramView(s.currentConfig().Telegram))
+}
+
+// handleUpdateTelegram 校验、持久化并热更新 Telegram 通知配置。
+// Bot Token 留空或使用脱敏占位值时保留原值。
+func (s *Server) handleUpdateTelegram(w http.ResponseWriter, r *http.Request) {
+	var telegram notifier.Config
+	if err := decodeJSON(r, &telegram); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体不是有效 JSON")
+		return
+	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	cfg := s.currentConfig()
+	if telegram.BotToken == "" || telegram.BotToken == "****" || telegram.BotToken == model.APIKeySentinel {
+		telegram.BotToken = cfg.Telegram.BotToken
+	}
+	cfg.Telegram = telegram
+	if err := s.updateConfig(&cfg); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, telegramView(s.currentConfig().Telegram))
+}
+
+func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Notifier == nil {
+		writeErr(w, http.StatusServiceUnavailable, "Telegram 通知器未初始化")
+		return
+	}
+	var request struct {
+		SubscriptionID string `json:"subscription_id"`
+	}
+	if err := decodeJSON(r, &request); err != nil || strings.TrimSpace(request.SubscriptionID) == "" {
+		writeErr(w, http.StatusBadRequest, "subscription_id 不能为空")
+		return
+	}
+	if err := s.opt.Notifier.SendTest(r.Context(), request.SubscriptionID); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func telegramView(config notifier.Config) map[string]any {
+	token := ""
+	if config.BotToken != "" {
+		token = "****"
+	}
+	return map[string]any{
+		"bot_token":        token,
+		"token_configured": config.BotToken != "",
+		"subscriptions":    config.Subscriptions,
+	}
+}
+
 // maskService 返回脱敏后的服务副本。
 func maskService(svc model.Service) model.Service {
 	svc.APIKey = maskKey(svc.APIKey)
+	if svc.Enabled == nil {
+		enabled := true
+		svc.Enabled = &enabled
+	}
 	return svc
 }
 

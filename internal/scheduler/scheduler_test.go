@@ -3,11 +3,13 @@ package scheduler
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/prober"
 	"github.com/lefachao/model-uptime/internal/store"
 )
@@ -226,6 +228,191 @@ func TestCheckDueSkipsDisabled(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if calls.Load() != 0 {
 		t.Errorf("禁用服务不应被探测")
+	}
+}
+
+type collectingNotifier struct {
+	mu      sync.Mutex
+	batches []notifier.Batch
+	ready   chan struct{}
+}
+
+func (n *collectingNotifier) Notify(batch notifier.Batch) error {
+	n.mu.Lock()
+	n.batches = append(n.batches, batch)
+	n.mu.Unlock()
+	select {
+	case n.ready <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func (n *collectingNotifier) snapshot() []notifier.Batch {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]notifier.Batch(nil), n.batches...)
+}
+
+func TestCheckDueAggregatesMixedChangesIntoOneBatch(t *testing.T) {
+	s := New(nil, nil)
+	s.Reload([]model.Service{testSvc("down", true), testSvc("recovered", true)}, defaultPage())
+	s.record("down", model.ProbeResult{OK: true, TS: 1})
+	s.record("recovered", model.ProbeResult{OK: false, TS: 1, Error: "old failure"})
+
+	collector := &collectingNotifier{ready: make(chan struct{}, 1)}
+	s.SetNotifier(collector)
+	s.probeFn = func(_ context.Context, svc *model.Service) prober.Result {
+		if svc.ID == "down" {
+			return prober.Result{OK: false, Error: "timeout"}
+		}
+		return prober.Result{OK: true, LatencyMS: 42}
+	}
+
+	s.checkDue()
+	select {
+	case <-collector.ready:
+	case <-time.After(time.Second):
+		t.Fatal("等待聚合通知超时")
+	}
+	batches := collector.snapshot()
+	if len(batches) != 1 || len(batches[0].Changes) != 2 {
+		t.Fatalf("同轮变化应合并成一批: %+v", batches)
+	}
+	statuses := map[string]string{}
+	for _, change := range batches[0].Changes {
+		statuses[change.ServiceID] = change.Status
+	}
+	if statuses["down"] != "down" || statuses["recovered"] != "up" {
+		t.Fatalf("聚合状态错误: %v", statuses)
+	}
+}
+
+func TestFirstAndContinuousFailureDoNotNotify(t *testing.T) {
+	s := New(nil, nil)
+	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
+	collector := &collectingNotifier{ready: make(chan struct{}, 1)}
+	s.SetNotifier(collector)
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		return prober.Result{OK: false, Error: "still down"}
+	}
+
+	s.checkDue()
+	s.wg.Wait()
+	if batches := collector.snapshot(); len(batches) != 0 {
+		t.Fatalf("首次异常只应建立基线: %+v", batches)
+	}
+	s.mu.Lock()
+	s.states["s1"].lastProbe = time.Time{}
+	s.mu.Unlock()
+	s.checkDue()
+	s.wg.Wait()
+	if batches := collector.snapshot(); len(batches) != 0 {
+		t.Fatalf("持续异常不应重复通知: %+v", batches)
+	}
+
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		return prober.Result{OK: true, LatencyMS: 12}
+	}
+	s.mu.Lock()
+	s.states["s1"].lastProbe = time.Time{}
+	s.mu.Unlock()
+	s.checkDue()
+	s.wg.Wait()
+	batches := collector.snapshot()
+	if len(batches) != 1 || len(batches[0].Changes) != 1 || batches[0].Changes[0].Status != "up" {
+		t.Fatalf("异常恢复应发送一次通知: %+v", batches)
+	}
+}
+
+func TestInvalidatedProbeStillCompletesCycle(t *testing.T) {
+	s := New(nil, nil)
+	s.Reload([]model.Service{testSvc("kept", true), testSvc("removed", true)}, defaultPage())
+	s.record("kept", model.ProbeResult{OK: true, TS: 1})
+	s.record("removed", model.ProbeResult{OK: true, TS: 1})
+
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	s.probeFn = func(_ context.Context, svc *model.Service) prober.Result {
+		started <- svc.ID
+		<-release
+		return prober.Result{OK: false, Error: "failed"}
+	}
+	collector := &collectingNotifier{ready: make(chan struct{}, 1)}
+	s.SetNotifier(collector)
+	s.checkDue()
+	<-started
+	<-started
+	s.Reload([]model.Service{testSvc("kept", true)}, defaultPage())
+	close(release)
+
+	select {
+	case <-collector.ready:
+	case <-time.After(time.Second):
+		t.Fatal("失效探测不应阻塞聚合批次完成")
+	}
+	batches := collector.snapshot()
+	if len(batches) != 1 || len(batches[0].Changes) != 1 || batches[0].Changes[0].ServiceID != "kept" {
+		t.Fatalf("批次应只包含仍有效的服务: %+v", batches)
+	}
+}
+
+func TestReloadChangedServiceDropsInFlightAndUsesModelID(t *testing.T) {
+	s := New(nil, nil)
+	service := testSvc("s1", true)
+	service.Name = "Production endpoint"
+	service.Protocol = model.ProtocolChat
+	service.Model = "old-model"
+	s.Reload([]model.Service{service}, defaultPage())
+	s.record("s1", model.ProbeResult{OK: true, TS: 1})
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		close(started)
+		<-release
+		return prober.Result{OK: false, Error: "old endpoint failed"}
+	}
+	collector := &collectingNotifier{ready: make(chan struct{}, 1)}
+	s.SetNotifier(collector)
+	s.checkDue()
+	<-started
+
+	updated := service
+	updated.BaseURL = "http://new.example.com"
+	updated.Model = "new-model"
+	s.Reload([]model.Service{updated}, defaultPage())
+	close(release)
+	s.wg.Wait()
+	if batches := collector.snapshot(); len(batches) != 0 {
+		t.Fatalf("旧端点的在途结果不应触发通知: %+v", batches)
+	}
+
+	s.probeFn = func(_ context.Context, _ *model.Service) prober.Result {
+		return prober.Result{OK: false, Error: "new endpoint failed"}
+	}
+	s.checkDue()
+	s.wg.Wait()
+	batches := collector.snapshot()
+	if len(batches) != 1 || len(batches[0].Changes) != 1 || batches[0].Changes[0].Model != "new-model" {
+		t.Fatalf("通知应使用真实模型 ID: %+v", batches)
+	}
+}
+
+func TestManualDebouncePreservesFirstPreviousStatus(t *testing.T) {
+	s := New(nil, nil)
+	s.manualDebounce = time.Hour
+	s.queueManualChange(notifier.Change{ServiceID: "s1", PreviousStatus: "up", Status: "down"})
+	s.queueManualChange(notifier.Change{ServiceID: "s1", PreviousStatus: "down", Status: "up", OK: true})
+	s.mu.Lock()
+	change := s.manualChanges["s1"]
+	if s.manualTimer != nil {
+		s.manualTimer.Stop()
+	}
+	s.manualChanges = make(map[string]notifier.Change)
+	s.mu.Unlock()
+	if change.PreviousStatus != "up" || change.Status != "up" {
+		t.Fatalf("防抖窗口应保留首次旧状态和最终新状态: %+v", change)
 	}
 }
 

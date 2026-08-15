@@ -16,6 +16,7 @@ import (
 
 	"github.com/lefachao/model-uptime/internal/api"
 	"github.com/lefachao/model-uptime/internal/config"
+	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/scheduler"
 	"github.com/lefachao/model-uptime/internal/store"
 )
@@ -25,7 +26,8 @@ var defaultConfigBytes []byte
 
 // writeDefaultConfig 首次启动时落盘默认配置。
 func writeDefaultConfig(path string) error {
-	return os.WriteFile(path, defaultConfigBytes, 0o644)
+	// 配置可能包含 API Key 与 Telegram Bot Token，首次创建即限制为仅属主可读写。
+	return os.WriteFile(path, defaultConfigBytes, 0o600)
 }
 
 func main() {
@@ -76,13 +78,28 @@ func main() {
 	}
 	defer st.Close()
 
+	notifications, err := notifier.New(notifier.Options{Logger: logger}, cfg.Telegram)
+	if err != nil {
+		logger.Error("初始化 Telegram 通知器失败", "err", err)
+		os.Exit(1)
+	}
+
 	sch := scheduler.New(st, logger)
+	sch.SetNotifier(notifications)
 	sch.Reload(cfg.Services, cfg.Page)
 	sch.Start()
-	defer sch.Stop()
+	defer func() {
+		sch.Stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := notifications.Close(ctx); err != nil {
+			logger.Warn("关闭 Telegram 通知器超时", "err", err)
+		}
+	}()
 
 	srv, err := api.New(api.Options{
 		Scheduler:  sch,
+		Notifier:   notifications,
 		ConfigPath: configPath,
 		AdminToken: adminToken,
 		Logger:     logger,

@@ -2,14 +2,18 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lefachao/model-uptime/internal/config"
 	"github.com/lefachao/model-uptime/internal/model"
+	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/scheduler"
 	"github.com/lefachao/model-uptime/internal/store"
 )
@@ -279,7 +283,7 @@ func TestServiceCRUD(t *testing.T) {
 	_ = hdr
 }
 
-func TestUpdateServiceConflictingID(t *testing.T) {
+func TestUpdateServiceRejectsIDChange(t *testing.T) {
 	ts := newTestServer(t)
 	// 创建第二个服务
 	code, _ := doJSON(t, ts, http.MethodPost, "/api/admin/services", testToken, map[string]any{
@@ -288,12 +292,12 @@ func TestUpdateServiceConflictingID(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatal("创建失败")
 	}
-	// 把 s1 改名为 two → 冲突
+	// 服务 ID 是订阅与历史的稳定引用，创建后不允许修改。
 	code, _ = doJSON(t, ts, http.MethodPut, "/api/admin/services/s1", testToken, map[string]any{
 		"id": "two", "name": "x", "protocol": "http", "base_url": "http://x",
 	})
-	if code != http.StatusConflict {
-		t.Errorf("改名冲突应 409，got %d", code)
+	if code != http.StatusBadRequest {
+		t.Errorf("修改服务 ID 应返回 400，got %d", code)
 	}
 }
 
@@ -583,5 +587,106 @@ func TestTestEndpoint(t *testing.T) {
 	}
 	if out["latency_ms"] == nil {
 		t.Errorf("应返回延迟: %v", out)
+	}
+}
+
+func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
+	requests := make(chan string, 1)
+	telegramAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("解析 Telegram 请求: %v", err)
+		}
+		requests <- r.URL.Path + "|" + r.Form.Get("chat_id") + "|" + r.Form.Get("parse_mode")
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer telegramAPI.Close()
+
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	scheduler := scheduler.New(st, nil)
+	cfg := &config.Config{
+		AdminToken: testToken,
+		Page:       model.PageConfig{HistoryLen: 60, RefreshSec: 5},
+		Services: []model.Service{{
+			ID: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
+			BaseURL: "http://example.com", IntervalSec: 60, Enabled: boolp(true),
+		}},
+		Telegram: notifier.Config{
+			BotToken: "secret-token",
+			Subscriptions: []notifier.Subscription{{
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "-100", ServiceIDs: []string{"s1"},
+			}},
+		},
+	}
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatal(err)
+	}
+	notifications, err := notifier.New(notifier.Options{APIBaseURL: telegramAPI.URL, RetryDelays: []time.Duration{}}, cfg.Telegram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := notifications.Close(ctx); err != nil {
+			t.Errorf("关闭 notifier: %v", err)
+		}
+	}()
+	scheduler.SetNotifier(notifications)
+	scheduler.Reload(cfg.Services, cfg.Page)
+	server, err := New(Options{
+		Scheduler: scheduler, Notifier: notifications, ConfigPath: configPath, AdminToken: testToken,
+	}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(server.Handler())
+	defer ts.Close()
+
+	code, out := doJSON(t, ts, http.MethodGet, "/api/admin/telegram", testToken, nil)
+	if code != http.StatusOK || out["bot_token"] != "****" || out["token_configured"] != true {
+		t.Fatalf("Telegram GET 未正确脱敏: code=%d out=%v", code, out)
+	}
+
+	code, out = doJSON(t, ts, http.MethodPut, "/api/admin/telegram", testToken, map[string]any{
+		"bot_token": "",
+		"subscriptions": []map[string]any{{
+			"id": "ops", "name": "Primary operations", "enabled": true,
+			"chat_id": "-100", "service_ids": []string{"s1"}, "template": "<b>{{.TotalChanges}}</b>",
+		}},
+	})
+	if code != http.StatusOK || out["bot_token"] != "****" {
+		t.Fatalf("Telegram PUT 失败: code=%d out=%v", code, out)
+	}
+	saved, err := config.Load(configPath)
+	if err != nil || saved.Telegram.BotToken != "secret-token" || saved.Telegram.Subscriptions[0].Name != "Primary operations" {
+		t.Fatalf("Token 保留或配置落盘失败: cfg=%+v err=%v", saved, err)
+	}
+
+	code, out = doJSON(t, ts, http.MethodPost, "/api/admin/telegram/test", testToken, map[string]string{"subscription_id": "ops"})
+	if code != http.StatusOK {
+		t.Fatalf("Telegram 测试发送失败: code=%d out=%v", code, out)
+	}
+	select {
+	case request := <-requests:
+		if request != "/botsecret-token/sendMessage|-100|HTML" {
+			t.Fatalf("Telegram 请求错误: %s", request)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("没有收到 Telegram 测试请求")
+	}
+
+	code, out = doJSON(t, ts, http.MethodDelete, "/api/admin/services/s1", testToken, nil)
+	if code != http.StatusOK {
+		t.Fatalf("删除服务失败: code=%d out=%v", code, out)
+	}
+	saved, err = config.Load(configPath)
+	if err != nil || len(saved.Telegram.Subscriptions) != 1 || len(saved.Telegram.Subscriptions[0].ServiceIDs) != 0 {
+		t.Fatalf("删除服务未清理订阅引用: cfg=%+v err=%v", saved, err)
 	}
 }
