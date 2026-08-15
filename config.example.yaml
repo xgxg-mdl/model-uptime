@@ -46,7 +46,6 @@ telegram:
         {{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
         {{end}}
         {{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
-        异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}
         确认时间：{{formatBeijing .LastTS}}
 
         <b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>

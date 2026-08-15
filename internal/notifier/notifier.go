@@ -32,7 +32,6 @@ const DefaultTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型
 {{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
 {{end}}
 {{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
-异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}
 确认时间：{{formatBeijing .LastTS}}
 
 <b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
@@ -58,7 +57,6 @@ const EnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model 
 {{if gt .TotalChanges 1}}Changes: {{.DownCount}} down, {{.RecoveryCount}} recovered
 {{end}}
 {{if .DownModels}}{{range .DownModels}}<b>Down model: {{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
-Error: {{if .Error}}{{.Error}}{{else}}Probe failed{{end}}
 Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
 
 <b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
@@ -295,14 +293,25 @@ func normalizeSubscription(subscription *Subscription) {
 	subscription.ChatID = strings.TrimSpace(subscription.ChatID)
 	subscription.Language = normalizeLanguage(originalLanguage)
 	templateText := strings.TrimSpace(subscription.Template)
-	// v0.4.x 会把内置英文模板写入配置；未声明语言时将它迁移为新的中文默认。
-	legacyBuiltIn := templateText == strings.TrimSpace(legacyChineseTemplate) || templateText == strings.TrimSpace(legacyEnglishTemplate)
+	// 识别历史版本写入配置的内置模板并升级；用户修改过的自定义模板保持不变。
+	legacyBuiltIn := templateText == strings.TrimSpace(legacyChineseTemplate) ||
+		templateText == strings.TrimSpace(legacyEnglishTemplate) ||
+		templateText == strings.TrimSpace(legacyStatisticsTemplate(DefaultLanguage)) ||
+		templateText == strings.TrimSpace(legacyStatisticsTemplate(LanguageEnglish))
 	if templateText == "" || legacyBuiltIn || (originalLanguage == "" && templateText == strings.TrimSpace(EnglishTemplate)) {
 		subscription.Template = TemplateForLanguage(subscription.Language)
 	}
 	for j := range subscription.ServiceIDs {
 		subscription.ServiceIDs[j] = strings.TrimSpace(subscription.ServiceIDs[j])
 	}
+}
+
+// legacyStatisticsTemplate 还原 v0.6.0 带错误详情的内置模板，用于无损识别并迁移。
+func legacyStatisticsTemplate(language string) string {
+	if normalizeLanguage(language) == LanguageEnglish {
+		return strings.Replace(EnglishTemplate, "Confirmed at:", "Error: {{if .Error}}{{.Error}}{{else}}Probe failed{{end}}\nConfirmed at:", 1)
+	}
+	return strings.Replace(DefaultTemplate, "确认时间：", "异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}\n确认时间：", 1)
 }
 
 func normalizeLanguage(language string) string {

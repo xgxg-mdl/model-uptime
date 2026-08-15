@@ -12,6 +12,9 @@ if (!html.includes("'en-US': `<b>{{if and .DownModels .RecoveredModels}}⚠️ M
 for (const field of ['.OutageDurationSec', '.TodayUpSec', '.TodayDownSec', '.TodayDownCount', '.TodayUptimePct']) {
   if (!html.includes(field)) throw new Error(`Telegram 管理页缺少统计模板变量 ${field}`);
 }
+if (html.includes('异常原因：{{if .Error}}') || html.includes('Error: {{if .Error}}')) {
+  throw new Error('Telegram 内置模板不应返回探测错误详情');
+}
 const start = html.indexOf('async function testTelegramSubscription(index)');
 const end = html.indexOf('\nfunction deleteTelegramSubscription', start);
 if (start < 0 || end < 0) throw new Error('未找到 testTelegramSubscription');

@@ -28,10 +28,17 @@ func TestRenderTemplateAggregatesAndEscapes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"⚠️ 模型状态变更：多项状态变化", "异常模型：alpha &lt;fast&gt;", "vendor &amp; co", "timeout &lt;5s", "异常持续时间：7.9 分钟", "监控模型：<b>beta</b>", "确认时间：2026-08-15 10:50:02", "今日运行时间：9 小时 39 分钟", "今日异常时间：1 小时 10 分钟", "今日异常次数：4 次", "今日可用率：89.20%"} {
+	for _, want := range []string{"⚠️ 模型状态变更：多项状态变化", "异常模型：alpha &lt;fast&gt;", "vendor &amp; co", "异常持续时间：7.9 分钟", "监控模型：<b>beta</b>", "确认时间：2026-08-15 10:50:02", "今日运行时间：9 小时 39 分钟", "今日异常时间：1 小时 10 分钟", "今日异常次数：4 次", "今日可用率：89.20%"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("渲染结果缺少 %q:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, "timeout") || strings.Contains(text, "异常原因") {
+		t.Fatalf("默认模板不应返回探测错误详情:\n%s", text)
+	}
+	custom, err := RenderTemplate(`{{range .Changes}}{{.Error}}{{end}}`, context)
+	if err != nil || custom != "timeout &lt;5s" {
+		t.Fatalf("自定义模板仍应能安全使用 Error 变量: text=%q err=%v", custom, err)
 	}
 }
 
@@ -59,6 +66,8 @@ func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T)
 		{ID: "custom", Template: "custom English content"},
 		{ID: "old-chinese", Language: DefaultLanguage, Template: legacyChineseTemplate},
 		{ID: "old-english", Language: LanguageEnglish, Template: legacyEnglishTemplate},
+		{ID: "stats-chinese", Language: DefaultLanguage, Template: legacyStatisticsTemplate(DefaultLanguage)},
+		{ID: "stats-english", Language: LanguageEnglish, Template: legacyStatisticsTemplate(LanguageEnglish)},
 	}}
 	NormalizeConfig(&config)
 	for _, index := range []int{0, 1} {
@@ -74,6 +83,9 @@ func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T)
 	}
 	if config.Subscriptions[4].Template != DefaultTemplate || config.Subscriptions[5].Template != EnglishTemplate {
 		t.Fatalf("旧版内置模板应升级为新的统计模板: %+v %+v", config.Subscriptions[4], config.Subscriptions[5])
+	}
+	if config.Subscriptions[6].Template != DefaultTemplate || config.Subscriptions[7].Template != EnglishTemplate {
+		t.Fatalf("带错误详情的默认模板应升级为脱敏模板: %+v %+v", config.Subscriptions[6], config.Subscriptions[7])
 	}
 }
 
