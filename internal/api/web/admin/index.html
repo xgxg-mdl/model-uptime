@@ -121,6 +121,9 @@
   .subscription-meta { min-width: 0; }
   .subscription-meta b { display: block; overflow-wrap: anywhere; }
   .subscription-summary { color: var(--mute); font-size: 10px; margin-top: 2px; overflow-wrap: anywhere; }
+  .subscription-test-result { margin-top: 4px; font-size: 10px; overflow-wrap: anywhere; }
+  .subscription-test-result.ok { color: var(--ok); }
+  .subscription-test-result.bad { color: var(--bad); }
   .subscription-editor { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
   .model-picker {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px;
@@ -866,6 +869,7 @@ function renderTelegramSubscriptions() {
       <div class="subscription-meta">
         <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${esc(subscription.name || subscription.id)}</b>
         <div class="subscription-summary">#${esc(subscription.id)} · chat ${esc(subscription.chat_id)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
+        <div class="subscription-test-result hidden" data-tg-test-status="${index}"></div>
       </div>
       <div class="actions">
         <button class="btn" type="button" data-tg-action="edit" data-index="${index}">edit</button>
@@ -951,12 +955,16 @@ function collectTelegramSubscription() {
   return subscription;
 }
 
-function applyTelegramEditor() {
+function applyTelegramEditor(options = {}) {
   const subscription = collectTelegramSubscription();
-  if (editingTelegramIndex === null) telegramConfig.subscriptions.push(subscription);
-  else telegramConfig.subscriptions[editingTelegramIndex] = subscription;
+  if (editingTelegramIndex === null) {
+    telegramConfig.subscriptions.push(subscription);
+    if (options.close === false) editingTelegramIndex = telegramConfig.subscriptions.length - 1;
+  } else {
+    telegramConfig.subscriptions[editingTelegramIndex] = subscription;
+  }
   renderTelegramSubscriptions();
-  closeTelegramEditor();
+  if (options.close !== false) closeTelegramEditor();
   return subscription;
 }
 
@@ -976,22 +984,27 @@ async function saveTelegramConfig(options = {}) {
 async function testTelegramSubscription(index) {
   const subscription = telegramConfig.subscriptions[index];
   if (!subscription) return;
-  const result = document.getElementById('tg-test-result');
-  result.className = 'test-result';
-  result.textContent = 'sending…';
+  const rowResult = document.querySelector(`[data-tg-test-status="${index}"]`);
+  const editorResult = editingTelegramIndex === index ? document.getElementById('tg-test-result') : null;
+  const results = [rowResult, editorResult].filter(Boolean);
+  const setResult = (state, text) => results.forEach(result => {
+    const base = result.id === 'tg-test-result' ? 'test-result' : 'subscription-test-result';
+    result.className = `${base} ${state}`.trim();
+    result.textContent = text;
+  });
+  setResult('', 'saving config…');
   try {
     // 先持久化草稿，确保测试使用的 Token、模板和模型选择与界面一致。
     await saveTelegramConfig({ quiet: true });
+    setResult('', 'sending test message…');
     await api('/api/admin/telegram/test', {
       method: 'POST',
       body: JSON.stringify({ subscription_id: subscription.id }),
     });
-    result.className = 'test-result ok';
-    result.textContent = 'test message sent';
+    setResult('ok', 'test message sent');
     toast(`Test message sent for ${subscription.name || subscription.id}`);
   } catch (err) {
-    result.className = 'test-result bad';
-    result.textContent = err.message;
+    setResult('bad', err.message);
     toast(err.message);
   }
 }
@@ -1020,7 +1033,7 @@ document.getElementById('tg-test-btn').addEventListener('click', async () => {
     const index = editingTelegramIndex === null
       ? telegramConfig.subscriptions.length
       : editingTelegramIndex;
-    applyTelegramEditor();
+    applyTelegramEditor({ close: false });
     await testTelegramSubscription(index);
   } catch (err) { toast(err.message); }
 });

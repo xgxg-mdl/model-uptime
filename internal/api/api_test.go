@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -592,9 +594,15 @@ func TestTestEndpoint(t *testing.T) {
 
 func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 	requests := make(chan string, 1)
+	var rejectTelegram atomic.Bool
 	telegramAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			t.Errorf("解析 Telegram 请求: %v", err)
+		}
+		if rejectTelegram.Load() {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"ok":false,"description":"chat not found"}`)
+			return
 		}
 		requests <- r.URL.Path + "|" + r.Form.Get("chat_id") + "|" + r.Form.Get("parse_mode")
 		_, _ = io.WriteString(w, `{"ok":true}`)
@@ -680,6 +688,13 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("没有收到 Telegram 测试请求")
 	}
+
+	rejectTelegram.Store(true)
+	code, out = doJSON(t, ts, http.MethodPost, "/api/admin/telegram/test", testToken, map[string]string{"subscription_id": "ops"})
+	if code != http.StatusBadGateway || !strings.Contains(out["error"].(string), "chat not found") {
+		t.Fatalf("Telegram 错误必须完整返回管理页: code=%d out=%v", code, out)
+	}
+	rejectTelegram.Store(false)
 
 	code, out = doJSON(t, ts, http.MethodDelete, "/api/admin/services/s1", testToken, nil)
 	if code != http.StatusOK {

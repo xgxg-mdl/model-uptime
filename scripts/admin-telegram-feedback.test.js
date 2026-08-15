@@ -1,0 +1,48 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const html = fs.readFileSync(path.join(__dirname, '..', 'internal', 'api', 'web', 'admin', 'index.html'), 'utf8');
+const start = html.indexOf('async function testTelegramSubscription(index)');
+const end = html.indexOf('\nfunction deleteTelegramSubscription', start);
+if (start < 0 || end < 0) throw new Error('未找到 testTelegramSubscription');
+
+const hiddenEditorResult = { className: 'test-result hidden', textContent: '' };
+const visibleRowResult = { className: 'subscription-test-result hidden', textContent: '' };
+const context = {
+  telegramConfig: {
+    subscriptions: [{ id: 'ops', name: 'Operations', chat_id: '1', service_ids: ['s1'], template: 'test' }],
+  },
+  editingTelegramIndex: null,
+  document: {
+    getElementById(id) {
+      if (id === 'tg-test-result') return hiddenEditorResult;
+      throw new Error(`意外的元素查询: ${id}`);
+    },
+    querySelector(selector) {
+      if (selector === '[data-tg-test-status="0"]') return visibleRowResult;
+      return null;
+    },
+  },
+  saveTelegramConfig: async () => {},
+  api: async () => ({ ok: true }),
+  toast: () => {},
+};
+vm.createContext(context);
+vm.runInContext(html.slice(start, end), context);
+
+(async () => {
+  await context.testTelegramSubscription(0);
+  if (visibleRowResult.textContent !== 'test message sent' || /\bhidden\b/.test(visibleRowResult.className)) {
+    throw new Error('订阅列表行没有留下可见的测试结果');
+  }
+  context.api = async () => { throw new Error('Telegram API returned: chat not found'); };
+  await context.testTelegramSubscription(0);
+  if (visibleRowResult.textContent !== 'Telegram API returned: chat not found' || !/\bbad\b/.test(visibleRowResult.className)) {
+    throw new Error('订阅列表行没有持久显示 Telegram 错误');
+  }
+  console.log('admin Telegram test feedback regression check passed');
+})().catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
