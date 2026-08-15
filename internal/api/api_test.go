@@ -665,14 +665,14 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 		"bot_token": "",
 		"subscriptions": []map[string]any{{
 			"id": "ops", "name": "Primary operations", "enabled": true,
-			"chat_id": "-100", "service_ids": []string{"s1"}, "template": "<b>{{.TotalChanges}}</b>",
+			"chat_id": "-100", "language": "en-US", "service_ids": []string{"s1"}, "template": "<b>{{.TotalChanges}}</b>",
 		}},
 	})
 	if code != http.StatusOK || out["bot_token"] != "****" {
 		t.Fatalf("Telegram PUT 失败: code=%d out=%v", code, out)
 	}
 	saved, err := config.Load(configPath)
-	if err != nil || saved.Telegram.BotToken != "secret-token" || saved.Telegram.Subscriptions[0].Name != "Primary operations" {
+	if err != nil || saved.Telegram.BotToken != "secret-token" || saved.Telegram.Subscriptions[0].Name != "Primary operations" || saved.Telegram.Subscriptions[0].Language != notifier.LanguageEnglish {
 		t.Fatalf("Token 保留或配置落盘失败: cfg=%+v err=%v", saved, err)
 	}
 

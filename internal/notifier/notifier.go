@@ -21,12 +21,30 @@ import (
 const (
 	// TelegramMessageLimit 是 Telegram sendMessage 接受的最大消息字符数。
 	TelegramMessageLimit  = 4096
+	DefaultLanguage       = "zh-CN"
+	LanguageEnglish       = "en-US"
 	defaultQueueSize      = 64
 	defaultRequestTimeout = 10 * time.Second
 )
 
-// DefaultTemplate 同时展示一轮探测中的异常与恢复模型。
-const DefaultTemplate = `<b>MODEL STATUS UPDATE</b>
+// DefaultTemplate 是默认中文模板，同时展示一轮探测中的异常与恢复模型。
+const DefaultTemplate = `<b>模型状态变更</b>
+<code>{{.ChangedAt}}</code>
+
+<b>状态概览</b>
+🔴 异常 <b>{{.DownCount}}</b>   🟢 恢复 <b>{{.RecoveryCount}}</b>   变更 <b>{{.TotalChanges}}</b>
+
+{{if .DownModels}}<b>🔴 异常模型</b>
+{{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+  {{if .Error}}<code>{{.Error}}</code>{{else}}<code>探测失败</code>{{end}}
+{{end}}
+{{end}}{{if .RecoveredModels}}<b>🟢 恢复模型</b>
+{{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+  延迟 <code>{{.LatencyMS}} ms</code> · 可用率 <code>{{printf "%.2f" .UptimePct}}%</code>
+{{end}}{{end}}`
+
+// EnglishTemplate 是英文内置模板，可按订阅选择。
+const EnglishTemplate = `<b>MODEL STATUS UPDATE</b>
 <code>{{.ChangedAt}}</code>
 
 <b>OVERVIEW</b>
@@ -65,6 +83,7 @@ type Subscription struct {
 	Name       string   `yaml:"name" json:"name"`
 	Enabled    bool     `yaml:"enabled" json:"enabled"`
 	ChatID     string   `yaml:"chat_id" json:"chat_id"`
+	Language   string   `yaml:"language" json:"language"`
 	ServiceIDs []string `yaml:"service_ids" json:"service_ids"`
 	Template   string   `yaml:"template" json:"template"`
 }
@@ -191,20 +210,46 @@ func (n *Notifier) UpdateConfig(config Config) error {
 	return nil
 }
 
-// NormalizeConfig 清理配置字段，并为留空模板填入默认卡片。
+// NormalizeConfig 清理配置字段，并按订阅语言填入内置卡片。
 func NormalizeConfig(config *Config) {
 	config.BotToken = strings.TrimSpace(config.BotToken)
 	for i := range config.Subscriptions {
-		subscription := &config.Subscriptions[i]
-		subscription.ID = strings.TrimSpace(subscription.ID)
-		subscription.Name = strings.TrimSpace(subscription.Name)
-		subscription.ChatID = strings.TrimSpace(subscription.ChatID)
-		if strings.TrimSpace(subscription.Template) == "" {
-			subscription.Template = DefaultTemplate
-		}
-		for j := range subscription.ServiceIDs {
-			subscription.ServiceIDs[j] = strings.TrimSpace(subscription.ServiceIDs[j])
-		}
+		normalizeSubscription(&config.Subscriptions[i])
+	}
+}
+
+// TemplateForLanguage 返回受支持语言的内置模板；未知语言交由配置校验报告。
+func TemplateForLanguage(language string) string {
+	if normalizeLanguage(language) == LanguageEnglish {
+		return EnglishTemplate
+	}
+	return DefaultTemplate
+}
+
+func normalizeSubscription(subscription *Subscription) {
+	originalLanguage := strings.TrimSpace(subscription.Language)
+	subscription.ID = strings.TrimSpace(subscription.ID)
+	subscription.Name = strings.TrimSpace(subscription.Name)
+	subscription.ChatID = strings.TrimSpace(subscription.ChatID)
+	subscription.Language = normalizeLanguage(originalLanguage)
+	templateText := strings.TrimSpace(subscription.Template)
+	// v0.4.x 会把内置英文模板写入配置；未声明语言时将它迁移为新的中文默认。
+	if templateText == "" || (originalLanguage == "" && templateText == strings.TrimSpace(EnglishTemplate)) {
+		subscription.Template = TemplateForLanguage(subscription.Language)
+	}
+	for j := range subscription.ServiceIDs {
+		subscription.ServiceIDs[j] = strings.TrimSpace(subscription.ServiceIDs[j])
+	}
+}
+
+func normalizeLanguage(language string) string {
+	switch strings.ToLower(strings.ReplaceAll(strings.TrimSpace(language), "_", "-")) {
+	case "", "zh", "zh-cn":
+		return DefaultLanguage
+	case "en", "en-us":
+		return LanguageEnglish
+	default:
+		return strings.TrimSpace(language)
 	}
 }
 
@@ -256,9 +301,13 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID string) error {
 			continue
 		}
 		now := time.Now()
+		downModel, recoveredModel, provider, probeError := "example-down", "example-recovered", "example", "probe timeout"
+		if subscription.Language == DefaultLanguage {
+			downModel, recoveredModel, provider, probeError = "示例异常模型", "示例恢复模型", "示例提供商", "探测超时"
+		}
 		templateContext := NewTemplateContext(now, []Change{
-			{ServiceID: "example-down", Model: "example-down", Provider: "example", Protocol: "chat", Error: "probe timeout", PreviousStatus: "up", Status: "down", LastTS: now.Unix()},
-			{ServiceID: "example-recovered", Model: "example-recovered", Provider: "example", Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix()},
+			{ServiceID: "example-down", Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix()},
+			{ServiceID: "example-recovered", Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix()},
 		})
 		text, err := executeTemplate(subscription.template, templateContext)
 		if err != nil {
@@ -337,8 +386,7 @@ func compileConfig(config Config) (runtimeConfig, error) {
 	runtime := runtimeConfig{botToken: strings.TrimSpace(config.BotToken)}
 	seen := make(map[string]struct{}, len(config.Subscriptions))
 	for _, subscription := range config.Subscriptions {
-		subscription.ID = strings.TrimSpace(subscription.ID)
-		subscription.ChatID = strings.TrimSpace(subscription.ChatID)
+		normalizeSubscription(&subscription)
 		if subscription.ID == "" {
 			return runtimeConfig{}, errors.New("Telegram 订阅 id 不能为空")
 		}
@@ -352,8 +400,8 @@ func compileConfig(config Config) (runtimeConfig, error) {
 		if subscription.Enabled && subscription.ChatID == "" {
 			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 %q 已启用但 chat id 为空", subscription.ID)
 		}
-		if strings.TrimSpace(subscription.Template) == "" {
-			subscription.Template = DefaultTemplate
+		if subscription.Language != DefaultLanguage && subscription.Language != LanguageEnglish {
+			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 %q 的 language 不受支持: %q", subscription.ID, subscription.Language)
 		}
 		tmpl, err := parseTemplate(subscription.Template)
 		if err != nil {

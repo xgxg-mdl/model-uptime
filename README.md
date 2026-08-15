@@ -108,6 +108,7 @@ telegram:
       name: Operations
       enabled: true
       chat_id: "-1001234567890"
+      language: zh-CN     # zh-CN（默认）| en-US
       service_ids:       # 可包含 enabled: false 的服务
         - openai-gpt54
       template: ""       # 留空使用默认聚合模板
@@ -138,7 +139,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 - 同一调度轮中，每个订阅最多发送一条消息，异常模型和恢复模型分区展示。
 - 管理页的手动测试连接使用 3 秒聚合窗口，连续测试多个模型时不会逐条刷屏。
 
-每个订阅可使用 Go `html/template` 自定义消息。通知以 Telegram HTML 模式发送，模板变量会自动转义，最长 4096 个字符。`template` 留空时使用内置的默认模板：标题和时间在顶部，中间给出 Down/Recovered/Total 摘要，下方分别展示异常原因与恢复后的延迟、可用率，适合手机阅读。
+每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。内置模板的标题和时间位于顶部，中间展示异常、恢复和总变更数，下方分别展示异常原因与恢复后的延迟、可用率，适合手机阅读。
 
 | 模板变量 | 说明 |
 |---|---|

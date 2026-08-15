@@ -31,6 +31,8 @@ telegram:
       name: Operations
       enabled: true
       chat_id: "-1001234567890"
+      # 内置模板语言支持 zh-CN / en-US；省略时默认 zh-CN。
+      language: zh-CN
       # 可引用下方任意服务，包括 enabled: false 的服务；禁用期间不会探测或通知，
       # 重新启用并产生状态变化后会继续参与该订阅的聚合消息。
       service_ids:
@@ -40,19 +42,19 @@ telegram:
       # 留空时自动使用以下默认模板。模板采用 Go html/template 语法，消息以
       # Telegram HTML 发送；变量值会自动转义。
       template: |
-        <b>MODEL STATUS UPDATE</b>
+        <b>模型状态变更</b>
         <code>{{.ChangedAt}}</code>
 
-        <b>OVERVIEW</b>
-        🔴 Down <b>{{.DownCount}}</b>   🟢 Recovered <b>{{.RecoveryCount}}</b>   Total <b>{{.TotalChanges}}</b>
+        <b>状态概览</b>
+        🔴 异常 <b>{{.DownCount}}</b>   🟢 恢复 <b>{{.RecoveryCount}}</b>   变更 <b>{{.TotalChanges}}</b>
 
-        {{if .DownModels}}<b>🔴 DOWN</b>
+        {{if .DownModels}}<b>🔴 异常模型</b>
         {{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-          {{if .Error}}<code>{{.Error}}</code>{{else}}<code>Probe failed</code>{{end}}
+          {{if .Error}}<code>{{.Error}}</code>{{else}}<code>探测失败</code>{{end}}
         {{end}}
-        {{end}}{{if .RecoveredModels}}<b>🟢 RECOVERED</b>
+        {{end}}{{if .RecoveredModels}}<b>🟢 恢复模型</b>
         {{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-          Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
+          延迟 <code>{{.LatencyMS}} ms</code> · 可用率 <code>{{printf "%.2f" .UptimePct}}%</code>
         {{end}}{{end}}
 
 # 监控目标。协议支持：

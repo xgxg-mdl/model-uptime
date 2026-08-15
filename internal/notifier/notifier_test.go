@@ -23,10 +23,55 @@ func TestRenderTemplateAggregatesAndEscapes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"<b>🔴 DOWN</b>", "<b>🟢 RECOVERED</b>", "alpha &lt;fast&gt;", "vendor &amp; co", "timeout &lt;5s", "Latency <code>42 ms</code>"} {
+	for _, want := range []string{"<b>模型状态变更</b>", "<b>🔴 异常模型</b>", "<b>🟢 恢复模型</b>", "alpha &lt;fast&gt;", "vendor &amp; co", "timeout &lt;5s", "延迟 <code>42 ms</code>"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("渲染结果缺少 %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestBuiltInTemplateLanguageSelection(t *testing.T) {
+	t.Parallel()
+	context := NewTemplateContext(time.Now(), []Change{{ServiceID: "a", Model: "alpha", Error: "timeout", Status: "down", PreviousStatus: "up"}})
+	english, err := RenderTemplate(TemplateForLanguage(LanguageEnglish), context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(english, "MODEL STATUS UPDATE") || !strings.Contains(english, "🔴 DOWN") {
+		t.Fatalf("英文内置模板渲染错误:\n%s", english)
+	}
+	if got := TemplateForLanguage(""); got != DefaultTemplate {
+		t.Fatal("空语言必须使用中文默认模板")
+	}
+}
+
+func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T) {
+	t.Parallel()
+	config := Config{Subscriptions: []Subscription{
+		{ID: "empty"},
+		{ID: "legacy", Template: EnglishTemplate},
+		{ID: "english", Language: LanguageEnglish},
+		{ID: "custom", Template: "custom English content"},
+	}}
+	NormalizeConfig(&config)
+	for _, index := range []int{0, 1} {
+		if config.Subscriptions[index].Language != DefaultLanguage || config.Subscriptions[index].Template != DefaultTemplate {
+			t.Fatalf("订阅未迁移为中文默认模板: %+v", config.Subscriptions[index])
+		}
+	}
+	if config.Subscriptions[2].Language != LanguageEnglish || config.Subscriptions[2].Template != EnglishTemplate {
+		t.Fatalf("英文订阅未使用英文内置模板: %+v", config.Subscriptions[2])
+	}
+	if config.Subscriptions[3].Language != DefaultLanguage || config.Subscriptions[3].Template != "custom English content" {
+		t.Fatalf("自定义模板不应被覆盖: %+v", config.Subscriptions[3])
+	}
+}
+
+func TestValidateConfigRejectsUnsupportedLanguage(t *testing.T) {
+	t.Parallel()
+	err := ValidateConfig(Config{Subscriptions: []Subscription{{ID: "ops", Language: "fr-FR"}}})
+	if err == nil || !strings.Contains(err.Error(), "language") {
+		t.Fatalf("未知语言应被拒绝: %v", err)
 	}
 }
 

@@ -133,6 +133,9 @@ func TestSaveRoundTrip(t *testing.T) {
 	if got.Telegram.Subscriptions[0].Template != notifier.DefaultTemplate {
 		t.Error("空通知模板应填充默认卡片")
 	}
+	if got.Telegram.Subscriptions[0].Language != notifier.DefaultLanguage {
+		t.Errorf("空通知语言应默认为中文，得到 %q", got.Telegram.Subscriptions[0].Language)
+	}
 }
 
 func TestValidateTelegramSubscriptions(t *testing.T) {
@@ -159,6 +162,12 @@ func TestValidateTelegramSubscriptions(t *testing.T) {
 				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"s1"}, Template: "{{",
 			}}},
 		},
+		{
+			name: "不支持的通知语言",
+			telegram: notifier.Config{BotToken: "token", Subscriptions: []notifier.Subscription{{
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", Language: "fr-FR", ServiceIDs: []string{"s1"},
+			}}},
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -181,5 +190,8 @@ func TestExampleConfigLoads(t *testing.T) {
 	}
 	if strings.TrimSpace(config.Telegram.Subscriptions[0].Template) != strings.TrimSpace(notifier.DefaultTemplate) {
 		t.Error("示例配置中的模板必须与内置默认卡片一致")
+	}
+	if config.Telegram.Subscriptions[0].Language != notifier.DefaultLanguage {
+		t.Errorf("示例配置应默认使用中文通知，得到 %q", config.Telegram.Subscriptions[0].Language)
 	}
 }

@@ -368,6 +368,14 @@
               <input id="tg-chat-id" required autocomplete="off" placeholder="-1001234567890" />
               <span class="hint">A user, group, or channel chat ID.</span>
             </div>
+            <div class="field">
+              <label>Language *</label>
+              <select id="tg-language">
+                <option value="zh-CN">简体中文</option>
+                <option value="en-US">English</option>
+              </select>
+              <span class="hint">Controls the built-in template; custom templates can use any language.</span>
+            </div>
             <div class="field check-row">
               <input id="tg-enabled" type="checkbox" checked />
               <label for="tg-enabled">enabled</label>
@@ -462,7 +470,22 @@ let telegramConfig = { bot_token: '', subscriptions: [] };
 let editingTelegramIndex = null;
 let telegramTokenConfigured = false;
 
-const DEFAULT_TELEGRAM_TEMPLATE = `<b>MODEL STATUS UPDATE</b>
+const TELEGRAM_TEMPLATES = {
+  'zh-CN': `<b>模型状态变更</b>
+<code>{{.ChangedAt}}</code>
+
+<b>状态概览</b>
+🔴 异常 <b>{{.DownCount}}</b>   🟢 恢复 <b>{{.RecoveryCount}}</b>   变更 <b>{{.TotalChanges}}</b>
+
+{{if .DownModels}}<b>🔴 异常模型</b>
+{{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+  {{if .Error}}<code>{{.Error}}</code>{{else}}<code>探测失败</code>{{end}}
+{{end}}
+{{end}}{{if .RecoveredModels}}<b>🟢 恢复模型</b>
+{{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+  延迟 <code>{{.LatencyMS}} ms</code> · 可用率 <code>{{printf "%.2f" .UptimePct}}%</code>
+{{end}}{{end}}`,
+  'en-US': `<b>MODEL STATUS UPDATE</b>
 <code>{{.ChangedAt}}</code>
 
 <b>OVERVIEW</b>
@@ -475,7 +498,10 @@ const DEFAULT_TELEGRAM_TEMPLATE = `<b>MODEL STATUS UPDATE</b>
 {{end}}{{if .RecoveredModels}}<b>🟢 RECOVERED</b>
 {{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
   Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
-{{end}}{{end}}`;
+{{end}}{{end}}`,
+};
+const DEFAULT_TELEGRAM_LANGUAGE = 'zh-CN';
+const DEFAULT_TELEGRAM_TEMPLATE = TELEGRAM_TEMPLATES[DEFAULT_TELEGRAM_LANGUAGE];
 
 function token() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
 function logout() { sessionStorage.removeItem(TOKEN_KEY); location.reload(); }
@@ -846,13 +872,17 @@ function renderTelegramModelPicker(selectedIDs = []) {
 }
 
 function normalizeTelegramSubscription(subscription) {
+  const language = TELEGRAM_TEMPLATES[subscription.language]
+    ? subscription.language
+    : DEFAULT_TELEGRAM_LANGUAGE;
   return {
     id: subscription.id || '',
     name: subscription.name || '',
     enabled: subscription.enabled !== false,
     chat_id: String(subscription.chat_id || ''),
+    language,
     service_ids: Array.isArray(subscription.service_ids) ? subscription.service_ids.slice() : [],
-    template: subscription.template || DEFAULT_TELEGRAM_TEMPLATE,
+    template: subscription.template || TELEGRAM_TEMPLATES[language],
   };
 }
 
@@ -868,7 +898,7 @@ function renderTelegramSubscriptions() {
     return `<div class="subscription-row">
       <div class="subscription-meta">
         <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${esc(subscription.name || subscription.id)}</b>
-        <div class="subscription-summary">#${esc(subscription.id)} · chat ${esc(subscription.chat_id)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
+        <div class="subscription-summary">#${esc(subscription.id)} · chat ${esc(subscription.chat_id)} · ${esc(subscription.language)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
         <div class="subscription-test-result hidden" data-tg-test-status="${index}"></div>
       </div>
       <div class="actions">
@@ -921,8 +951,11 @@ function openTelegramEditor(index = null) {
   document.getElementById('tg-id').disabled = index !== null;
   document.getElementById('tg-name').value = subscription.name;
   document.getElementById('tg-chat-id').value = subscription.chat_id;
+  const languageSelect = document.getElementById('tg-language');
+  languageSelect.value = subscription.language;
+  languageSelect.dataset.previousLanguage = subscription.language;
   document.getElementById('tg-enabled').checked = subscription.enabled;
-  document.getElementById('tg-template').value = subscription.template || DEFAULT_TELEGRAM_TEMPLATE;
+  document.getElementById('tg-template').value = subscription.template || TELEGRAM_TEMPLATES[subscription.language];
   document.getElementById('tg-test-result').className = 'test-result hidden';
   renderTelegramModelPicker(subscription.service_ids);
   const editor = document.getElementById('tg-editor');
@@ -941,6 +974,7 @@ function collectTelegramSubscription() {
     name: document.getElementById('tg-name').value.trim(),
     enabled: document.getElementById('tg-enabled').checked,
     chat_id: document.getElementById('tg-chat-id').value.trim(),
+    language: document.getElementById('tg-language').value,
     service_ids: selectedTelegramServiceIDs(),
     template: document.getElementById('tg-template').value.trim(),
   });
@@ -1021,6 +1055,15 @@ function deleteTelegramSubscription(index) {
 
 document.getElementById('tg-new-btn').addEventListener('click', () => openTelegramEditor());
 document.getElementById('tg-editor-cancel').addEventListener('click', closeTelegramEditor);
+document.getElementById('tg-language').addEventListener('change', event => {
+  const previousLanguage = event.target.dataset.previousLanguage || DEFAULT_TELEGRAM_LANGUAGE;
+  const nextLanguage = event.target.value;
+  const templateInput = document.getElementById('tg-template');
+  if (!templateInput.value.trim() || templateInput.value.trim() === TELEGRAM_TEMPLATES[previousLanguage].trim()) {
+    templateInput.value = TELEGRAM_TEMPLATES[nextLanguage];
+  }
+  event.target.dataset.previousLanguage = nextLanguage;
+});
 document.getElementById('tg-subscription-form').addEventListener('submit', (event) => {
   event.preventDefault();
   try {
