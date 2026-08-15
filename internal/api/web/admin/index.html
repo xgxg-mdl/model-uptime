@@ -433,6 +433,11 @@
             <input id="p-comment" autocomplete="off" />
             <span class="hint">顶部 # 注释行</span>
           </div>
+          <div class="field full">
+            <label>Public URL</label>
+            <input id="p-public-url" type="url" autocomplete="url" placeholder="https://status.example.com/" />
+            <span class="hint">Appended to Telegram notifications when configured.</span>
+          </div>
           <div class="field">
             <label>History Length</label>
             <input id="p-history" type="number" min="1" max="200" step="1" />
@@ -1114,6 +1119,7 @@ async function loadPage() {
     document.getElementById('p-title').value = p.title || '';
     document.getElementById('p-subtitle').value = p.subtitle || '';
     document.getElementById('p-comment').value = p.probe_comment || '';
+    document.getElementById('p-public-url').value = p.public_url || '';
     document.getElementById('p-history').value = p.history_len || 60;
     document.getElementById('p-refresh').value = p.refresh_sec || 5;
     document.getElementById('p-uptime').checked = !!p.show_uptime;
@@ -1129,6 +1135,7 @@ document.getElementById('page-form').addEventListener('submit', async (e) => {
     title: document.getElementById('p-title').value.trim(),
     subtitle: document.getElementById('p-subtitle').value.trim(),
     probe_comment: document.getElementById('p-comment').value.trim(),
+    public_url: document.getElementById('p-public-url').value.trim(),
     history_len: parseInt(document.getElementById('p-history').value) || 60,
     refresh_sec: parseInt(document.getElementById('p-refresh').value) || 5,
     show_uptime: document.getElementById('p-uptime').checked,

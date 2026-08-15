@@ -305,7 +305,9 @@ func (n *collectingNotifier) snapshot() []notifier.Batch {
 
 func TestCheckDueAggregatesMixedChangesIntoOneBatch(t *testing.T) {
 	s := New(nil, nil)
-	s.Reload([]model.Service{testSvc("down", true), testSvc("recovered", true)}, defaultPage())
+	page := defaultPage()
+	page.PublicURL = "https://status.example.com/"
+	s.Reload([]model.Service{testSvc("down", true), testSvc("recovered", true)}, page)
 	s.record("down", model.ProbeResult{OK: true, TS: 1})
 	s.record("recovered", model.ProbeResult{OK: false, TS: 1, Error: "old failure"})
 
@@ -327,6 +329,9 @@ func TestCheckDueAggregatesMixedChangesIntoOneBatch(t *testing.T) {
 	batches := collector.snapshot()
 	if len(batches) != 1 || len(batches[0].Changes) != 2 {
 		t.Fatalf("同轮变化应合并成一批: %+v", batches)
+	}
+	if batches[0].StatusPageURL != page.PublicURL {
+		t.Fatalf("聚合批次未携带探针页地址: %+v", batches[0])
 	}
 	statuses := map[string]string{}
 	for _, change := range batches[0].Changes {

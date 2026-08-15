@@ -404,7 +404,7 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "subscription_id 不能为空")
 		return
 	}
-	if err := s.opt.Notifier.SendTest(r.Context(), request.SubscriptionID); err != nil {
+	if err := s.opt.Notifier.SendTest(r.Context(), request.SubscriptionID, s.currentConfig().Page.PublicURL); err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}

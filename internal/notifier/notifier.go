@@ -112,6 +112,7 @@ var (
 	ErrClosed               = errors.New("Telegram 通知器已关闭")
 	ErrMessageTooLong       = errors.New("Telegram 消息超过 4096 字符")
 	ErrSubscriptionNotFound = errors.New("Telegram 订阅不存在")
+	ErrInvalidStatusPageURL = errors.New("探针页地址必须是无账号密码的完整 http/https 地址")
 	beijingLocation         = time.FixedZone("Asia/Shanghai", 8*60*60)
 	templateFunctions       = template.FuncMap{
 		"beijingDate":   formatBeijingDate,
@@ -166,8 +167,9 @@ type Change struct {
 
 // Batch 是一次调度轮次产生的全部状态变化。
 type Batch struct {
-	ChangedAt time.Time
-	Changes   []Change
+	ChangedAt     time.Time
+	Changes       []Change
+	StatusPageURL string
 }
 
 // TemplateContext 是聚合模板可访问的完整上下文。
@@ -358,6 +360,11 @@ func (n *Notifier) Notify(batch Batch) error {
 			errs = append(errs, fmt.Errorf("渲染订阅 %q: %w", subscription.ID, err))
 			continue
 		}
+		text, err = appendStatusPageLink(text, batch.StatusPageURL, subscription.Language)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("渲染订阅 %q: %w", subscription.ID, err))
+			continue
+		}
 		if err := n.enqueue(sendJob{botToken: config.botToken, chatID: subscription.ChatID, text: text, name: subscription.ID}); err != nil {
 			errs = append(errs, fmt.Errorf("订阅 %q: %w", subscription.ID, err))
 		}
@@ -366,7 +373,7 @@ func (n *Notifier) Notify(batch Batch) error {
 }
 
 // SendTest 同步发送一条包含异常和恢复示例的消息，便于管理 API 返回准确结果。
-func (n *Notifier) SendTest(ctx context.Context, subscriptionID string) error {
+func (n *Notifier) SendTest(ctx context.Context, subscriptionID, statusPageURL string) error {
 	config := n.configSnapshot()
 	for _, subscription := range config.subscriptions {
 		if subscription.ID != subscriptionID {
@@ -382,6 +389,10 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID string) error {
 			{ServiceID: "example-recovered", Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix(), OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
 		})
 		text, err := executeTemplate(subscription.template, templateContext)
+		if err != nil {
+			return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
+		}
+		text, err = appendStatusPageLink(text, statusPageURL, subscription.Language)
 		if err != nil {
 			return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
 		}
@@ -542,6 +553,32 @@ func executeTemplate(tmpl *template.Template, context TemplateContext) (string, 
 		return "", err
 	}
 	text := output.String()
+	if utf8.RuneCountInString(text) > TelegramMessageLimit {
+		return "", ErrMessageTooLong
+	}
+	return text, nil
+}
+
+func appendStatusPageLink(text, statusPageURL, language string) (string, error) {
+	statusPageURL = strings.TrimSpace(statusPageURL)
+	if statusPageURL == "" {
+		return text, nil
+	}
+	parsed, err := url.Parse(statusPageURL)
+	if err != nil || parsed == nil || parsed.Host == "" || parsed.User != nil {
+		return "", ErrInvalidStatusPageURL
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", ErrInvalidStatusPageURL
+	}
+	label := "查看探针页"
+	if normalizeLanguage(language) == LanguageEnglish {
+		label = "Open status page"
+	}
+	text = strings.TrimRight(text, "\n") + `
+
+<a href="` + template.HTMLEscapeString(statusPageURL) + `">` + label + `</a>`
 	if utf8.RuneCountInString(text) > TelegramMessageLimit {
 		return "", ErrMessageTooLong
 	}

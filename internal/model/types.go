@@ -4,6 +4,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -126,6 +127,7 @@ type PageConfig struct {
 	Title        string `yaml:"title" json:"title"`
 	Subtitle     string `yaml:"subtitle" json:"subtitle"`
 	ProbeComment string `yaml:"probe_comment" json:"probe_comment"`
+	PublicURL    string `yaml:"public_url" json:"public_url"`
 	HistoryLen   int    `yaml:"history_len" json:"history_len"`
 	RefreshSec   int    `yaml:"refresh_sec" json:"refresh_sec"`
 	ShowUptime   bool   `yaml:"show_uptime" json:"show_uptime"`
@@ -136,6 +138,7 @@ type PageConfig struct {
 
 // Normalize 填充页面显示配置的默认值。
 func (p *PageConfig) Normalize() {
+	p.PublicURL = strings.TrimSpace(p.PublicURL)
 	if p.Title == "" {
 		p.Title = "model-uptime // status"
 	}
@@ -164,6 +167,16 @@ func (p *PageConfig) Validate() error {
 	}
 	if p.RefreshSec < 1 || p.RefreshSec > 60 {
 		return fmt.Errorf("refresh_sec 需在 1~60 之间")
+	}
+	if p.PublicURL != "" {
+		parsed, err := url.Parse(p.PublicURL)
+		if err != nil || parsed == nil {
+			return fmt.Errorf("public_url 必须是无账号密码的完整 http/https 地址")
+		}
+		scheme := strings.ToLower(parsed.Scheme)
+		if parsed.Host == "" || (scheme != "http" && scheme != "https") || parsed.User != nil {
+			return fmt.Errorf("public_url 必须是无账号密码的完整 http/https 地址")
+		}
 	}
 	return nil
 }

@@ -135,7 +135,7 @@ func TestNotifySendsOneAggregatedMessagePerSubscription(t *testing.T) {
 			{ID: "other", Enabled: true, ChatID: "200", ServiceIDs: []string{"c"}, Template: `{{.TotalChanges}}`},
 		},
 	})
-	if err := n.Notify(Batch{Changes: []Change{
+	if err := n.Notify(Batch{StatusPageURL: "https://status.example.com/?model=a&view=full", Changes: []Change{
 		{ServiceID: "a", Model: "alpha-old", Status: "down", PreviousStatus: "up"},
 		{ServiceID: "a", Model: "alpha-middle", OK: true, Status: "up", PreviousStatus: "down"},
 		{ServiceID: "a", Model: "alpha", Status: "down", PreviousStatus: "up"},
@@ -150,7 +150,8 @@ func TestNotifySendsOneAggregatedMessagePerSubscription(t *testing.T) {
 		if got.path != "/bottoken/sendMessage" || got.chatID != "-100" || got.parseMode != "HTML" {
 			t.Fatalf("请求参数错误: %+v", got)
 		}
-		if got.text != "2|D:alpha;R:beta;" {
+		wantText := "2|D:alpha;R:beta;\n\n<a href=\"https://status.example.com/?model=a&amp;view=full\">查看探针页</a>"
+		if got.text != wantText {
 			t.Fatalf("聚合内容错误: %q", got.text)
 		}
 	default:
@@ -160,6 +161,27 @@ func TestNotifySendsOneAggregatedMessagePerSubscription(t *testing.T) {
 	case extra := <-requests:
 		t.Fatalf("收到额外请求: %+v", extra)
 	default:
+	}
+}
+
+func TestAppendStatusPageLinkIsLocalizedAndChecksLength(t *testing.T) {
+	t.Parallel()
+	english, err := appendStatusPageLink("message", "https://status.example.com/", LanguageEnglish)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if english != "message\n\n<a href=\"https://status.example.com/\">Open status page</a>" {
+		t.Fatalf("英文探针页链接错误: %q", english)
+	}
+	plain, err := appendStatusPageLink("message", "", DefaultLanguage)
+	if err != nil || plain != "message" {
+		t.Fatalf("空地址不应修改消息: text=%q err=%v", plain, err)
+	}
+	if _, err := appendStatusPageLink(strings.Repeat("界", TelegramMessageLimit), "https://status.example.com/", DefaultLanguage); !errors.Is(err, ErrMessageTooLong) {
+		t.Fatalf("追加链接后超长应失败: %v", err)
+	}
+	if _, err := appendStatusPageLink("message", "javascript:alert(1)", DefaultLanguage); !errors.Is(err, ErrInvalidStatusPageURL) {
+		t.Fatalf("危险探针页地址应被拒绝: %v", err)
 	}
 }
 
@@ -181,7 +203,7 @@ func TestSendTestRetriesTransientFailureThreeTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeNotifier(t, n)
-	if err := n.SendTest(context.Background(), "ops"); err != nil {
+	if err := n.SendTest(context.Background(), "ops", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := attempts.Load(); got != 4 {
@@ -201,7 +223,7 @@ func TestSendTestDoesNotRetryPermanentFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeNotifier(t, n)
-	if err := n.SendTest(context.Background(), "ops"); err == nil {
+	if err := n.SendTest(context.Background(), "ops", ""); err == nil {
 		t.Fatal("期望 Telegram 参数错误")
 	}
 	if got := attempts.Load(); got != 1 {
@@ -219,7 +241,7 @@ func TestSendErrorRedactsBotToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeNotifier(t, n)
-	err = n.SendTest(context.Background(), "ops")
+	err = n.SendTest(context.Background(), "ops", "")
 	if err == nil || strings.Contains(err.Error(), "super-secret") || !strings.Contains(err.Error(), "****") {
 		t.Fatalf("Bot Token 应从错误中脱敏: %v", err)
 	}
@@ -241,7 +263,7 @@ func TestUpdateConfigIsUsedByFollowingNotifications(t *testing.T) {
 	if err := n.UpdateConfig(validConfig("new-token", "new-chat")); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SendTest(context.Background(), "ops"); err != nil {
+	if err := n.SendTest(context.Background(), "ops", ""); err != nil {
 		t.Fatal(err)
 	}
 	closeNotifier(t, n)

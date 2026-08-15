@@ -82,6 +82,8 @@ func TestValidateRejectsBadConfig(t *testing.T) {
 		"services:\n  - id: a\n    name: a\n    protocol: message\n    base_url: http://x",
 		// http 协议缺 base_url
 		"services:\n  - id: a\n    name: a\n    protocol: http",
+		// 探针页公开地址不是安全的绝对 HTTP(S) URL
+		"page:\n  public_url: javascript:alert(1)",
 	}
 	for i, content := range cases {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -101,6 +103,7 @@ func TestSaveRoundTrip(t *testing.T) {
 		Page: model.PageConfig{
 			Title:      "My Status",
 			Subtitle:   "status.example",
+			PublicURL:  "https://status.example.com/",
 			HistoryLen: 30,
 		},
 		Services: []model.Service{{
@@ -123,6 +126,9 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 	if got.AdminToken != "tok" {
 		t.Errorf("round-trip AdminToken = %q", got.AdminToken)
+	}
+	if got.Page.PublicURL != "https://status.example.com/" {
+		t.Errorf("round-trip PublicURL = %q", got.Page.PublicURL)
 	}
 	if len(got.Services) != 1 || got.Services[0].ID != "s1" {
 		t.Errorf("round-trip services 不一致: %+v", got.Services)

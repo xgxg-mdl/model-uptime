@@ -3,6 +3,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'internal', 'api', 'web', 'admin', 'index.html'), 'utf8');
+for (const snippet of ['id="p-public-url"', "p.public_url || ''", "public_url: document.getElementById('p-public-url').value.trim()"]) {
+  if (!html.includes(snippet)) throw new Error('探针页公开地址没有完整接入管理页');
+}
 if (!html.includes('<option value="zh-CN">简体中文</option>') || !html.includes("const DEFAULT_TELEGRAM_LANGUAGE = 'zh-CN';")) {
   throw new Error('Telegram 新订阅没有默认使用中文');
 }

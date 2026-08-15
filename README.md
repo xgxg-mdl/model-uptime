@@ -94,6 +94,7 @@ page:                    # 状态页显示配置
   title: "model-uptime // status"
   subtitle: "model-uptime"
   probe_comment: "model-uptime service monitor · probing every 60s"
+  public_url: "https://status.example.com/" # 留空则通知不显示链接
   history_len: 60        # 状态条数量 / 历史窗口
   refresh_sec: 5         # 状态页轮询间隔
   show_uptime: true      # ↓ 统计维度开关
@@ -140,6 +141,8 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 - 管理页的手动测试连接使用 3 秒聚合窗口，连续测试多个模型时不会逐条刷屏。
 
 每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。默认模板使用北京时间，按模型展示异常持续时间、确认时间，以及当天运行时间、异常时间、异常次数和基于已观测时间计算的可用率；同一轮多个模型变化仍合并在一条消息中。
+
+`page.public_url` 可配置探针页的对外访问地址。配置后，所有状态变化通知和测试通知都会在消息末尾自动追加本地化链接；留空时不追加。地址必须是无账号密码的完整 `http://` 或 `https://` URL。
 
 | 模板变量 | 说明 |
 |---|---|

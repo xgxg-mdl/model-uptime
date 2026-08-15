@@ -317,6 +317,7 @@ func TestPageConfig(t *testing.T) {
 	code, out = doJSON(t, ts, http.MethodPut, "/api/admin/page", testToken, map[string]any{
 		// PUT 为全量替换：配置页会提交完整对象，缺省字段按零值处理
 		"title": "t", "subtitle": "s", "probe_comment": "c",
+		"public_url":  " https://status.example.com/models?view=all ",
 		"history_len": 90, "refresh_sec": 5,
 		"show_uptime": true, "show_samples": true, "show_latency": false, "show_avg_load": true,
 	})
@@ -332,11 +333,20 @@ func TestPageConfig(t *testing.T) {
 	if page["show_latency"].(bool) {
 		t.Error("show_latency 应为 false")
 	}
+	if page["public_url"] != "https://status.example.com/models?view=all" {
+		t.Errorf("public_url 未归一化或热更新: %v", page["public_url"])
+	}
 
 	// 非法值
 	code, _ = doJSON(t, ts, http.MethodPut, "/api/admin/page", testToken, map[string]any{"history_len": 99999})
 	if code != http.StatusBadRequest {
 		t.Errorf("非法 history_len 应 400，got %d", code)
+	}
+	code, _ = doJSON(t, ts, http.MethodPut, "/api/admin/page", testToken, map[string]any{
+		"public_url": "javascript:alert(1)", "history_len": 60, "refresh_sec": 5,
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("非法 public_url 应 400，got %d", code)
 	}
 }
 
@@ -604,7 +614,7 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 			_, _ = io.WriteString(w, `{"ok":false,"description":"chat not found"}`)
 			return
 		}
-		requests <- r.URL.Path + "|" + r.Form.Get("chat_id") + "|" + r.Form.Get("parse_mode")
+		requests <- r.URL.Path + "|" + r.Form.Get("chat_id") + "|" + r.Form.Get("parse_mode") + "|" + r.Form.Get("text")
 		_, _ = io.WriteString(w, `{"ok":true}`)
 	}))
 	defer telegramAPI.Close()
@@ -618,7 +628,7 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 	scheduler := scheduler.New(st, nil)
 	cfg := &config.Config{
 		AdminToken: testToken,
-		Page:       model.PageConfig{HistoryLen: 60, RefreshSec: 5},
+		Page:       model.PageConfig{PublicURL: "https://status.example.com/?from=test&view=full", HistoryLen: 60, RefreshSec: 5},
 		Services: []model.Service{{
 			ID: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
 			BaseURL: "http://example.com", IntervalSec: 60, Enabled: boolp(true),
@@ -682,8 +692,12 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 	}
 	select {
 	case request := <-requests:
-		if request != "/botsecret-token/sendMessage|-100|HTML" {
+		parts := strings.SplitN(request, "|", 4)
+		if len(parts) != 4 || parts[0] != "/botsecret-token/sendMessage" || parts[1] != "-100" || parts[2] != "HTML" {
 			t.Fatalf("Telegram 请求错误: %s", request)
+		}
+		if !strings.Contains(parts[3], `<a href="https://status.example.com/?from=test&amp;view=full">Open status page</a>`) {
+			t.Fatalf("Telegram 测试消息缺少探针页链接: %s", parts[3])
 		}
 	case <-time.After(time.Second):
 		t.Fatal("没有收到 Telegram 测试请求")

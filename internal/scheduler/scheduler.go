@@ -420,7 +420,10 @@ func (s *Scheduler) notify(n batchNotifier, changes []notifier.Change) {
 	if n == nil || len(changes) == 0 {
 		return
 	}
-	if err := n.Notify(notifier.Batch{ChangedAt: time.Now(), Changes: changes}); err != nil {
+	s.mu.RLock()
+	statusPageURL := s.page.PublicURL
+	s.mu.RUnlock()
+	if err := n.Notify(notifier.Batch{ChangedAt: time.Now(), Changes: changes, StatusPageURL: statusPageURL}); err != nil {
 		s.logger.Warn("提交状态变更通知失败", "err", err, "changes", len(changes))
 	}
 }
