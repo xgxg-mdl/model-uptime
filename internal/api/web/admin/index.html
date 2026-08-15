@@ -394,7 +394,8 @@
               <div class="template-help">
                 Summary: <code>{{.ChangedAt}}</code> <code>{{.DownCount}}</code> <code>{{.RecoveryCount}}</code> <code>{{.TotalChanges}}</code><br />
                 Lists: <code>{{range .DownModels}}…{{end}}</code> <code>{{range .RecoveredModels}}…{{end}}</code> <code>{{range .Changes}}…{{end}}</code><br />
-                Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code>
+                Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code> <code>{{.OutageDurationSec}}</code> <code>{{.TodayUpSec}}</code> <code>{{.TodayDownSec}}</code> <code>{{.TodayDownCount}}</code> <code>{{.TodayUptimePct}}</code><br />
+                Helpers: <code>{{formatBeijing .LastTS}}</code> <code>{{beijingDate .LastTS}}</code> <code>{{durationCN .TodayUpSec}}</code> <code>{{durationEN .TodayUpSec}}</code>
               </div>
             </div>
             <div class="form-actions">
@@ -471,33 +472,53 @@ let editingTelegramIndex = null;
 let telegramTokenConfigured = false;
 
 const TELEGRAM_TEMPLATES = {
-  'zh-CN': `<b>模型状态变更</b>
-<code>{{.ChangedAt}}</code>
-
-<b>状态概览</b>
-🔴 异常 <b>{{.DownCount}}</b>   🟢 恢复 <b>{{.RecoveryCount}}</b>   变更 <b>{{.TotalChanges}}</b>
-
-{{if .DownModels}}<b>🔴 异常模型</b>
-{{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-  {{if .Error}}<code>{{.Error}}</code>{{else}}<code>探测失败</code>{{end}}
+  'zh-CN': `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
+{{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
 {{end}}
-{{end}}{{if .RecoveredModels}}<b>🟢 恢复模型</b>
-{{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-  延迟 <code>{{.LatencyMS}} ms</code> · 可用率 <code>{{printf "%.2f" .UptimePct}}%</code>
+{{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}
+确认时间：{{formatBeijing .LastTS}}
+
+<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+今日运行时间：{{durationCN .TodayUpSec}}
+今日异常时间：{{durationCN .TodayDownSec}}
+今日异常次数：{{.TodayDownCount}} 次
+今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}异常持续时间：{{durationCN .OutageDurationSec}}
+监控模型：<b>{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+确认时间：{{formatBeijing .LastTS}}
+
+<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+今日运行时间：{{durationCN .TodayUpSec}}
+今日异常时间：{{durationCN .TodayDownSec}}
+今日异常次数：{{.TodayDownCount}} 次
+今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
 {{end}}{{end}}`,
-  'en-US': `<b>MODEL STATUS UPDATE</b>
-<code>{{.ChangedAt}}</code>
-
-<b>OVERVIEW</b>
-🔴 Down <b>{{.DownCount}}</b>   🟢 Recovered <b>{{.RecoveryCount}}</b>   Total <b>{{.TotalChanges}}</b>
-
-{{if .DownModels}}<b>🔴 DOWN</b>
-{{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-  {{if .Error}}<code>{{.Error}}</code>{{else}}<code>Probe failed</code>{{end}}
+  'en-US': `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update: multiple changes{{else if .DownModels}}❌ Model status update: incident detected{{else}}✅ Model status update: recovered{{end}}</b>
+{{if gt .TotalChanges 1}}Changes: {{.DownCount}} down, {{.RecoveryCount}} recovered
 {{end}}
-{{end}}{{if .RecoveredModels}}<b>🟢 RECOVERED</b>
-{{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-  Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
+{{if .DownModels}}{{range .DownModels}}<b>Down model: {{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
+Error: {{if .Error}}{{.Error}}{{else}}Probe failed{{end}}
+Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
+
+<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
+Uptime: {{durationEN .TodayUpSec}}
+Downtime: {{durationEN .TodayDownSec}}
+Incidents: {{.TodayDownCount}}
+Availability: {{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}Incident duration: {{durationEN .OutageDurationSec}}
+Model: <b>{{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
+Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
+
+<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
+Uptime: {{durationEN .TodayUpSec}}
+Downtime: {{durationEN .TodayDownSec}}
+Incidents: {{.TodayDownCount}}
+Availability: {{printf "%.2f" .TodayUptimePct}}%
+
 {{end}}{{end}}`,
 };
 const DEFAULT_TELEGRAM_LANGUAGE = 'zh-CN';

@@ -6,8 +6,11 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'internal', 'api', 'web'
 if (!html.includes('<option value="zh-CN">简体中文</option>') || !html.includes("const DEFAULT_TELEGRAM_LANGUAGE = 'zh-CN';")) {
   throw new Error('Telegram 新订阅没有默认使用中文');
 }
-if (!html.includes("'en-US': `<b>MODEL STATUS UPDATE</b>")) {
+if (!html.includes("'en-US': `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update")) {
   throw new Error('Telegram 管理页缺少英文内置模板');
+}
+for (const field of ['.OutageDurationSec', '.TodayUpSec', '.TodayDownSec', '.TodayDownCount', '.TodayUptimePct']) {
+  if (!html.includes(field)) throw new Error(`Telegram 管理页缺少统计模板变量 ${field}`);
 }
 const start = html.indexOf('async function testTelegramSubscription(index)');
 const end = html.indexOf('\nfunction deleteTelegramSubscription', start);

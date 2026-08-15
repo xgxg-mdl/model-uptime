@@ -139,16 +139,16 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 - 同一调度轮中，每个订阅最多发送一条消息，异常模型和恢复模型分区展示。
 - 管理页的手动测试连接使用 3 秒聚合窗口，连续测试多个模型时不会逐条刷屏。
 
-每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。内置模板的标题和时间位于顶部，中间展示异常、恢复和总变更数，下方分别展示异常原因与恢复后的延迟、可用率，适合手机阅读。
+每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。默认模板使用北京时间，按模型展示异常持续时间、确认时间，以及当天运行时间、异常时间、异常次数和基于已观测时间计算的可用率；同一轮多个模型变化仍合并在一条消息中。
 
 | 模板变量 | 说明 |
 |---|---|
-| `.ChangedAt` | 该批状态变化时间 |
+| `.ChangedAt` | 该批状态变化时间（北京时间） |
 | `.DownCount` / `.RecoveryCount` / `.TotalChanges` | 异常数、恢复数和总变化数 |
 | `.DownModels` / `.RecoveredModels` | 异常模型列表和恢复模型列表 |
 | `.Changes` | 本条订阅消息中的全部状态变化 |
 
-`.DownModels`、`.RecoveredModels` 和 `.Changes` 的每个元素包含 `.ServiceID`、`.Model`、`.Provider`、`.Protocol`、`.OK`、`.LatencyMS`、`.Error`、`.UptimePct`、`.Samples`、`.PreviousStatus`、`.Status` 和 `.LastTS`。完整的默认模板可直接参考 [config.example.yaml](config.example.yaml)。
+`.DownModels`、`.RecoveredModels` 和 `.Changes` 的每个元素包含 `.ServiceID`、`.Model`、`.Provider`、`.Protocol`、`.OK`、`.LatencyMS`、`.Error`、`.UptimePct`、`.Samples`、`.PreviousStatus`、`.Status`、`.LastTS`、`.OutageDurationSec`、`.TodayUpSec`、`.TodayDownSec`、`.TodayDownCount` 和 `.TodayUptimePct`。时间统计以北京时间零点为边界；相邻探测之间的时长归属于前一次已知状态。模板函数 `formatBeijing`、`beijingDate`、`durationCN` 和 `durationEN` 可用于格式化时间。完整默认模板见 [config.example.yaml](config.example.yaml)。
 
 ## 配置页
 

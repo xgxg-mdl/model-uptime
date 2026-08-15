@@ -100,6 +100,61 @@ func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]mod
 	return out, nil
 }
 
+// LoadResultsSinceWithPrevious 返回时间范围内的结果，并额外携带范围起点前最后一条状态。
+// 额外状态用于从北京时间零点开始积分，避免把当天首次探测前的已知状态丢失。
+func (s *Store) LoadResultsSinceWithPrevious(ctx context.Context, svcID string, since, until int64) ([]model.ProbeResult, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT ts, ok, latency_ms, error
+		 FROM probe_results
+		 WHERE service_id=? AND ts<=? AND (
+			ts>=? OR ts=(SELECT MAX(ts) FROM probe_results WHERE service_id=? AND ts<?)
+		 )
+		 ORDER BY ts ASC`,
+		svcID, until, since, svcID, since,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询统计时间窗失败: %w", err)
+	}
+	defer rows.Close()
+	var out []model.ProbeResult
+	for rows.Next() {
+		var result model.ProbeResult
+		var ok int
+		var errText sql.NullString
+		if err := rows.Scan(&result.TS, &ok, &result.LatencyMS, &errText); err != nil {
+			return nil, fmt.Errorf("扫描统计时间窗失败: %w", err)
+		}
+		result.OK = ok != 0
+		result.Error = errText.String
+		out = append(out, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// LoadFailureStart 返回 recoveredAt 之前当前连续失败区间的首次失败时间。
+func (s *Store) LoadFailureStart(ctx context.Context, svcID string, recoveredAt int64) (int64, error) {
+	var startedAt sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MIN(ts)
+		 FROM probe_results
+		 WHERE service_id=? AND ok=0 AND ts<?
+		   AND ts>COALESCE((
+			SELECT MAX(ts) FROM probe_results WHERE service_id=? AND ok=1 AND ts<?
+		   ), 0)`,
+		svcID, recoveredAt, svcID, recoveredAt,
+	).Scan(&startedAt)
+	if err != nil {
+		return 0, fmt.Errorf("查询异常起点失败: %w", err)
+	}
+	if !startedAt.Valid {
+		return 0, nil
+	}
+	return startedAt.Int64, nil
+}
+
 // DeleteHistory 删除某个服务的全部历史，用于终止观测生命周期。
 // 返回删除行数。
 func (s *Store) DeleteHistory(ctx context.Context, svcID string) (int64, error) {

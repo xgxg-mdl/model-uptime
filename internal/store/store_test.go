@@ -78,6 +78,54 @@ func TestLoadHistoryLimit(t *testing.T) {
 	}
 }
 
+func TestLoadResultsSinceWithPreviousAndFailureStart(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	for _, result := range []model.ProbeResult{
+		{OK: true, TS: 50},
+		{OK: true, TS: 120},
+		{OK: false, TS: 200},
+		{OK: false, TS: 260},
+		{OK: true, TS: 300},
+		{OK: false, TS: 400},
+		{OK: true, TS: 500},
+	} {
+		if err := s.AppendResult(ctx, "svc-a", result); err != nil {
+			t.Fatal(err)
+		}
+	}
+	window, err := s.LoadResultsSinceWithPrevious(ctx, "svc-a", 100, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(window) != 5 || window[0].TS != 50 || window[4].TS != 300 {
+		t.Fatalf("统计时间窗应包含起点前最后状态并排除终点后数据: %+v", window)
+	}
+	startedAt, err := s.LoadFailureStart(ctx, "svc-a", 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startedAt != 200 {
+		t.Fatalf("连续异常起点 = %d，期望 200", startedAt)
+	}
+	startedAt, err = s.LoadFailureStart(ctx, "svc-a", 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startedAt != 400 {
+		t.Fatalf("第二次连续异常起点 = %d，期望 400", startedAt)
+	}
+	for _, result := range []model.ProbeResult{{OK: false, TS: 10}, {OK: false, TS: 20}, {OK: true, TS: 30}} {
+		if err := s.AppendResult(ctx, "svc-b", result); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startedAt, err = s.LoadFailureStart(ctx, "svc-b", 30)
+	if err != nil || startedAt != 10 {
+		t.Fatalf("没有成功基线时的异常起点 = %d, err=%v", startedAt, err)
+	}
+}
+
 func TestDeleteHistoryOnlyAffectsRequestedService(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

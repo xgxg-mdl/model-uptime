@@ -42,19 +42,29 @@ telegram:
       # 留空时自动使用以下默认模板。模板采用 Go html/template 语法，消息以
       # Telegram HTML 发送；变量值会自动转义。
       template: |
-        <b>模型状态变更</b>
-        <code>{{.ChangedAt}}</code>
-
-        <b>状态概览</b>
-        🔴 异常 <b>{{.DownCount}}</b>   🟢 恢复 <b>{{.RecoveryCount}}</b>   变更 <b>{{.TotalChanges}}</b>
-
-        {{if .DownModels}}<b>🔴 异常模型</b>
-        {{range .DownModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-          {{if .Error}}<code>{{.Error}}</code>{{else}}<code>探测失败</code>{{end}}
+        <b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
+        {{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
         {{end}}
-        {{end}}{{if .RecoveredModels}}<b>🟢 恢复模型</b>
-        {{range .RecoveredModels}}• <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-          延迟 <code>{{.LatencyMS}} ms</code> · 可用率 <code>{{printf "%.2f" .UptimePct}}%</code>
+        {{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+        异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}
+        确认时间：{{formatBeijing .LastTS}}
+
+        <b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+        今日运行时间：{{durationCN .TodayUpSec}}
+        今日异常时间：{{durationCN .TodayDownSec}}
+        今日异常次数：{{.TodayDownCount}} 次
+        今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
+        {{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}异常持续时间：{{durationCN .OutageDurationSec}}
+        监控模型：<b>{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+        确认时间：{{formatBeijing .LastTS}}
+
+        <b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+        今日运行时间：{{durationCN .TodayUpSec}}
+        今日异常时间：{{durationCN .TodayDownSec}}
+        今日异常次数：{{.TodayDownCount}} 次
+        今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
         {{end}}{{end}}
 
 # 监控目标。协议支持：

@@ -55,6 +55,55 @@ func TestUptimePct(t *testing.T) {
 	}
 }
 
+func TestCalculateDailyStatsAndBeijingBoundary(t *testing.T) {
+	stats := calculateDailyStats([]model.ProbeResult{
+		{OK: true, TS: 50},
+		{OK: false, TS: 200},
+		{OK: true, TS: 500},
+		{OK: false, TS: 800},
+		{OK: true, TS: 1000},
+	}, 100, 1000)
+	if stats.upSec != 400 || stats.downSec != 500 || stats.downCount != 2 {
+		t.Fatalf("今日时间统计错误: %+v", stats)
+	}
+	if stats.uptimePct < 44.44 || stats.uptimePct > 44.45 {
+		t.Fatalf("今日可用率错误: %.4f", stats.uptimePct)
+	}
+	if got := failureStartFromResults([]model.ProbeResult{{OK: true, TS: 100}, {OK: false, TS: 200}, {OK: false, TS: 300}, {OK: true, TS: 400}}, 400); got != 200 {
+		t.Fatalf("异常起点 = %d，期望 200", got)
+	}
+	beijingTime := time.Date(2026, 8, 15, 10, 50, 2, 0, beijingLocation)
+	wantStart := time.Date(2026, 8, 15, 0, 0, 0, 0, beijingLocation).Unix()
+	if got := beijingDayStart(beijingTime.Unix()); got != wantStart {
+		t.Fatalf("北京时间零点 = %d，期望 %d", got, wantStart)
+	}
+}
+
+func TestRecordChangeUsesPersistedDailyStats(t *testing.T) {
+	s := New(openTestStore(t), nil)
+	page := defaultPage()
+	page.HistoryLen = 2
+	s.Reload([]model.Service{testSvc("s1", true)}, page)
+	generation := s.states["s1"].generation
+	dayStart := time.Date(2026, 8, 15, 0, 0, 0, 0, beijingLocation).Unix()
+	results := []model.ProbeResult{
+		{OK: true, TS: dayStart},
+		{OK: false, TS: dayStart + 3600},
+		{OK: false, TS: dayStart + 4200},
+		{OK: true, TS: dayStart + 7200},
+	}
+	var change *notifier.Change
+	for _, result := range results {
+		change = s.recordGeneration("s1", generation, result)
+	}
+	if change == nil || change.Status != "up" {
+		t.Fatalf("恢复探测应产生状态变化: %+v", change)
+	}
+	if change.OutageDurationSec != 3600 || change.TodayUpSec != 3600 || change.TodayDownSec != 3600 || change.TodayDownCount != 1 || change.TodayUptimePct != 50 {
+		t.Fatalf("通知统计未使用完整持久化历史: %+v", change)
+	}
+}
+
 func TestReloadPreservesHistory(t *testing.T) {
 	s := New(nil, nil)
 	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())

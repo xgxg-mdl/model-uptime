@@ -28,7 +28,58 @@ const (
 )
 
 // DefaultTemplate 是默认中文模板，同时展示一轮探测中的异常与恢复模型。
-const DefaultTemplate = `<b>模型状态变更</b>
+const DefaultTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
+{{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
+{{end}}
+{{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}
+确认时间：{{formatBeijing .LastTS}}
+
+<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+今日运行时间：{{durationCN .TodayUpSec}}
+今日异常时间：{{durationCN .TodayDownSec}}
+今日异常次数：{{.TodayDownCount}} 次
+今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}异常持续时间：{{durationCN .OutageDurationSec}}
+监控模型：<b>{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+确认时间：{{formatBeijing .LastTS}}
+
+<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+今日运行时间：{{durationCN .TodayUpSec}}
+今日异常时间：{{durationCN .TodayDownSec}}
+今日异常次数：{{.TodayDownCount}} 次
+今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}`
+
+// EnglishTemplate 是英文内置模板，可按订阅选择。
+const EnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update: multiple changes{{else if .DownModels}}❌ Model status update: incident detected{{else}}✅ Model status update: recovered{{end}}</b>
+{{if gt .TotalChanges 1}}Changes: {{.DownCount}} down, {{.RecoveryCount}} recovered
+{{end}}
+{{if .DownModels}}{{range .DownModels}}<b>Down model: {{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
+Error: {{if .Error}}{{.Error}}{{else}}Probe failed{{end}}
+Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
+
+<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
+Uptime: {{durationEN .TodayUpSec}}
+Downtime: {{durationEN .TodayDownSec}}
+Incidents: {{.TodayDownCount}}
+Availability: {{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}Incident duration: {{durationEN .OutageDurationSec}}
+Model: <b>{{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
+Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
+
+<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
+Uptime: {{durationEN .TodayUpSec}}
+Downtime: {{durationEN .TodayDownSec}}
+Incidents: {{.TodayDownCount}}
+Availability: {{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}`
+
+const legacyChineseTemplate = `<b>模型状态变更</b>
 <code>{{.ChangedAt}}</code>
 
 <b>状态概览</b>
@@ -43,8 +94,7 @@ const DefaultTemplate = `<b>模型状态变更</b>
   延迟 <code>{{.LatencyMS}} ms</code> · 可用率 <code>{{printf "%.2f" .UptimePct}}%</code>
 {{end}}{{end}}`
 
-// EnglishTemplate 是英文内置模板，可按订阅选择。
-const EnglishTemplate = `<b>MODEL STATUS UPDATE</b>
+const legacyEnglishTemplate = `<b>MODEL STATUS UPDATE</b>
 <code>{{.ChangedAt}}</code>
 
 <b>OVERVIEW</b>
@@ -64,6 +114,13 @@ var (
 	ErrClosed               = errors.New("Telegram 通知器已关闭")
 	ErrMessageTooLong       = errors.New("Telegram 消息超过 4096 字符")
 	ErrSubscriptionNotFound = errors.New("Telegram 订阅不存在")
+	beijingLocation         = time.FixedZone("Asia/Shanghai", 8*60*60)
+	templateFunctions       = template.FuncMap{
+		"beijingDate":   formatBeijingDate,
+		"durationCN":    formatDurationCN,
+		"durationEN":    formatDurationEN,
+		"formatBeijing": formatBeijingTime,
+	}
 )
 
 // HTTPClient 允许测试或调用方注入 HTTP 实现。
@@ -90,18 +147,23 @@ type Subscription struct {
 
 // Change 是一个模型在本轮探测中的最终状态变化。
 type Change struct {
-	ServiceID      string
-	Model          string
-	Provider       string
-	Protocol       string
-	OK             bool
-	LatencyMS      int64
-	Error          string
-	UptimePct      float64
-	Samples        int
-	PreviousStatus string
-	Status         string
-	LastTS         int64
+	ServiceID         string
+	Model             string
+	Provider          string
+	Protocol          string
+	OK                bool
+	LatencyMS         int64
+	Error             string
+	UptimePct         float64
+	Samples           int
+	PreviousStatus    string
+	Status            string
+	LastTS            int64
+	OutageDurationSec int64
+	TodayUpSec        int64
+	TodayDownSec      int64
+	TodayDownCount    int
+	TodayUptimePct    float64
 }
 
 // Batch 是一次调度轮次产生的全部状态变化。
@@ -234,7 +296,8 @@ func normalizeSubscription(subscription *Subscription) {
 	subscription.Language = normalizeLanguage(originalLanguage)
 	templateText := strings.TrimSpace(subscription.Template)
 	// v0.4.x 会把内置英文模板写入配置；未声明语言时将它迁移为新的中文默认。
-	if templateText == "" || (originalLanguage == "" && templateText == strings.TrimSpace(EnglishTemplate)) {
+	legacyBuiltIn := templateText == strings.TrimSpace(legacyChineseTemplate) || templateText == strings.TrimSpace(legacyEnglishTemplate)
+	if templateText == "" || legacyBuiltIn || (originalLanguage == "" && templateText == strings.TrimSpace(EnglishTemplate)) {
 		subscription.Template = TemplateForLanguage(subscription.Language)
 	}
 	for j := range subscription.ServiceIDs {
@@ -306,8 +369,8 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID string) error {
 			downModel, recoveredModel, provider, probeError = "示例异常模型", "示例恢复模型", "示例提供商", "探测超时"
 		}
 		templateContext := NewTemplateContext(now, []Change{
-			{ServiceID: "example-down", Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix()},
-			{ServiceID: "example-recovered", Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix()},
+			{ServiceID: "example-down", Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix(), TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
+			{ServiceID: "example-recovered", Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix(), OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
 		})
 		text, err := executeTemplate(subscription.template, templateContext)
 		if err != nil {
@@ -366,7 +429,7 @@ func NewTemplateContext(changedAt time.Time, changes []Change) TemplateContext {
 		return left < right
 	})
 	context := TemplateContext{
-		ChangedAt:    changedAt.Format("2006-01-02 15:04:05 MST"),
+		ChangedAt:    changedAt.In(beijingLocation).Format("2006-01-02 15:04:05"),
 		Changes:      final,
 		TotalChanges: len(final),
 	}
@@ -417,7 +480,51 @@ func parseTemplate(text string) (*template.Template, error) {
 	if strings.TrimSpace(text) == "" {
 		text = DefaultTemplate
 	}
-	return template.New("telegram").Option("missingkey=error").Parse(text)
+	return template.New("telegram").Funcs(templateFunctions).Option("missingkey=error").Parse(text)
+}
+
+func formatBeijingTime(timestamp int64) string {
+	if timestamp <= 0 {
+		return "-"
+	}
+	return time.Unix(timestamp, 0).In(beijingLocation).Format("2006-01-02 15:04:05")
+}
+
+func formatBeijingDate(timestamp int64) string {
+	if timestamp <= 0 {
+		return "-"
+	}
+	return time.Unix(timestamp, 0).In(beijingLocation).Format("2006-01-02")
+}
+
+func formatDurationCN(seconds int64) string {
+	if seconds < 60 {
+		return "不足 1 分钟"
+	}
+	if seconds < 60*60 {
+		return fmt.Sprintf("%.1f 分钟", float64(seconds)/60)
+	}
+	hours := seconds / (60 * 60)
+	minutes := seconds % (60 * 60) / 60
+	if minutes == 0 {
+		return fmt.Sprintf("%d 小时", hours)
+	}
+	return fmt.Sprintf("%d 小时 %d 分钟", hours, minutes)
+}
+
+func formatDurationEN(seconds int64) string {
+	if seconds < 60 {
+		return "less than 1 minute"
+	}
+	if seconds < 60*60 {
+		return fmt.Sprintf("%.1f minutes", float64(seconds)/60)
+	}
+	hours := seconds / (60 * 60)
+	minutes := seconds % (60 * 60) / 60
+	if minutes == 0 {
+		return fmt.Sprintf("%d hours", hours)
+	}
+	return fmt.Sprintf("%d hours %d minutes", hours, minutes)
 }
 
 func executeTemplate(tmpl *template.Template, context TemplateContext) (string, error) {
