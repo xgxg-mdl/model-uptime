@@ -7,8 +7,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
 # CGO_ENABLED=0：modernc.org/sqlite 为纯 Go，产出静态二进制
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/model-uptime ./cmd/server \
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" \
+    -o /out/model-uptime ./cmd/server \
  && mkdir -p /data && chown 65534:65534 /data
 
 # ---- 运行阶段：alpine + entrypoint 处理卷权限，主程序仍以 nobody 运行 ----
@@ -23,4 +28,6 @@ RUN chmod +x /entrypoint.sh
 
 ENV DATA_DIR=/data PORT=8080
 EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=4 \
+  CMD wget -q -T 3 -O /dev/null http://127.0.0.1:8080/api/status || exit 1
 ENTRYPOINT ["/entrypoint.sh"]

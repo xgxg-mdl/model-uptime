@@ -140,6 +140,21 @@
   .template-help code { color: var(--info); overflow-wrap: anywhere; }
   #tg-template { min-height: 260px; line-height: 1.5; }
 
+  .update-grid {
+    display: grid; grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.5fr);
+    gap: 12px; align-items: stretch;
+  }
+  .update-value {
+    min-width: 0; padding: 10px 12px; background: #15151a;
+    border: 1px solid var(--line); border-radius: 6px;
+  }
+  .update-label { display: block; color: var(--mute); font-size: 10px; margin-bottom: 4px; text-transform: uppercase; }
+  .update-value strong { display: block; color: var(--fg); font-size: 13px; overflow-wrap: anywhere; }
+  .update-value strong.ok { color: var(--ok); }
+  .update-value strong.warn { color: var(--warn); }
+  .update-value strong.bad { color: var(--bad); }
+  .update-detail { color: var(--mute); font-size: 10px; margin: 10px 0 0; overflow-wrap: anywhere; }
+
   @media (max-width: 640px) {
     form { grid-template-columns: 1fr; }
     body { padding: 16px 8px 48px; }
@@ -147,6 +162,7 @@
     .telegram-head { align-items: stretch; flex-direction: column; }
     .model-picker { grid-template-columns: 1fr; }
     .subscription-row { align-items: start; }
+    .update-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -187,6 +203,32 @@
 
   <!-- 主视图 -->
   <main id="app-view" hidden>
+    <!-- 版本检查与容器更新 -->
+    <section class="panel">
+      <h2>system update</h2>
+      <div class="panel-body">
+        <div class="update-grid">
+          <div class="update-value">
+            <span class="update-label">Current</span>
+            <strong id="update-current">checking…</strong>
+          </div>
+          <div class="update-value">
+            <span class="update-label">Latest</span>
+            <strong id="update-latest">checking…</strong>
+          </div>
+          <div class="update-value">
+            <span class="update-label">Status</span>
+            <strong id="update-status">Checking releases…</strong>
+          </div>
+        </div>
+        <p class="update-detail" id="update-detail">Version checks confirm that the release image is available before updating.</p>
+        <div class="form-actions" style="margin-top:12px;">
+          <button class="btn" type="button" id="update-check-btn">check again</button>
+          <button class="btn primary" type="button" id="update-start-btn" disabled>update now</button>
+        </div>
+      </div>
+    </section>
+
     <!-- 服务管理 -->
     <section class="panel">
       <h2>monitor services</h2>
@@ -475,6 +517,9 @@ let adminServices = [];
 let telegramConfig = { bot_token: '', subscriptions: [] };
 let editingTelegramIndex = null;
 let telegramTokenConfigured = false;
+let updateStatus = null;
+let updatePollTimer = null;
+const UPDATE_TARGET_KEY = 'model_uptime_update_target';
 
 const TELEGRAM_TEMPLATES = {
   'zh-CN': `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
@@ -605,7 +650,118 @@ function enterApp() {
   loadServices();
   loadTelegram();
   loadPage();
+  loadUpdate();
 }
+
+// ---------- 系统版本与一键更新 ----------
+function renderUpdateStatus(data) {
+  updateStatus = data;
+  const current = document.getElementById('update-current');
+  const latest = document.getElementById('update-latest');
+  const status = document.getElementById('update-status');
+  const detail = document.getElementById('update-detail');
+  const start = document.getElementById('update-start-btn');
+  current.textContent = data.current_version || 'dev';
+  latest.textContent = data.latest_version || '—';
+  status.className = '';
+
+  if (data.updating) {
+    status.textContent = 'Updating…';
+    status.classList.add('warn');
+  } else if (data.last_update_error) {
+    status.textContent = 'Update failed';
+    status.classList.add('bad');
+  } else if (data.update_available) {
+    status.textContent = 'Update available';
+    status.classList.add('warn');
+  } else {
+    status.textContent = 'Up to date';
+    status.classList.add('ok');
+  }
+
+  const notes = [];
+  if (data.disabled_reason) notes.push(data.disabled_reason);
+  if (data.last_update_error) notes.push(data.last_update_error);
+  if (data.deployment_tag) notes.push('Deployment tag: ' + data.deployment_tag);
+  if (data.checked_at) notes.push('Checked: ' + new Date(data.checked_at).toLocaleString());
+  detail.textContent = notes.join(' · ') || 'Release image verified and ready.';
+  start.disabled = !data.enabled || !data.update_available || data.updating;
+}
+
+function renderUpdateError(message, restarting = false) {
+  const status = document.getElementById('update-status');
+  status.textContent = restarting ? 'Restarting service…' : 'Check failed';
+  status.className = restarting ? 'warn' : 'bad';
+  document.getElementById('update-detail').textContent = message;
+  document.getElementById('update-start-btn').disabled = true;
+}
+
+async function loadUpdate(force = false) {
+  const check = document.getElementById('update-check-btn');
+  check.disabled = true;
+  try {
+    const data = await api(force ? '/api/admin/update/check' : '/api/admin/update', force ? { method: 'POST' } : {});
+    renderUpdateStatus(data);
+    const target = sessionStorage.getItem(UPDATE_TARGET_KEY);
+    if (target && data.current_version === target) {
+      sessionStorage.removeItem(UPDATE_TARGET_KEY);
+      toast('Updated to ' + target);
+    } else if (target) {
+      pollUpdate(target);
+    }
+  } catch (err) {
+    renderUpdateError(err.message);
+  } finally {
+    check.disabled = false;
+  }
+}
+
+function pollUpdate(target) {
+  clearTimeout(updatePollTimer);
+  const deadline = Date.now() + 11 * 60 * 1000;
+  const poll = async () => {
+    try {
+      const data = await api('/api/admin/update');
+      renderUpdateStatus(data);
+      if (data.current_version === target) {
+        sessionStorage.removeItem(UPDATE_TARGET_KEY);
+        toast('Updated to ' + target);
+        return;
+      }
+      if (data.last_update_error) {
+        sessionStorage.removeItem(UPDATE_TARGET_KEY);
+        return;
+      }
+    } catch (err) {
+      renderUpdateError('Waiting for the updated container to become available.', true);
+    }
+    if (Date.now() >= deadline) {
+      sessionStorage.removeItem(UPDATE_TARGET_KEY);
+      renderUpdateError('The service did not return with ' + target + ' within 11 minutes. Check Docker logs on the host.');
+      return;
+    }
+    updatePollTimer = setTimeout(poll, 2000);
+  };
+  updatePollTimer = setTimeout(poll, 1200);
+}
+
+document.getElementById('update-check-btn').addEventListener('click', () => loadUpdate(true));
+document.getElementById('update-start-btn').addEventListener('click', async () => {
+  if (!updateStatus || !updateStatus.update_available || !updateStatus.latest_version) return;
+  const target = updateStatus.latest_version;
+  if (!confirm('Update model-uptime from ' + updateStatus.current_version + ' to ' + target + '?')) return;
+  document.getElementById('update-start-btn').disabled = true;
+  try {
+    const result = await api('/api/admin/update', { method: 'POST' });
+    sessionStorage.setItem(UPDATE_TARGET_KEY, result.target_version || target);
+    renderUpdateStatus({ ...updateStatus, updating: true, last_update_error: '' });
+    toast('Update triggered');
+    pollUpdate(result.target_version || target);
+  } catch (err) {
+    renderUpdateError(err.message);
+    toast(err.message);
+  }
+});
 
 // ---------- 服务管理 ----------
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

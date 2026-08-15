@@ -19,10 +19,18 @@ import (
 	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/scheduler"
 	"github.com/lefachao/model-uptime/internal/store"
+	"github.com/lefachao/model-uptime/internal/updater"
 )
 
 //go:embed config.template.yaml
 var defaultConfigBytes []byte
+
+// 由发布镜像的 ldflags 注入；源码直接构建时保持开发标识。
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+)
 
 // writeDefaultConfig 首次启动时落盘默认配置。
 func writeDefaultConfig(path string) error {
@@ -83,6 +91,17 @@ func main() {
 		logger.Error("初始化 Telegram 通知器失败", "err", err)
 		os.Exit(1)
 	}
+	updates := updater.New(updater.Options{
+		BuildInfo: updater.BuildInfo{
+			Version: version,
+			Commit:  commit,
+			BuiltAt: buildTime,
+		},
+		DeploymentTag: os.Getenv("MODEL_UPTIME_TAG"),
+		UpdateURL:     os.Getenv("UPDATE_URL"),
+		UpdateToken:   os.Getenv("UPDATE_TOKEN"),
+		Logger:        logger,
+	})
 
 	sch := scheduler.New(st, logger)
 	sch.SetNotifier(notifications)
@@ -100,6 +119,7 @@ func main() {
 	srv, err := api.New(api.Options{
 		Scheduler:  sch,
 		Notifier:   notifications,
+		Updater:    updates,
 		ConfigPath: configPath,
 		AdminToken: adminToken,
 		Logger:     logger,
@@ -131,6 +151,8 @@ func main() {
 		"config", configPath,
 		"services", len(cfg.Services),
 		"admin_configured", adminToken != "",
+		"version", version,
+		"commit", commit,
 	)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("HTTP 服务异常退出", "err", err)

@@ -10,9 +10,32 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       PORT: "8080"
       DATA_DIR: /data
+      MODEL_UPTIME_TAG: ${MODEL_UPTIME_TAG:-latest}
+      UPDATE_URL: "http://model-uptime-updater:8080/v1/update?image=ghcr.io/xgxg-mdl/model-uptime:latest&async=true"
+      UPDATE_TOKEN: ${UPDATE_TOKEN:?set UPDATE_TOKEN in .env}
     volumes:
       - model-uptime-data:/data
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     restart: unless-stopped
+
+  model-uptime-updater:
+    image: nickfedor/watchtower:1.20.3
+    container_name: model-uptime-updater
+    environment:
+      WATCHTOWER_HTTP_API_TOKEN: ${UPDATE_TOKEN:?set UPDATE_TOKEN in .env}
+      WATCHTOWER_HTTP_API_ENDPOINTS: update,history
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
 
 volumes:
   model-uptime-data:

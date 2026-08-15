@@ -5,7 +5,8 @@
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
 - **终端风格状态页**：60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
 - **Telegram 聚合通知**：按订阅合并同一调度轮的多模型变化，仅在异常/恢复切换时发送可自定义 HTML 消息
-- **配置页**：在线管理监控目标与页面显示配置（标题、历史窗口、统计维度开关），修改即时热重载
+- **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载
+- **一键更新**：检查 GitHub 稳定版本，并确认目标版本与 GHCR `latest` digest 一致后更新容器
 - **Docker Compose 一键部署**：Go 单二进制 + SQLite，最终镜像约 15MB
 
 ## 服务器部署（预构建镜像）
@@ -14,12 +15,25 @@
 
 ```bash
 mkdir model-uptime && cd model-uptime
+umask 077
 curl -fsSLO https://raw.githubusercontent.com/xgxg-mdl/model-uptime/main/docker-compose.yml
 curl -fsSLO https://raw.githubusercontent.com/xgxg-mdl/model-uptime/main/.env.example
 mv .env.example .env
 ```
 
-编辑 `.env`，至少设置一个强管理员密码；然后拉取并启动镜像：
+编辑 `.env`；管理员密码可以首次访问管理页时设置。一键更新需要先生成内部令牌并写入 `.env`：
+
+```bash
+chmod 600 .env
+sed -i '/^UPDATE_TOKEN=/d' .env
+openssl rand -hex 32 | sed 's/^/UPDATE_TOKEN=/' >> .env
+```
+
+`UPDATE_TOKEN` 只在 Compose 内网中的主应用与更新 sidecar 之间使用，更新器端口不会暴露到宿主机。
+
+> 更新 sidecar 需要访问 Docker Socket，该权限等同于管理宿主机上的容器。Compose 不向主应用挂载 Socket，并通过 label 将更新范围限制为 `model-uptime`。请保持 updater 镜像为项目固定的版本，不要自行改成浮动的 `latest`。
+
+然后拉取并启动镜像：
 
 ```bash
 docker compose pull
@@ -63,6 +77,24 @@ docker compose restart                 # 重启
 > 镜像内以非 root（nobody, uid 65534）运行。使用命名卷时 entrypoint 会自动初始化目录权限；若改用绑定挂载（`./data:/data`），需保证宿主目录对 uid 65534 可写：`sudo chown -R 65534:65534 data`。
 
 > 管理密码优先级：环境变量 `ADMIN_TOKEN` > 配置文件 `admin_token`。两者均为空（默认）时，**首次访问 `/admin/` 会在页面设置管理密码**，设置后写入 `/data/config.yaml` 持久化，之后用该密码登录。
+
+### 从旧版本启用一键更新
+
+现有部署需要最后一次人工更新 Compose。数据卷不会受影响：
+
+```bash
+cd model-uptime
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/xgxg-mdl/model-uptime/main/docker-compose.yml
+chmod 600 .env
+sed -i '/^UPDATE_TOKEN=/d' .env
+openssl rand -hex 32 | sed 's/^/UPDATE_TOKEN=/' >> .env
+docker compose pull
+docker compose up -d
+```
+
+确认 `.env` 中 `MODEL_UPTIME_TAG=latest`。固定版本标签用于锁定版本，因此管理页会显示版本信息但拒绝一键更新。迁移完成后，后续稳定版本可在 `/admin/` 的 **System Update** 面板完成检查和更新。
+
+若新版本无法启动，可在 VPS 将 `.env` 中的 `MODEL_UPTIME_TAG` 改为上一个版本号，然后执行 `docker compose pull && docker compose up -d`。更新器不会主动删除旧镜像，但一键更新本身不承诺自动回滚。
 
 ## 本地运行
 
@@ -160,6 +192,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 - **监控服务**：增删改、测试连接（立即探测一次并显示结果）、启停
 - **页面显示**：标题、副标题、探针注释、历史窗口、轮询间隔、四个统计维度开关
 - **Telegram 订阅**：Bot Token 脱敏编辑、订阅增删改/启停、多模型选择、聚合模板编辑与测试发送
+- **系统更新**：显示当前与最新稳定版本，确认 GHCR 镜像可用后触发容器更新并跟踪重启
 - **API Key 脱敏**：列表只显示掩码；编辑时留空即保留原密钥
 
 所有修改原子写回配置文件并即时热重载，无需重启。
@@ -178,6 +211,8 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 | `/api/admin/page` | GET / PUT | Bearer | 页面显示配置 |
 | `/api/admin/telegram` | GET / PUT | Bearer | 获取（Token 脱敏）/ 更新 Telegram 配置 |
 | `/api/admin/telegram/test` | POST | Bearer | 按 `{"subscription_id": "operations"}` 同步发送聚合测试消息 |
+| `/api/admin/update` | GET / POST | Bearer | 获取版本状态 / 触发一键更新 |
+| `/api/admin/update/check` | POST | Bearer | 强制刷新 GitHub Tag 与 GHCR 镜像状态 |
 
 ## 存储与数据
 
@@ -201,6 +236,7 @@ internal/
   prober/            协议探针适配器（chat / response / message / http）
   scheduler/         1s 级调度、并发探测、历史窗口、聚合快照
   notifier/          Telegram 聚合模板、异步发送与失败重试
+  updater/           稳定版本检查、GHCR 发布确认与容器更新触发
   api/               HTTP 路由、管理 API、token 认证、embed 前端
     web/             前端：状态页（复刻）+ 配置页 + JetBrains Mono 字体
 ```

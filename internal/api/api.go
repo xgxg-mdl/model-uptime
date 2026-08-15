@@ -13,6 +13,7 @@ import (
 	"github.com/lefachao/model-uptime/internal/model"
 	"github.com/lefachao/model-uptime/internal/notifier"
 	"github.com/lefachao/model-uptime/internal/scheduler"
+	"github.com/lefachao/model-uptime/internal/updater"
 )
 
 //go:embed web
@@ -22,6 +23,7 @@ var webFS embed.FS
 type Options struct {
 	Scheduler  *scheduler.Scheduler
 	Notifier   *notifier.Notifier
+	Updater    *updater.Service
 	ConfigPath string // config.yaml 路径（admin 修改后原子写回）
 	AdminToken string // 已生效的管理令牌（env 优先于配置文件）
 	Logger     *slog.Logger
@@ -87,6 +89,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/admin/telegram", s.requireAuth(s.handleGetTelegram))
 	mux.Handle("PUT /api/admin/telegram", s.requireAuth(s.handleUpdateTelegram))
 	mux.Handle("POST /api/admin/telegram/test", s.requireAuth(s.handleTestTelegram))
+	mux.Handle("GET /api/admin/update", s.requireAuth(s.handleGetUpdate))
+	mux.Handle("POST /api/admin/update/check", s.requireAuth(s.handleCheckUpdate))
+	mux.Handle("POST /api/admin/update", s.requireAuth(s.handleStartUpdate))
 
 	// 静态页面（状态页 + 配置页 + 字体）。webFS 根含 web/ 前缀，需 Sub 到内容根，
 	// 使 / 正确落到 index.html，而非显示 embed 目录结构。
