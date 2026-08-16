@@ -75,6 +75,10 @@
   .service-table { min-width: 940px; }
   .service-primary { min-width: 180px; }
   .service-actions { width: 1%; white-space: nowrap; }
+  .service-test-result { margin-top: 5px; font-size: 10px; white-space: normal; overflow-wrap: anywhere; }
+  .service-test-result.ok { color: var(--ok); }
+  .service-test-result.bad { color: var(--bad); }
+  .service-test-result .mute { color: var(--mute); }
   .new-service-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
@@ -865,14 +869,17 @@ async function loadServices() {
           <button class="btn" data-act="copy" data-id="${esc(s.id)}">copy</button>
           <button class="btn" data-act="test" data-id="${esc(s.id)}">test</button>
           <button class="btn bad" data-act="del" data-id="${esc(s.id)}">del</button>
-        </div></td>
+        </div><div class="service-test-result hidden" data-service-test-status="${esc(s.id)}" role="status" aria-live="polite"></div></td>
       </tr>`).join('');
     tbody.querySelectorAll('button[data-act]').forEach(btn => {
       btn.addEventListener('click', () => {
         const svc = data.services.find(x => x.id === btn.dataset.id);
         if (btn.dataset.act === 'edit') openEditor(svc);
         else if (btn.dataset.act === 'copy') duplicateService(btn.dataset.id);
-        else if (btn.dataset.act === 'test') testService(btn.dataset.id);
+        else if (btn.dataset.act === 'test') {
+          const result = btn.closest('.service-actions').querySelector('[data-service-test-status]');
+          testService(btn.dataset.id, result, btn);
+        }
         else if (btn.dataset.act === 'del') deleteService(btn.dataset.id);
       });
     });
@@ -975,18 +982,20 @@ function duplicateService(id) {
     .catch(err => toast(err.message));
 }
 
-function testService(id) {
-  const el = document.getElementById('test-result');
-  el.hidden = false;
-  el.className = 'test-result';
-  el.textContent = 'probing…';
-  api('/api/admin/services/' + encodeURIComponent(id) + '/test', { method: 'POST' })
+function testService(id, result, button) {
+  const baseClass = result.className.includes('service-test-result') ? 'service-test-result' : 'test-result';
+  result.hidden = false;
+  result.className = baseClass;
+  result.textContent = 'probing…';
+  button.disabled = true;
+  return api('/api/admin/services/' + encodeURIComponent(id) + '/test', { method: 'POST' })
     .then(r => {
-      el.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
-      el.innerHTML = (r.ok ? '✓ OK' : '✗ FAIL') + ` · <span class="mute">${r.latency_ms}ms</span>` +
+      result.className = baseClass + ' ' + (r.ok ? 'ok' : 'bad');
+      result.innerHTML = (r.ok ? '✓ OK' : '✗ FAIL') + ` · <span class="mute">${r.latency_ms}ms</span>` +
         (r.error ? ' · ' + esc(r.error) : '');
     })
-    .catch(err => { el.className = 'test-result bad'; el.textContent = err.message; });
+    .catch(err => { result.className = baseClass + ' bad'; result.textContent = err.message; })
+    .finally(() => { button.disabled = false; });
 }
 
 // ---------- 编辑表单 ----------
@@ -1046,7 +1055,7 @@ document.getElementById('cancel-btn').addEventListener('click', () => document.g
 document.getElementById('test-btn').addEventListener('click', () => {
   const id = editingID;
   if (!id) { toast('先保存服务再测试'); return; }
-  testService(id);
+  testService(id, document.getElementById('test-result'), document.getElementById('test-btn'));
 });
 
 function collectService() {
