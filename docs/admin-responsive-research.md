@@ -79,9 +79,8 @@ Application: preserve the desktop table and its stable column positions.
 ### W3C
 
 WCAG 2.2 requires pointer targets to be at least `24x24 CSS px`, unless a listed
-spacing exception applies. The implementation uses `44x44px` row actions on
-narrow screens. This exceeds the minimum with a comfortable touch margin and
-still fits four commands on one line at the supported 320px viewport.
+spacing exception applies. The proposed `32x32px` row actions exceed this
+minimum while fitting four commands on one line.
 
 - [Target Size (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)
 
@@ -94,9 +93,8 @@ mobile summary list is more suitable for this named-object workflow.
 - [Tables with one header](https://www.w3.org/WAI/tutorials/tables/one-header/)
 
 Required small text must meet the WCAG AA contrast ratio of at least `4.5:1`.
-The shared `--fg-dim` and `--fg-mute` aliases are audited against the terminal,
-panel, and input backgrounds; essential hints and headers use `--dim`, while
-`--mute` remains reserved for disabled or decorative content.
+The existing `--mute: #55555e` is approximately `2.63:1` against the panel, so
+essential hints and headers must use the existing brighter `--dim` token.
 
 - [Contrast (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 
@@ -109,18 +107,15 @@ panel, and input backgrounds; essential hints and headers use `--dim`, while
   `640px` and `768px`.
 - Mobile service summaries show checkbox, name, ID, state, protocol, optional
   model/provider, interval, and all four row commands within about `110px`.
-- Mobile commands use one row of stable `44x44px` icon buttons with tooltips and
-  accessible names. The larger target reduces accidental activation of the
-  destructive command while preserving the compact three-row summary.
+- Mobile commands use one row of stable `32x32px` icon buttons with tooltips and
+  accessible names.
 - Current and latest versions remain side by side on mobile; status spans the
   next row.
 - The normal toolbar shows selection state and the new-service action on one
   row. Batch commands appear only when at least one service is selected.
 - Desktop and mobile selections stay synchronized across responsive changes.
-- Preserve the neutral palette roles and semantic status colors. The shared
-  dim/mute aliases are intentionally brighter than the original values so
-  required small text remains readable on both page backgrounds. Service rows
-  use the panel background with separators, not the input background as a
+- Preserve the original neutral palette and semantic status colors. Service
+  rows use the panel background with separators, not the input background as a
   nested card surface.
 - Use `--dim` for information that must be read. Reserve `--mute` for disabled
   or decorative content and use accent colors only for primary actions, focus,
@@ -134,7 +129,7 @@ panel, and input backgrounds; essential hints and headers use `--dim`, while
 - At `640px` and `768px`, the summary list remains active while ordinary forms
   retain two columns.
 - At `960px` and above, the semantic table is visible and its columns align.
-- Every icon action has a `title`, an accessible name, and at least a `44x44px`
+- Every icon action has a `title`, an accessible name, and at least a `32x32px`
   target in the summary list.
 - The service list adds no third surface color, card border, or card radius.
 - Responsive regression tests validate the final list/table behavior rather

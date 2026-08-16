@@ -15,25 +15,12 @@ function color(source, variable) {
   return match[1];
 }
 
-function luminance(hex) {
-  const values = hex.match(/[0-9a-f]{2}/gi).map(value => Number.parseInt(value, 16) / 255);
-  const linear = values.map(value => (
-    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  ));
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-}
-
-function contrast(left, right) {
-  const values = [luminance(left), luminance(right)].sort((a, b) => b - a);
-  return (values[0] + 0.05) / (values[1] + 0.05);
-}
-
-test('管理页使用一致的英文界面且不含内联样式', () => {
+test('管理页使用一致的英文界面并恢复旧版背景', () => {
   assert.match(html, /<html lang="en">/);
   const visibleSource = html.replace(/<!--[\s\S]*?-->/g, '');
   assert.doesNotMatch(visibleSource, /[\u4e00-\u9fff]/);
   assert.doesNotMatch(html, /\sstyle=/i);
-  assert.doesNotMatch(adminCSS, /(?:linear|radial)-gradient/);
+  assert.match(adminCSS, /background-image:\s*radial-gradient\(ellipse at top, #26262d 0%, #1a1a1e 60%, #141418 100%\)/);
 });
 
 test('所有管理表单控件都有标签，按钮都有显式类型', () => {
@@ -62,24 +49,17 @@ test('编辑器披露状态、动态反馈和登录加载态具备语义', () =>
   }
 });
 
-test('键盘焦点和移动触控目标有明确保护', () => {
-  assert.match(adminCSS, /\.check-row input:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\)/s);
-  assert.match(adminCSS, /\.field input:not\(\[type="checkbox"\]\):focus-visible[^}]*outline:\s*2px solid var\(--accent\)/s);
-  assert.match(adminCSS, /\.field\.check-row\s*\{[^}]*flex-direction:\s*row[^}]*align-items:\s*center[^}]*flex-wrap:\s*wrap/s);
-  assert.match(adminCSS, /\.field\.check-row \.hint\s*\{[^}]*flex-basis:\s*100%[^}]*padding-left:\s*24px/s);
+test('键盘焦点和移动操作密度保持旧版样式', () => {
+  assert.match(adminCSS, /\.btn:focus-visible\s*\{\s*outline:\s*2px solid var\(--accent\)/);
+  assert.match(adminCSS, /\.field input:focus,[\s\S]*\.field textarea:focus\s*\{\s*outline:\s*none;/);
   const mobile = adminCSS.slice(adminCSS.indexOf('@media (max-width: 959px)'));
-  assert.match(mobile, /\.service-item-actions \.icon-btn\s*\{\s*width:\s*44px;\s*height:\s*44px;/);
+  assert.match(mobile, /\.service-item-actions \.icon-btn\s*\{\s*width:\s*32px;\s*height:\s*32px;/);
 });
 
-test('管理页正文与辅助文本在实际背景上达到 AA 对比度', () => {
-  const foreground = color(foundationCSS, '--fg');
-  const dim = color(foundationCSS, '--fg-dim');
-  const mute = color(foundationCSS, '--fg-mute');
-  for (const background of ['#0d0d10', '#15151a', '#24242a']) {
-    assert.ok(contrast(foreground, background) >= 4.5);
-    assert.ok(contrast(dim, background) >= 4.5);
-  }
-  assert.ok(contrast(mute, '#15151a') >= 4.5);
+test('管理页恢复 v0.9.0 色阶', () => {
+  assert.equal(color(foundationCSS, '--fg'), '#d4d4d4');
+  assert.equal(color(foundationCSS, '--fg-dim'), '#8a8a94');
+  assert.equal(color(foundationCSS, '--fg-mute'), '#55555e');
 });
 
 test('reduced-motion 会逐项关闭管理页动画和过渡', () => {

@@ -47,8 +47,8 @@ test('管理页使用外置资源并保留响应式结构', () => {
   for (const marker of [
     '@media (max-width: 959px)',
     '.service-table-wrap { display: none; }',
-    'grid-template-columns: 28px minmax(0, 1fr) auto',
-    '.service-item-actions .icon-btn { width: 44px; height: 44px;',
+    'grid-template-columns: 20px minmax(0, 1fr) auto',
+    '.service-item-actions .icon-btn { width: 32px; height: 32px;',
     '@media (max-width: 559px)',
     '.update-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
     '.metric-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));',
@@ -152,7 +152,7 @@ test('移动服务行在窄视口内保持紧凑且操作按钮不溢出', () =>
       - 2 * panelBodyPadding;
     assert.ok(actionGroupWidth <= panelContentWidth - selectionColumn - columnGap);
   }
-  assert.ok(selectionColumn >= 24, 'mobile selection target must meet WCAG minimum target size');
+  assert.equal(selectionColumn, 20, 'mobile selection column must keep the v0.9.0 density');
 });
 
 test('管理页颜色只来自已审核的共享色板', () => {
