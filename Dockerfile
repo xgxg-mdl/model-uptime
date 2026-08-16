@@ -1,5 +1,5 @@
 # ---- 构建阶段 ----
-FROM golang:1.25.13-alpine3.23 AS build
+FROM golang:1.26.6-alpine3.23 AS build
 WORKDIR /src
 
 # 先拷贝依赖清单，利用层缓存
