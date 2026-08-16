@@ -1,3 +1,5 @@
+import { setButtonPending } from './shared.js';
+
 export function fillPageForm(documentRef, page) {
   documentRef.getElementById('p-title').value = page.title || '';
   documentRef.getElementById('p-subtitle').value = page.subtitle || '';
@@ -40,6 +42,9 @@ export function createPageSettingsController({ document: documentRef, api, toast
 
   async function save(event) {
     event.preventDefault();
+    const button = documentRef.getElementById('page-save-btn');
+    if (button.getAttribute?.('aria-busy') === 'true') return null;
+    setButtonPending(button, true, 'saving…');
     try {
       const page = await api('/api/admin/page', {
         method: 'PUT',
@@ -47,11 +52,13 @@ export function createPageSettingsController({ document: documentRef, api, toast
       });
       // Normalize/default rules live on the server; reflect its authoritative result.
       fillPageForm(documentRef, page);
-      toast('显示配置已保存');
+      toast('Display settings saved.');
       return page;
     } catch (error) {
       toast(error.message);
       return null;
+    } finally {
+      setButtonPending(button, false);
     }
   }
 

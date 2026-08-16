@@ -30,7 +30,7 @@ func (e *Error) Error() string {
 	if e.Cause != nil {
 		return e.Cause.Error()
 	}
-	return "管理操作失败"
+	return "admin operation failed"
 }
 
 func (e *Error) Unwrap() error { return e.Cause }

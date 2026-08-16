@@ -158,7 +158,7 @@ func (c *Config) Validate() error {
 			return err
 		}
 		if seen[svc.ID] {
-			return fmt.Errorf("服务 id 重复: %q", svc.ID)
+			return fmt.Errorf("duplicate service id: %q", svc.ID)
 		}
 		seen[svc.ID] = true
 	}
@@ -167,15 +167,15 @@ func (c *Config) Validate() error {
 	}
 	for _, subscription := range c.Telegram.Subscriptions {
 		if subscription.Name == "" {
-			return fmt.Errorf("Telegram 订阅 %q: name 不能为空", subscription.ID)
+			return fmt.Errorf("Telegram subscription %q: name is required", subscription.ID)
 		}
 		references := make(map[string]bool, len(subscription.ServiceIDs))
 		for _, id := range subscription.ServiceIDs {
 			if id == "" || !seen[id] {
-				return fmt.Errorf("Telegram 订阅 %q 引用了不存在的服务 %q", subscription.ID, id)
+				return fmt.Errorf("Telegram subscription %q references missing service %q", subscription.ID, id)
 			}
 			if references[id] {
-				return fmt.Errorf("Telegram 订阅 %q 重复引用服务 %q", subscription.ID, id)
+				return fmt.Errorf("Telegram subscription %q references service %q more than once", subscription.ID, id)
 			}
 			references[id] = true
 		}

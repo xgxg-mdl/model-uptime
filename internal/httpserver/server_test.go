@@ -220,6 +220,25 @@ func TestPageUpdateReturnsNormalizedServerState(t *testing.T) {
 	}
 }
 
+func TestWriteAdminErrorKeepsPublicDetailsAndHidesInternalCauses(t *testing.T) {
+	public := httptest.NewRecorder()
+	writeAdminError(public, &admin.Error{Kind: admin.ErrorInvalid, Message: "interval must be at least 5"})
+	if public.Code != http.StatusBadRequest || !strings.Contains(public.Body.String(), "interval must be at least 5") {
+		t.Fatalf("公开错误响应 = %d %q", public.Code, public.Body.String())
+	}
+
+	internal := httptest.NewRecorder()
+	writeAdminError(internal, &admin.Error{
+		Kind: admin.ErrorInternal, Message: "failed to save /private/config.yaml", Cause: errors.New("disk secret"),
+	})
+	if internal.Code != http.StatusInternalServerError || !strings.Contains(internal.Body.String(), "internal server error") {
+		t.Fatalf("内部错误响应 = %d %q", internal.Code, internal.Body.String())
+	}
+	if strings.Contains(internal.Body.String(), "private") || strings.Contains(internal.Body.String(), "secret") {
+		t.Fatalf("内部错误泄露底层细节: %q", internal.Body.String())
+	}
+}
+
 func TestTelegramViewIncludesCanonicalTemplatesAndMasksToken(t *testing.T) {
 	t.Parallel()
 	server := newTestServer(t, nil)

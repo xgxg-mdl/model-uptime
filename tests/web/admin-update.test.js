@@ -106,3 +106,55 @@ test('更新控制器检查、触发并轮询到目标版本', async () => {
   assert.equal(calls.at(-1)[0], '/api/admin/update');
   controller.stop();
 });
+
+test('停止更新轮询后旧请求不会再创建计时器', async () => {
+  const document = createElementDocument(updateIDs);
+  const scheduled = [];
+  let resolveRequest;
+  const controller = createUpdateController({
+    document,
+    api: () => new Promise(resolve => { resolveRequest = resolve; }),
+    toast() {},
+    storage: { getItem: () => null, setItem() {}, removeItem() {} },
+    schedule(callback) {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    cancel() {},
+    now: () => 1_000,
+  });
+
+  controller.poll('v2.0.0');
+  const oldRun = scheduled.shift()();
+  controller.stop();
+  resolveRequest({ current_version: 'v1.0.0', latest_version: 'v2.0.0', update_available: true });
+  await oldRun;
+  assert.equal(scheduled.length, 0);
+});
+
+test('新的更新轮询会作废旧轮询请求', async () => {
+  const document = createElementDocument(updateIDs);
+  const scheduled = [];
+  const resolvers = [];
+  const controller = createUpdateController({
+    document,
+    api: () => new Promise(resolve => { resolvers.push(resolve); }),
+    toast() {},
+    storage: { getItem: () => null, setItem() {}, removeItem() {} },
+    schedule(callback) {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    cancel() {},
+    now: () => 1_000,
+  });
+
+  controller.poll('v2.0.0');
+  const oldRun = scheduled.shift()();
+  controller.poll('v2.0.0');
+  assert.equal(scheduled.length, 1);
+  resolvers[0]({ current_version: 'v1.0.0', latest_version: 'v2.0.0', update_available: true });
+  await oldRun;
+  assert.equal(scheduled.length, 1, 'old poll must not add a second timer');
+  controller.stop();
+});

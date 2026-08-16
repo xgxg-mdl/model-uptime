@@ -26,8 +26,8 @@
   --page-bg: #1a1a1e;
   --term-bg: #0d0d10;
   --fg: #d4d4d4;
-  --fg-dim: #8a8a94;
-  --fg-mute: #55555e;
+  --fg-dim: #a0a0aa;
+  --fg-mute: #82828c;
   --ok: #5eff9c;
   --bad: #ff5e7a;
   --warn: #ffc857;
@@ -49,4 +49,16 @@
 
 * {
   box-sizing: border-box;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

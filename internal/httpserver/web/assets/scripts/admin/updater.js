@@ -1,4 +1,11 @@
+import { setButtonPending } from './shared.js';
+
 export const UPDATE_TARGET_KEY = 'model_uptime_update_target';
+
+function setStatusText(element, text, className) {
+  if (element.textContent !== text) element.textContent = text;
+  element.className = className;
+}
 
 export function renderUpdateStatus(documentRef, data) {
   const current = documentRef.getElementById('update-current');
@@ -8,20 +15,15 @@ export function renderUpdateStatus(documentRef, data) {
   const start = documentRef.getElementById('update-start-btn');
   current.textContent = data.current_version || 'dev';
   latest.textContent = data.latest_version || '—';
-  status.className = '';
 
   if (data.updating) {
-    status.textContent = 'Updating…';
-    status.classList.add('warn');
+    setStatusText(status, 'Updating…', 'warn');
   } else if (data.last_update_error) {
-    status.textContent = 'Update failed';
-    status.classList.add('bad');
+    setStatusText(status, 'Update failed', 'bad');
   } else if (data.update_available) {
-    status.textContent = 'Update available';
-    status.classList.add('warn');
+    setStatusText(status, 'Update available', 'warn');
   } else {
-    status.textContent = 'Up to date';
-    status.classList.add('ok');
+    setStatusText(status, 'Up to date', 'ok');
   }
 
   const notes = [];
@@ -35,8 +37,7 @@ export function renderUpdateStatus(documentRef, data) {
 
 export function renderUpdateError(documentRef, message, restarting = false) {
   const status = documentRef.getElementById('update-status');
-  status.textContent = restarting ? 'Restarting service…' : 'Check failed';
-  status.className = restarting ? 'warn' : 'bad';
+  setStatusText(status, restarting ? 'Restarting service…' : 'Check failed', restarting ? 'warn' : 'bad');
   documentRef.getElementById('update-detail').textContent = message;
   documentRef.getElementById('update-start-btn').disabled = true;
 }
@@ -53,9 +54,11 @@ export function createUpdateController({
 } = {}) {
   let status = null;
   let pollTimer = null;
+  let pollGeneration = 0;
   const element = id => documentRef.getElementById(id);
 
   function clearPollTimer() {
+    pollGeneration++;
     if (pollTimer !== null) cancel(pollTimer);
     pollTimer = null;
   }
@@ -67,10 +70,14 @@ export function createUpdateController({
 
   function poll(target) {
     clearPollTimer();
+    // 每轮携带代际令牌，避免重启检查后旧请求再创建计时器。
+    const generation = pollGeneration;
     const deadline = now() + 11 * 60 * 1000;
     const run = async () => {
+      if (generation !== pollGeneration) return;
       try {
         const data = await api('/api/admin/update');
+        if (generation !== pollGeneration) return;
         render(data);
         if (data.current_version === target) {
           storage.removeItem(UPDATE_TARGET_KEY);
@@ -82,21 +89,30 @@ export function createUpdateController({
           return;
         }
       } catch {
+        if (generation !== pollGeneration) return;
         renderUpdateError(documentRef, 'Waiting for the updated container to become available.', true);
       }
+      if (generation !== pollGeneration) return;
       if (now() >= deadline) {
         storage.removeItem(UPDATE_TARGET_KEY);
         renderUpdateError(documentRef, `The service did not return with ${target} within 11 minutes. Check Docker logs on the host.`);
         return;
       }
-      pollTimer = schedule(run, 2000);
+      pollTimer = schedule(() => {
+        pollTimer = null;
+        return run();
+      }, 2000);
     };
-    pollTimer = schedule(run, 1200);
+    pollTimer = schedule(() => {
+      pollTimer = null;
+      return run();
+    }, 1200);
   }
 
   async function load(force = false) {
+    clearPollTimer();
     const check = element('update-check-btn');
-    check.disabled = true;
+    setButtonPending(check, true, 'checking…');
     try {
       const data = await api(
         force ? '/api/admin/update/check' : '/api/admin/update',
@@ -115,7 +131,7 @@ export function createUpdateController({
       renderUpdateError(documentRef, error.message);
       return null;
     } finally {
-      check.disabled = false;
+      setButtonPending(check, false);
     }
   }
 
@@ -123,7 +139,9 @@ export function createUpdateController({
     if (!status || !status.update_available || !status.latest_version) return;
     const target = status.latest_version;
     if (!confirmAction(`Update model-uptime from ${status.current_version} to ${target}?`)) return;
-    element('update-start-btn').disabled = true;
+    const start = element('update-start-btn');
+    setButtonPending(start, true, 'starting…');
+    let failed = false;
     try {
       const result = await api('/api/admin/update', { method: 'POST' });
       const requestedTarget = result.target_version || target;
@@ -132,8 +150,12 @@ export function createUpdateController({
       toast('Update triggered');
       poll(requestedTarget);
     } catch (error) {
+      failed = true;
       renderUpdateError(documentRef, error.message);
       toast(error.message);
+    } finally {
+      setButtonPending(start, false);
+      if (failed || !status || status.updating || !status.update_available) start.disabled = true;
     }
   }
 

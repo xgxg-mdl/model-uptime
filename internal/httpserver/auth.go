@@ -12,7 +12,7 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if s.admin.TokenConfigured() {
-		writeError(w, http.StatusConflict, "管理密码已设置，请直接登录")
+		writeError(w, http.StatusConflict, "an admin password is already configured; sign in instead")
 		return
 	}
 	var request struct {
@@ -50,7 +50,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		writeError(w, http.StatusUnauthorized, "密码无效")
+		writeError(w, http.StatusUnauthorized, "invalid password")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -59,7 +59,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) requireAuth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.admin.Authenticate(bearerToken(r)) {
-			writeError(w, http.StatusUnauthorized, "未授权")
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		next(w, r)

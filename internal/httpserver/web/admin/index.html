@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,19 +14,23 @@
       <h1>model-uptime <span class="sub">manage</span></h1>
     </div>
     <div class="actions">
-      <a class="btn" href="/">← status</a>
-      <button class="btn bad" id="logout-btn" hidden>logout</button>
+      <a class="btn" href="/"><span aria-hidden="true">←</span> status</a>
+      <button class="btn bad" type="button" id="logout-btn" hidden>logout</button>
     </div>
   </header>
 
   <!-- 登录视图 -->
+  <div class="panel login-card page-reveal" id="auth-loading" role="status">
+    <div class="panel-body auth-loading">checking admin access…</div>
+  </div>
   <div class="panel login-card page-reveal" id="login-view" hidden>
     <div class="panel-body">
       <form id="login-form">
-        <input type="password" id="login-token" placeholder="admin password" autocomplete="current-password" />
-        <button class="btn primary" type="submit">enter</button>
+        <label class="sr-only" for="login-token">Admin password</label>
+        <input type="password" id="login-token" placeholder="admin password" autocomplete="current-password" required />
+        <button class="btn primary" type="submit" id="login-submit">enter</button>
       </form>
-      <p class="hint" style="color:var(--dim);margin-top:10px;font-size:11px;">令牌在会话中生效（关闭标签页后失效）。</p>
+      <p class="hint auth-hint">Access lasts until this tab is closed.</p>
     </div>
   </div>
 
@@ -34,16 +38,22 @@
   <div class="panel login-card page-reveal" id="setup-view" hidden>
     <div class="panel-body">
       <form class="vertical" id="setup-form">
-        <input type="password" id="setup-token" placeholder="new admin password（至少 8 位）" autocomplete="new-password" />
-        <input type="password" id="setup-confirm" placeholder="confirm password" autocomplete="new-password" />
-        <button class="btn primary" type="submit">set password</button>
+        <div class="field">
+          <label for="setup-token">New admin password</label>
+          <input type="password" id="setup-token" placeholder="at least 8 characters" autocomplete="new-password" minlength="8" required />
+        </div>
+        <div class="field">
+          <label for="setup-confirm">Confirm password</label>
+          <input type="password" id="setup-confirm" placeholder="repeat password" autocomplete="new-password" minlength="8" required />
+        </div>
+        <button class="btn primary" type="submit" id="setup-submit">set password</button>
       </form>
-      <p class="hint" style="color:var(--dim);margin-top:10px;font-size:11px;">首次部署：设置后将写入配置文件持久化，之后用该密码登录。</p>
+      <p class="hint auth-hint">The password is written to the persistent configuration.</p>
     </div>
   </div>
 
   <!-- 主视图 -->
-  <main class="page-reveal" id="app-view" hidden>
+  <main class="page-reveal" id="app-view" tabindex="-1" aria-label="Administration" hidden>
     <!-- 版本检查与容器更新 -->
     <section class="panel">
       <h2>system update</h2>
@@ -59,11 +69,11 @@
           </div>
           <div class="update-value">
             <span class="update-label">Status</span>
-            <strong id="update-status">Checking releases…</strong>
+            <strong id="update-status" role="status" aria-live="polite" aria-atomic="true">Checking releases…</strong>
           </div>
         </div>
         <p class="update-detail" id="update-detail">Version checks confirm that the release image is available before updating.</p>
-        <div class="form-actions" style="margin-top:12px;">
+        <div class="form-actions update-actions">
           <button class="btn" type="button" id="update-check-btn">check again</button>
           <button class="btn primary" type="button" id="update-start-btn" disabled>update now</button>
         </div>
@@ -75,20 +85,20 @@
       <h2>monitor services</h2>
       <div class="panel-body">
         <div class="service-toolbar">
-          <label class="check-row" style="white-space:nowrap;">
+          <label class="check-row bulk-selector">
             <input type="checkbox" id="select-all" />
             <span id="bulk-count">0 selected</span>
           </label>
           <div class="actions service-bulk-actions hidden" id="bulk-actions">
-            <button class="btn ok" id="bulk-enable" disabled>enable</button>
-            <button class="btn" id="bulk-disable" disabled>disable</button>
-            <button class="btn primary" id="bulk-settings" disabled>settings…</button>
+            <button class="btn ok" type="button" id="bulk-enable" disabled>enable</button>
+            <button class="btn" type="button" id="bulk-disable" disabled>disable</button>
+            <button class="btn primary" type="button" id="bulk-settings" aria-controls="bulk-editor" aria-expanded="false" disabled>settings…</button>
           </div>
-          <button class="btn primary" id="new-btn">+ new service</button>
+          <button class="btn primary" type="button" id="new-btn" aria-controls="editor" aria-expanded="false">+ new service</button>
         </div>
         <div class="service-table-wrap">
           <table class="service-table">
-            <thead><tr><th scope="col" style="width:28px;"></th><th scope="col">name</th><th scope="col">protocol</th><th scope="col">model</th><th scope="col">provider</th><th scope="col">interval</th><th scope="col">enabled</th><th scope="col">actions</th></tr></thead>
+            <thead><tr><th scope="col" class="select-column"><span class="sr-only">select</span></th><th scope="col">name</th><th scope="col">protocol</th><th scope="col">model</th><th scope="col">provider</th><th scope="col">interval</th><th scope="col">enabled</th><th scope="col">actions</th></tr></thead>
             <tbody id="svc-table"><tr><td colspan="8" class="empty">loading…</td></tr></tbody>
           </table>
         </div>
@@ -99,17 +109,17 @@
           <h3 id="editor-title">new service</h3>
           <form id="svc-form">
             <div class="field">
-              <label>ID（留空自动生成）</label>
+              <label for="f-id-input">ID (generated when blank)</label>
               <input id="f-id-input" placeholder="auto" autocomplete="off" />
-              <span class="hint">唯一标识，创建后不可修改</span>
+              <span class="hint">Unique identifier; cannot be changed after creation.</span>
             </div>
             <div class="field">
-              <label>Name *</label>
+              <label for="f-name">Name *</label>
               <input id="f-name" required autocomplete="off" />
-              <span class="hint">状态页显示的模型名</span>
+              <span class="hint">Display name on the public status page.</span>
             </div>
             <div class="field">
-              <label>Protocol *</label>
+              <label for="f-protocol">Protocol *</label>
               <select id="f-protocol">
                 <option value="chat">chat — OpenAI chat/completions</option>
                 <option value="response">response — OpenAI responses</option>
@@ -118,34 +128,34 @@
               </select>
             </div>
             <div class="field">
-              <label>Provider</label>
+              <label for="f-provider">Provider</label>
               <input id="f-provider" placeholder="OpenAI / Anthropic / xAI …" autocomplete="off" />
-              <span class="hint">仅展示用标签</span>
+              <span class="hint">Display-only provider label.</span>
             </div>
             <div class="field llm">
-              <label>Model</label>
+              <label for="f-model">Model</label>
               <input id="f-model" placeholder="gpt-4o" autocomplete="off" />
             </div>
             <div class="field full">
-              <label>Base URL *</label>
+              <label for="f-base">Base URL *</label>
               <input id="f-base" required autocomplete="off" placeholder="https://api.openai.com/v1" />
-              <span class="hint">http 协议填完整地址；LLM 协议可含或不含 /v1，自动补全</span>
+              <span class="hint">Use a full URL for HTTP. LLM endpoints accept a base URL with or without /v1.</span>
             </div>
             <div class="field">
-              <label>API Key</label>
-              <input id="f-key" type="password" placeholder="留空保持不变" autocomplete="new-password" />
-              <span class="hint">编辑时留空保留原密钥</span>
+              <label for="f-key">API key</label>
+              <input id="f-key" type="password" placeholder="leave blank to keep" autocomplete="new-password" />
+              <span class="hint">Existing keys are preserved when this field is blank.</span>
             </div>
             <div class="field llm">
-              <label>Path override</label>
-              <input id="f-path" placeholder="可选，覆盖默认端点" autocomplete="off" />
+              <label for="f-path">Path override</label>
+              <input id="f-path" placeholder="optional endpoint override" autocomplete="off" />
             </div>
             <div class="field">
-              <label>Interval (s)</label>
+              <label for="f-interval">Interval (s)</label>
               <input id="f-interval" type="number" min="5" step="1" value="60" />
             </div>
             <div class="field">
-              <label>Timeout (s)</label>
+              <label for="f-timeout">Timeout (s)</label>
               <input id="f-timeout" type="number" min="1" max="300" step="1" value="15" />
             </div>
             <div class="field llm check-row">
@@ -154,20 +164,20 @@
               <span class="hint">Validate the SSE streaming path by default</span>
             </div>
             <div class="field http hidden">
-              <label>Method</label>
+              <label for="f-method">Method</label>
               <select id="f-method"><option>GET</option><option>POST</option><option>HEAD</option><option>PUT</option><option>DELETE</option></select>
             </div>
             <div class="field http hidden">
-              <label>Expect Status</label>
+              <label for="f-expect">Expected status</label>
               <input id="f-expect" type="number" min="100" max="599" value="200" />
             </div>
             <div class="field http hidden">
-              <label>Headers (JSON)</label>
+              <label for="f-headers">Headers (JSON)</label>
               <textarea id="f-headers" placeholder='{"X-Key": "value"}'></textarea>
             </div>
             <div class="field http hidden full">
-              <label>Body</label>
-              <textarea id="f-body" placeholder="可选请求体"></textarea>
+              <label for="f-body">Body</label>
+              <textarea id="f-body" placeholder="optional request body"></textarea>
             </div>
             <div class="field check-row">
               <input type="checkbox" id="f-enabled" checked />
@@ -177,7 +187,7 @@
               <button class="btn primary" type="submit" id="save-btn">save</button>
               <button class="btn" type="button" id="cancel-btn">cancel</button>
               <button class="btn" type="button" id="test-btn">test connection</button>
-              <span class="test-result feedback-in hidden" id="test-result"></span>
+              <span class="test-result feedback-in hidden" id="test-result" role="status" aria-live="polite" aria-atomic="true"></span>
             </div>
           </form>
         </div>
@@ -188,29 +198,29 @@
     <section class="panel panel-reveal hidden" id="bulk-editor">
       <h2>bulk settings</h2>
       <div class="panel-body">
-        <p class="hint" style="margin:0 0 12px;color:var(--dim);">仅填写的字段会被更新，留空保持不变。应用到 <b id="bulk-editor-count">0</b> 个选中服务。</p>
+        <p class="hint bulk-intro">Only completed fields are changed. Applies to <b id="bulk-editor-count">0</b> selected services.</p>
         <form id="bulk-form">
           <div class="field">
-            <label>Interval (s)</label>
-            <input id="b-interval" type="number" min="5" step="1" placeholder="不改" />
-            <span class="hint">采样间隔，最小 5</span>
+            <label for="b-interval">Interval (s)</label>
+            <input id="b-interval" type="number" min="5" step="1" placeholder="unchanged" />
+            <span class="hint">Probe interval; minimum 5 seconds.</span>
           </div>
           <div class="field">
-            <label>Timeout (s)</label>
-            <input id="b-timeout" type="number" min="1" max="300" step="1" placeholder="不改" />
-            <span class="hint">单次探测超时，1~300</span>
+            <label for="b-timeout">Timeout (s)</label>
+            <input id="b-timeout" type="number" min="1" max="300" step="1" placeholder="unchanged" />
+            <span class="hint">Per-probe timeout; 1–300 seconds.</span>
           </div>
           <div class="field">
-            <label>Streaming</label>
+            <label for="b-stream">Streaming</label>
             <select id="b-stream">
-              <option value="">不改</option>
-              <option value="true">on（流式 SSE）</option>
-              <option value="false">off（同步 JSON）</option>
+              <option value="">unchanged</option>
+              <option value="true">on (SSE stream)</option>
+              <option value="false">off (JSON response)</option>
             </select>
-            <span class="hint">仅 LLM 协议生效</span>
+            <span class="hint">Applies only to LLM protocols.</span>
           </div>
           <div class="form-actions">
-            <button class="btn primary" type="submit">apply</button>
+            <button class="btn primary" type="submit" id="bulk-apply">apply</button>
             <button class="btn" type="button" id="bulk-cancel">cancel</button>
           </div>
         </form>
@@ -226,7 +236,7 @@
             <label for="tg-bot-token">Bot token</label>
             <div class="telegram-token-row">
               <input id="tg-bot-token" type="password" placeholder="not configured" autocomplete="new-password" />
-              <button class="btn primary" type="button" id="tg-new-btn">+ new subscription</button>
+              <button class="btn primary" type="button" id="tg-new-btn" aria-controls="tg-editor" aria-expanded="false">+ new subscription</button>
             </div>
             <span class="hint">Leave blank to keep the configured token.</span>
           </div>
@@ -235,26 +245,27 @@
           <div class="empty">loading…</div>
         </div>
 
-        <div class="subscription-editor panel-reveal hidden" id="tg-editor">
+        <div class="subscription-editor panel-reveal hidden" id="tg-editor" role="region" aria-labelledby="tg-editor-title">
+          <h3 id="tg-editor-title">new subscription</h3>
           <form id="tg-subscription-form">
             <div class="field">
-              <label>Subscription ID *</label>
+              <label for="tg-id">Subscription ID *</label>
               <input id="tg-id" required autocomplete="off" placeholder="operations" />
               <span class="hint">Unique identifier; cannot be changed after saving.</span>
             </div>
             <div class="field">
-              <label>Name *</label>
+              <label for="tg-name">Name *</label>
               <input id="tg-name" required autocomplete="off" placeholder="Operations" />
             </div>
             <div class="field">
-              <label>Chat ID *</label>
+              <label for="tg-chat-id">Chat ID *</label>
               <input id="tg-chat-id" required autocomplete="off" placeholder="-1001234567890" />
               <span class="hint">A user, group, or channel chat ID.</span>
             </div>
             <div class="field">
-              <label>Language *</label>
+              <label for="tg-language">Language *</label>
               <select id="tg-language">
-                <option value="zh-CN">简体中文</option>
+                <option value="zh-CN">Simplified Chinese</option>
                 <option value="en-US">English</option>
               </select>
               <span class="hint">Controls the built-in template; custom templates can use any language.</span>
@@ -264,12 +275,12 @@
               <label for="tg-enabled">enabled</label>
             </div>
             <div class="field full">
-              <label>Models *</label>
-              <div class="model-picker" id="tg-model-picker"></div>
+              <span class="field-label" id="tg-models-label">Models *</span>
+              <div class="model-picker" id="tg-model-picker" role="group" aria-labelledby="tg-models-label"></div>
               <span class="hint">Disabled monitors remain selectable and notify again after monitoring resumes.</span>
             </div>
             <div class="field full">
-              <label>Aggregated message template *</label>
+              <label for="tg-template">Aggregated message template *</label>
               <textarea id="tg-template" required spellcheck="false"></textarea>
               <span class="hint">Telegram HTML is supported. Values are HTML-escaped automatically.</span>
             </div>
@@ -282,15 +293,15 @@
               </div>
             </div>
             <div class="form-actions">
-              <button class="btn primary" type="submit">apply subscription</button>
+              <button class="btn primary" type="submit" id="tg-apply-btn">apply subscription</button>
               <button class="btn" type="button" id="tg-editor-cancel">cancel</button>
               <button class="btn" type="button" id="tg-test-btn">send test</button>
-              <span class="test-result feedback-in hidden" id="tg-test-result"></span>
+              <span class="test-result feedback-in hidden" id="tg-test-result" role="status" aria-live="polite" aria-atomic="true"></span>
             </div>
           </form>
         </div>
 
-        <div class="form-actions" style="margin-top:14px;">
+        <div class="form-actions telegram-actions">
           <button class="btn primary" type="button" id="tg-save-btn">save Telegram config</button>
         </div>
       </div>
@@ -302,46 +313,46 @@
       <div class="panel-body">
         <form id="page-form">
           <div class="field">
-            <label>Title</label>
+            <label for="p-title">Title</label>
             <input id="p-title" autocomplete="off" />
-            <span class="hint">浏览器标签标题</span>
+            <span class="hint">Browser tab title.</span>
           </div>
           <div class="field">
-            <label>Subtitle</label>
+            <label for="p-subtitle">Subtitle</label>
             <input id="p-subtitle" autocomplete="off" />
-            <span class="hint">终端标题栏文本</span>
+            <span class="hint">Status terminal title bar.</span>
           </div>
           <div class="field full">
-            <label>Probe Comment</label>
+            <label for="p-comment">Probe comment</label>
             <input id="p-comment" autocomplete="off" />
-            <span class="hint">顶部 # 注释行</span>
+            <span class="hint">Comment shown at the top of the status terminal.</span>
           </div>
           <div class="field full">
-            <label>Public URL</label>
+            <label for="p-public-url">Public URL</label>
             <input id="p-public-url" type="url" autocomplete="url" placeholder="https://status.example.com/" />
             <span class="hint">Appended to Telegram notifications when configured.</span>
           </div>
           <div class="field">
-            <label>History Length</label>
+            <label for="p-history">History length</label>
             <input id="p-history" type="number" min="1" max="200" step="1" />
-            <span class="hint">状态条数量 / 历史窗口（分钟）</span>
+            <span class="hint">Timeline bucket count; 1–200 per service.</span>
           </div>
           <div class="field">
-            <label>Refresh (s)</label>
+            <label for="p-refresh">Refresh (s)</label>
             <input id="p-refresh" type="number" min="1" max="60" step="1" />
-            <span class="hint">状态页轮询间隔</span>
+            <span class="hint">Public status polling interval.</span>
           </div>
-          <div class="field full">
-            <span class="hint" style="color:var(--dim);">统计维度开关：</span>
+          <fieldset class="field full metric-fieldset">
+            <legend>Metrics</legend>
             <div class="metric-options">
               <label class="check-row"><input type="checkbox" id="p-uptime" /> uptime%</label>
               <label class="check-row"><input type="checkbox" id="p-samples" /> samples</label>
               <label class="check-row"><input type="checkbox" id="p-latency" /> latency</label>
-              <label class="check-row"><input type="checkbox" id="p-avload" /> avg load</label>
+              <label class="check-row"><input type="checkbox" id="p-avload" /> avg uptime</label>
             </div>
-          </div>
+          </fieldset>
           <div class="form-actions">
-            <button class="btn primary" type="submit">save display config</button>
+            <button class="btn primary" type="submit" id="page-save-btn">save display config</button>
           </div>
         </form>
       </div>
@@ -349,7 +360,7 @@
   </main>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <script type="module" src="/assets/scripts/admin/app.js"></script>
 </body>
 </html>

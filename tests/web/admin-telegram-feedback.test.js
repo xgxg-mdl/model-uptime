@@ -12,6 +12,7 @@ import {
   DEFAULT_TELEGRAM_LANGUAGE,
   normalizeTelegramSubscription,
   normalizeTelegramTemplates,
+  selectSubscriptionEditTrigger,
   sendTelegramTest,
 } from '../../internal/httpserver/web/assets/scripts/admin/telegram.js';
 import { createElementDocument } from './helpers/fake-dom.js';
@@ -60,6 +61,12 @@ test('新订阅使用中文服务端模板并复制 service_ids', () => {
   assert.deepEqual(subscription.service_ids, ['s1']);
 });
 
+test('订阅列表重绘后按索引恢复编辑触发器', () => {
+  const buttons = [0, 1, 2].map(index => ({ dataset: { index: String(index) } }));
+  assert.equal(selectSubscriptionEditTrigger(buttons, 1), buttons[1]);
+  assert.equal(selectSubscriptionEditTrigger(buttons, 4), null);
+});
+
 test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async () => {
   const rowResult = { className: 'subscription-test-result feedback-in hidden', textContent: '' };
   const editorResult = { id: 'tg-test-result', className: 'test-result feedback-in hidden', textContent: '' };
@@ -97,9 +104,38 @@ test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async
   assert.match(rowResult.className, /\bbad\b/);
 });
 
+test('Telegram 测试期间按钮公布并恢复忙碌状态', async () => {
+  const button = {
+    disabled: false,
+    textContent: 'send test',
+    attributes: new Map(),
+    setAttribute(name, value) { this.attributes.set(name, String(value)); },
+    getAttribute(name) { return this.attributes.get(name) || null; },
+  };
+  let releaseSave;
+  const pending = sendTelegramTest({
+    subscription: { id: 'ops', name: 'Operations' },
+    results: [],
+    buttons: [button],
+    save: () => new Promise(resolve => { releaseSave = resolve; }),
+    api: async () => {},
+    toast() {},
+  });
+
+  await Promise.resolve();
+  assert.equal(button.disabled, true);
+  assert.equal(button.textContent, 'sending…');
+  assert.equal(button.getAttribute('aria-busy'), 'true');
+  releaseSave();
+  await pending;
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'send test');
+  assert.equal(button.getAttribute('aria-busy'), 'false');
+});
+
 test('页面公开地址参与配置读取和服务端回填', () => {
   assert.match(html, /id="p-public-url"/);
-  assert.match(html, /<option value="zh-CN">简体中文<\/option>/);
+  assert.match(html, /<option value="zh-CN">Simplified Chinese<\/option>/);
   const ids = [
     'p-title', 'p-subtitle', 'p-comment', 'p-public-url', 'p-history', 'p-refresh',
     'p-uptime', 'p-samples', 'p-latency', 'p-avload',

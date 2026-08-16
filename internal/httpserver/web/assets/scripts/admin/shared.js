@@ -11,12 +11,43 @@ export function prefersReducedMotion(windowRef = globalThis.window) {
   return windowRef?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
-export function revealPanel(element, windowRef = globalThis.window, block = 'nearest') {
+export function focusWithoutScroll(element) {
+  if (!element?.focus) return;
+  try { element.focus({ preventScroll: true }); }
+  catch { element.focus(); }
+}
+
+export function revealPanel(element, windowRef = globalThis.window, block = 'nearest', focusTarget = null) {
   element.classList.remove('hidden');
   element.scrollIntoView({
     behavior: prefersReducedMotion(windowRef) ? 'auto' : 'smooth',
     block,
   });
+  focusWithoutScroll(focusTarget);
+}
+
+const pendingButtonStates = new WeakMap();
+
+export function setButtonPending(button, pending, pendingLabel = 'working…') {
+  if (pending) {
+    if (!pendingButtonStates.has(button)) {
+      pendingButtonStates.set(button, {
+        disabled: button.disabled,
+        label: button.textContent,
+        replaceLabel: pendingLabel !== null,
+      });
+    }
+    button.disabled = true;
+    button.setAttribute?.('aria-busy', 'true');
+    if (pendingLabel !== null) button.textContent = pendingLabel;
+    return;
+  }
+  const previous = pendingButtonStates.get(button);
+  if (!previous) return;
+  button.disabled = previous.disabled;
+  if (previous.replaceLabel) button.textContent = previous.label;
+  button.setAttribute?.('aria-busy', 'false');
+  pendingButtonStates.delete(button);
 }
 
 export function createToast({

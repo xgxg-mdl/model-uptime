@@ -93,12 +93,12 @@ func (m *Manager) Authenticate(token string) bool {
 func (m *Manager) SetupToken(token string) error {
 	token = strings.TrimSpace(token)
 	if len(token) < 8 {
-		return invalid("管理密码至少需要 8 个字符")
+		return invalid("admin password must contain at least 8 characters")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.adminToken != "" {
-		return conflict("管理密码已设置，请直接登录")
+		return conflict("an admin password is already configured; sign in instead")
 	}
 	next := m.config.Clone()
 	next.AdminToken = token
@@ -128,7 +128,7 @@ func (m *Manager) CreateService(service model.Service) (model.Service, error) {
 	defer m.mu.Unlock()
 	next := m.config.Clone()
 	if _, exists := next.ServiceByID(service.ID); exists {
-		return model.Service{}, conflict("服务 id 已存在: %s", service.ID)
+		return model.Service{}, conflict("service id already exists: %s", service.ID)
 	}
 	next.Services = append(next.Services, service)
 	if err := m.commitLocked(next); err != nil {
@@ -143,7 +143,7 @@ func (m *Manager) UpdateService(id string, service model.Service) (model.Service
 	next := m.config.Clone()
 	index := serviceIndex(next.Services, id)
 	if index < 0 {
-		return model.Service{}, notFound("服务不存在: %s", id)
+		return model.Service{}, notFound("service not found: %s", id)
 	}
 	previous := next.Services[index]
 	if service.APIKey == "" || service.APIKey == model.APIKeySentinel {
@@ -153,7 +153,7 @@ func (m *Manager) UpdateService(id string, service model.Service) (model.Service
 		service.ID = previous.ID
 	}
 	if service.ID != id {
-		return model.Service{}, invalid("服务 id 创建后不可修改")
+		return model.Service{}, invalid("service id cannot be changed after creation")
 	}
 	service.Normalize()
 	if err := service.Validate(); err != nil {
@@ -172,7 +172,7 @@ func (m *Manager) DuplicateService(id string) (model.Service, error) {
 	next := m.config.Clone()
 	index := serviceIndex(next.Services, id)
 	if index < 0 {
-		return model.Service{}, notFound("服务不存在: %s", id)
+		return model.Service{}, notFound("service not found: %s", id)
 	}
 	duplicate := next.Services[index]
 	base := duplicate.ID + "-copy"
@@ -194,7 +194,7 @@ func (m *Manager) DeleteService(id string) error {
 	next := m.config.Clone()
 	index := serviceIndex(next.Services, id)
 	if index < 0 {
-		return notFound("服务不存在: %s", id)
+		return notFound("service not found: %s", id)
 	}
 	next.Services = append(next.Services[:index], next.Services[index+1:]...)
 	for index := range next.Telegram.Subscriptions {
@@ -219,7 +219,7 @@ type ServicePatch struct {
 
 func (m *Manager) UpdateServices(ids []string, patch ServicePatch) ([]model.Service, error) {
 	if len(ids) == 0 {
-		return nil, invalid("ids 不能为空")
+		return nil, invalid("ids must not be empty")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -236,7 +236,7 @@ func (m *Manager) UpdateServices(ids []string, patch ServicePatch) ([]model.Serv
 		}
 	}
 	if len(missing) > 0 {
-		return nil, notFound("服务不存在: %s", strings.Join(missing, ", "))
+		return nil, notFound("services not found: %s", strings.Join(missing, ", "))
 	}
 	for index := range next.Services {
 		service := &next.Services[index]
@@ -293,7 +293,7 @@ func (m *Manager) ProbeNow(ctx context.Context, id string) (*model.ProbeResult, 
 	}
 	result, err := m.monitor.ProbeNow(ctx, id)
 	if err != nil {
-		return nil, notFound("%s", err)
+		return nil, notFound("service not found: %s", id)
 	}
 	return result, nil
 }

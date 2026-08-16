@@ -100,7 +100,7 @@ func (n *Notifier) send(ctx context.Context, job sendJob) *deliveryError {
 			description = http.StatusText(response.StatusCode)
 		}
 	}
-	err = fmt.Errorf("Telegram API 返回 %d: %s", response.StatusCode, description)
+	err = fmt.Errorf("Telegram API returned %d: %s", response.StatusCode, description)
 	// 只有 HTTP 或 Telegram error_code 明确给出的非 429 4xx 才是配置型
 	// 永久错误；2xx 未确认、3xx、429 和 5xx 都属于未知或可恢复结果。
 	permanentHTTPError := response.StatusCode >= 400 && response.StatusCode < 500 &&

@@ -53,7 +53,7 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(request.SubscriptionID) == "" {
-		writeError(w, http.StatusBadRequest, "subscription_id 不能为空")
+		writeError(w, http.StatusBadRequest, "subscription_id is required")
 		return
 	}
 	if err := s.admin.SendTestNotification(r.Context(), request.SubscriptionID); err != nil {

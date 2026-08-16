@@ -59,6 +59,8 @@ class FakeNode {
   }
 
   replaceChildren(...nodes) {
+    const activeElement = this.ownerDocument.activeElement;
+    if (activeElement && this.contains(activeElement)) this.ownerDocument.activeElement = null;
     for (const child of this.childNodes) child.parentNode = null;
     this.childNodes = [];
     this.append(...nodes);
@@ -75,6 +77,11 @@ class FakeNode {
 
   get children() {
     return this.childNodes.filter(child => child.nodeType === 1);
+  }
+
+  contains(candidate) {
+    if (this === candidate) return true;
+    return this.childNodes.some(child => child.contains?.(candidate));
   }
 }
 
@@ -143,7 +150,17 @@ export class FakeElement extends FakeNode {
 
   blur() {
     this.blurred = true;
+    if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = null;
     this.dispatchEvent({ type: 'blur' });
+  }
+
+  focus() {
+    const previous = this.ownerDocument.activeElement;
+    if (previous === this) return;
+    if (previous) previous.blur();
+    this.ownerDocument.activeElement = this;
+    this.focused = true;
+    this.dispatchEvent({ type: 'focus' });
   }
 
   scrollIntoView(options) {
@@ -172,7 +189,8 @@ export class FakeDocumentFragment extends FakeNode {
 export class FakeDocument {
   constructor() {
     this.elementsByID = new Map();
-    this.documentElement = { clientWidth: 1024 };
+    this.documentElement = { clientWidth: 1024, clientHeight: 768 };
+    this.activeElement = null;
     this.title = '';
   }
 
@@ -233,10 +251,11 @@ export function findFirst(root, predicate) {
 export function createStatusDocument() {
   const document = new FakeDocument();
   for (const id of [
-    'banner-out', 'svc-out', 'cmd-models', 'term-subtitle', 'probe-comment', 'updated', 'login-time',
+    'banner-out', 'status-announcer', 'svc-out', 'cmd-models', 'term-subtitle', 'probe-comment', 'updated', 'login-time',
   ]) {
     document.registerElement(id);
   }
+  document.registerElement('status-shell', 'main', 'term');
   document.registerElement('tip', 'div', 'tip');
   return document;
 }

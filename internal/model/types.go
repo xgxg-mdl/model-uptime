@@ -80,36 +80,36 @@ func (s *Service) Normalize() {
 // Validate 校验服务定义，返回首个错误。
 func (s *Service) Validate() error {
 	if s.ID == "" {
-		return fmt.Errorf("id 不能为空")
+		return fmt.Errorf("id is required")
 	}
 	if s.Name == "" {
-		return fmt.Errorf("服务 %q: name 不能为空", s.ID)
+		return fmt.Errorf("service %q: name is required", s.ID)
 	}
 	switch s.Protocol {
 	case ProtocolChat, ProtocolResponse, ProtocolMessage, ProtocolHTTP:
 	default:
-		return fmt.Errorf("服务 %q: 不支持的协议 %q（支持 chat|response|message|http）", s.ID, s.Protocol)
+		return fmt.Errorf("service %q: unsupported protocol %q (expected chat, response, message, or http)", s.ID, s.Protocol)
 	}
 	if s.Protocol == ProtocolHTTP {
 		if s.BaseURL == "" {
-			return fmt.Errorf("服务 %q: http 协议需要 base_url", s.ID)
+			return fmt.Errorf("service %q: the http protocol requires base_url", s.ID)
 		}
 		if s.ExpectStatus < 100 || s.ExpectStatus > 599 {
-			return fmt.Errorf("服务 %q: expect_status 必须是合法 HTTP 状态码", s.ID)
+			return fmt.Errorf("service %q: expect_status must be a valid HTTP status code", s.ID)
 		}
 	} else {
 		if s.BaseURL == "" {
-			return fmt.Errorf("服务 %q: 需要 base_url", s.ID)
+			return fmt.Errorf("service %q: base_url is required", s.ID)
 		}
 		if s.Model == "" {
-			return fmt.Errorf("服务 %q: %s 协议需要 model", s.ID, s.Protocol)
+			return fmt.Errorf("service %q: the %s protocol requires model", s.ID, s.Protocol)
 		}
 	}
 	if s.IntervalSec < 5 {
-		return fmt.Errorf("服务 %q: interval_sec 不能小于 5", s.ID)
+		return fmt.Errorf("service %q: interval_sec must be at least 5", s.ID)
 	}
 	if s.TimeoutSec < 1 || s.TimeoutSec > 300 {
-		return fmt.Errorf("服务 %q: timeout_sec 需在 1~300 之间", s.ID)
+		return fmt.Errorf("service %q: timeout_sec must be between 1 and 300", s.ID)
 	}
 	return nil
 }
@@ -201,19 +201,19 @@ func (p *PageConfig) Normalize() {
 // Validate 校验页面配置。
 func (p *PageConfig) Validate() error {
 	if p.HistoryLen < 1 || p.HistoryLen > 200 {
-		return fmt.Errorf("history_len 需在 1~200 之间")
+		return fmt.Errorf("history_len must be between 1 and 200")
 	}
 	if p.RefreshSec < 1 || p.RefreshSec > 60 {
-		return fmt.Errorf("refresh_sec 需在 1~60 之间")
+		return fmt.Errorf("refresh_sec must be between 1 and 60")
 	}
 	if p.PublicURL != "" {
 		parsed, err := url.Parse(p.PublicURL)
 		if err != nil || parsed == nil {
-			return fmt.Errorf("public_url 必须是无账号密码的完整 http/https 地址")
+			return fmt.Errorf("public_url must be a complete http/https URL without credentials")
 		}
 		scheme := strings.ToLower(parsed.Scheme)
 		if parsed.Host == "" || (scheme != "http" && scheme != "https") || parsed.User != nil {
-			return fmt.Errorf("public_url 必须是无账号密码的完整 http/https 地址")
+			return fmt.Errorf("public_url must be a complete http/https URL without credentials")
 		}
 	}
 	return nil
