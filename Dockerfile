@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
  && mkdir -p /data && chown 65534:65534 /data
 
 # ---- 运行阶段：alpine + entrypoint 处理卷权限，主程序仍以 nobody 运行 ----
-FROM alpine:3.23.3
+FROM alpine:3.24.1
 LABEL org.opencontainers.image.title="model-uptime" \
       org.opencontainers.image.description="Model API uptime monitoring and status page" \
       org.opencontainers.image.source="https://github.com/xgxg-mdl/model-uptime"
