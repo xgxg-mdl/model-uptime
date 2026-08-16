@@ -22,6 +22,7 @@
     --accent: #7afcff;
   }
   * { box-sizing: border-box; }
+  button, input, select, textarea { min-width: 0; }
   body {
     margin: 0; padding: 28px 16px 60px;
     background: var(--bg);
@@ -31,7 +32,7 @@
     font-size: 13px; line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 920px; margin: 0 auto; }
+  .wrap { width: 100%; max-width: 1120px; margin: 0 auto; }
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 16px; margin-bottom: 20px;
@@ -45,6 +46,7 @@
     cursor: pointer; transition: filter .1s ease;
   }
   .btn:hover { filter: brightness(1.3); }
+  .btn:disabled { cursor: not-allowed; opacity: .45; filter: none; }
   .btn.ok { color: var(--ok); border-color: rgba(94,255,156,.35); }
   .btn.bad { color: var(--bad); border-color: rgba(255,94,122,.35); }
   .btn.primary { background: rgba(122,252,255,.12); color: var(--info); border-color: rgba(122,252,255,.4); }
@@ -69,6 +71,11 @@
   .dot.on { background: var(--ok); } .dot.off { background: var(--mute); }
   .actions { display: flex; gap: 6px; }
   .actions .btn { padding: 3px 8px; font-size: 11px; }
+  .service-table-wrap { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+  .service-table { min-width: 940px; }
+  .service-primary { min-width: 180px; }
+  .service-actions { width: 1%; white-space: nowrap; }
+  .new-service-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   .field { display: flex; flex-direction: column; gap: 4px; }
@@ -155,14 +162,79 @@
   .update-value strong.bad { color: var(--bad); }
   .update-detail { color: var(--mute); font-size: 10px; margin: 10px 0 0; overflow-wrap: anywhere; }
 
-  @media (max-width: 640px) {
+  @media (max-width: 760px) {
     form { grid-template-columns: 1fr; }
-    body { padding: 16px 8px 48px; }
-    .actions { flex-direction: column; }
+    body { padding: 12px 8px 40px; }
+    header { gap: 10px; padding: 10px 12px; margin-bottom: 12px; }
+    header .actions { flex: 0 0 auto; }
+    header .actions .btn { padding: 5px 8px; }
+    .panel { margin-bottom: 12px; border-radius: 8px; }
+    .panel > h2 { padding: 9px 12px; }
+    .panel-body { padding: 12px; }
+    .field input, .field select, .field textarea { width: 100%; }
+    .form-actions { flex-wrap: wrap; }
+    .form-actions > .btn { flex: 1 1 130px; min-height: 38px; }
+    .form-actions > .test-result { flex-basis: 100%; overflow-wrap: anywhere; }
+    .bulk-bar { align-items: stretch; }
+    .bulk-bar > .actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: 100%; }
+    .bulk-bar > .actions .btn { min-height: 38px; white-space: normal; }
+    .bulk-bar > .actions #bulk-settings { grid-column: 1 / -1; }
+    .new-service-row .btn { width: 100%; min-height: 38px; }
+
+    .service-table-wrap { overflow: visible; }
+    .service-table { min-width: 0; }
+    .service-table thead { display: none; }
+    .service-table tbody { display: grid; gap: 10px; }
+    .service-table tbody tr {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 9px 14px; padding: 12px; background: #15151a;
+      border: 1px solid var(--line); border-radius: 6px;
+    }
+    .service-table tbody td {
+      display: grid; grid-template-columns: minmax(64px, auto) minmax(0, 1fr);
+      gap: 8px; width: auto; min-width: 0; padding: 0; border: 0;
+      align-items: baseline; overflow-wrap: anywhere;
+    }
+    .service-table tbody td::before {
+      content: attr(data-label); color: var(--mute); font-size: 10px;
+      font-weight: 400; text-transform: uppercase;
+    }
+    .service-table tbody .service-select {
+      display: block; grid-column: 1 / -1; padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .service-table tbody .service-select::before { content: none; }
+    .service-table tbody .service-primary { grid-column: 1 / -1; min-width: 0; }
+    .service-table tbody .service-actions {
+      display: block; grid-column: 1 / -1; width: auto; padding-top: 2px; white-space: normal;
+    }
+    .service-table tbody .service-actions::before { content: none; }
+    .service-table tbody .service-actions .actions {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+    }
+    .service-table tbody .service-actions .btn { min-height: 36px; }
+    .service-table tbody .empty {
+      display: block; grid-column: 1 / -1; padding: 18px 8px;
+    }
+    .service-table tbody .empty::before { content: none; }
+
     .telegram-head { align-items: stretch; flex-direction: column; }
+    .telegram-head .btn { min-height: 38px; }
     .model-picker { grid-template-columns: 1fr; }
-    .subscription-row { align-items: start; }
+    .subscription-list { margin-left: -12px; margin-right: -12px; }
+    .subscription-row { grid-template-columns: 1fr; align-items: start; padding: 12px; }
+    .subscription-row .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .subscription-row .actions .btn { min-height: 36px; }
+    .template-help { overflow-wrap: anywhere; }
     .update-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 420px) {
+    header .sub { display: block; margin-left: 0; }
+    .service-table tbody tr { grid-template-columns: 1fr; }
+    .service-table tbody td, .service-table tbody .service-primary,
+    .service-table tbody .service-select, .service-table tbody .service-actions { grid-column: 1; }
+    .toast { width: calc(100% - 24px); text-align: center; }
   }
 </style>
 </head>
@@ -244,13 +316,15 @@
             <button class="btn primary" id="bulk-settings" disabled>bulk settings…</button>
           </div>
         </div>
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <div class="new-service-row">
           <button class="btn primary" id="new-btn">+ new service</button>
         </div>
-        <table>
-          <thead><tr><th style="width:28px;"></th><th>name</th><th>protocol</th><th>model</th><th>provider</th><th>interval</th><th>enabled</th><th></th></tr></thead>
-          <tbody id="svc-table"><tr><td colspan="8" class="empty">loading…</td></tr></tbody>
-        </table>
+        <div class="service-table-wrap">
+          <table class="service-table">
+            <thead><tr><th style="width:28px;"></th><th>name</th><th>protocol</th><th>model</th><th>provider</th><th>interval</th><th>enabled</th><th></th></tr></thead>
+            <tbody id="svc-table"><tr><td colspan="8" class="empty">loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -779,14 +853,14 @@ async function loadServices() {
     }
     tbody.innerHTML = data.services.map(s => `
       <tr>
-        <td><input type="checkbox" class="row-check" data-id="${esc(s.id)}" /></td>
-        <td><b>${esc(s.name)}</b> <span class="tag">#${esc(s.id)}</span></td>
-        <td>${esc(s.protocol)}</td>
-        <td>${esc(s.model || '—')}</td>
-        <td>${esc(s.provider || '—')}</td>
-        <td>${s.interval_sec || 60}s</td>
-        <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span>${s.enabled ? 'on' : 'off'}</td>
-        <td><div class="actions">
+        <td class="service-select"><input type="checkbox" class="row-check" data-id="${esc(s.id)}" aria-label="select ${esc(s.name)}" /></td>
+        <td class="service-primary" data-label="name"><b>${esc(s.name)}</b> <span class="tag">#${esc(s.id)}</span></td>
+        <td data-label="protocol">${esc(s.protocol)}</td>
+        <td data-label="model">${esc(s.model || '—')}</td>
+        <td data-label="provider">${esc(s.provider || '—')}</td>
+        <td data-label="interval">${s.interval_sec || 60}s</td>
+        <td data-label="enabled"><span class="dot ${s.enabled ? 'on' : 'off'}"></span>${s.enabled ? 'on' : 'off'}</td>
+        <td class="service-actions"><div class="actions">
           <button class="btn" data-act="edit" data-id="${esc(s.id)}">edit</button>
           <button class="btn" data-act="copy" data-id="${esc(s.id)}">copy</button>
           <button class="btn" data-act="test" data-id="${esc(s.id)}">test</button>
