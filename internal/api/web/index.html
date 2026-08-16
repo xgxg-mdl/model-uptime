@@ -46,6 +46,12 @@
     --btn-close:   #ff5f57;
     --btn-min:     #febc2e;
     --btn-max:     #28c840;
+
+    --motion-fast: 100ms;
+    --motion-base: 160ms;
+    --motion-slow: 240ms;
+    --motion-ease-out: cubic-bezier(0, 0, .2, 1);
+    --motion-distance: 4px;
   }
 
   * { box-sizing: border-box; }
@@ -78,6 +84,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    animation: surface-in var(--motion-slow) var(--motion-ease-out);
   }
 
   .titlebar {
@@ -105,7 +112,7 @@
     color: var(--titlebar-t);
     font-size: 12px;
     font-weight: 500;
-    letter-spacing: 0.2px;
+    letter-spacing: 0;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -161,7 +168,7 @@
     min-width: 0;
     border-radius: 1px;
     cursor: pointer;
-    transition: transform 0.12s ease, filter 0.12s ease;
+    transition: transform var(--motion-fast) var(--motion-ease-out), filter var(--motion-fast) var(--motion-ease-out);
   }
   .bar:hover {
     transform: scaleY(1.12);
@@ -219,7 +226,7 @@
     z-index: 200;
     opacity: 0;
     transform: translate(-50%, -100%);
-    transition: opacity 0.1s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease-out);
     border-radius: 3px;
     box-shadow: 0 6px 16px rgba(0,0,0,0.5);
     max-width: 90vw;
@@ -240,8 +247,21 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  .foot a { color: var(--fg-dim); text-decoration: none; }
+  .foot a {
+    color: var(--fg-dim); text-decoration: none;
+    transition: color var(--motion-fast) var(--motion-ease-out);
+  }
   .foot a:hover { color: var(--info); }
+
+  .status-change { display: inline-block; animation: status-change var(--motion-slow) var(--motion-ease-out); }
+  @keyframes surface-in {
+    from { opacity: 0; transform: translateY(var(--motion-distance)); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes status-change {
+    0% { opacity: .65; transform: scale(.97); filter: brightness(1.35); }
+    100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+  }
 
   @media (max-width: 640px) {
     body { padding: 12px 8px 32px; font-size: 12px; }
@@ -259,6 +279,12 @@
   @media (max-width: 400px) {
     .bars { height: 16px; }
     .tip { font-size: 10px; padding: 6px 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .term, .cursor, .status-change { animation: none; }
+    .bar, .tip, .foot a { transition: none; }
+    .bar:hover { transform: none; }
+    .cursor { opacity: 1; }
   }
 </style>
 </head>
@@ -335,6 +361,9 @@ function showTip(e, html) {
 }
 function hideTip() { tip.classList.remove('show'); }
 
+let previousOverallStatus = null;
+let previousServiceStates = new Map();
+
 // 根据服务实际采样间隔生成时间轴标签。
 function axisLabels(historyLen, intervalSec) {
   const windowSec = historyLen * intervalSec;
@@ -351,6 +380,9 @@ function renderBanner(data, page) {
   const out = document.getElementById('banner-out');
   const n = data.services.length;
   const now = fmtTimeShort(data.generated_at);
+  const overallStatus = data.all_ok ? 'ok' : 'bad';
+  const statusChanged = previousOverallStatus !== null && previousOverallStatus !== overallStatus;
+  const statusMotionClass = statusChanged ? ' status-change' : '';
   const avgUptime = n > 0
     ? (data.services.reduce((s, x) => s + x.uptime_pct, 0) / n).toFixed(2)
     : '100.00';
@@ -358,12 +390,13 @@ function renderBanner(data, page) {
 
   if (data.all_ok) {
     out.innerHTML = `<div class="line"><span class="dim">${now}</span> <span class="ok">up,</span> <span class="cmd">${n} services</span>${load}</div>
-<div class="line ok bold" style="margin-top: 4px;">● all systems operational</div>`;
+<div class="line ok bold${statusMotionClass}" style="margin-top: 4px;">● all systems operational</div>`;
   } else {
     const down = data.services.filter(s => s.last && !s.last.ok).length;
     out.innerHTML = `<div class="line"><span class="dim">${now}</span> <span class="bad">degraded,</span> <span class="cmd">${n - down}/${n} services up</span>${load}</div>
-<div class="line bad bold" style="margin-top: 4px;">● ${down} service${down===1?'':'s'} failing — check logs below</div>`;
+<div class="line bad bold${statusMotionClass}" style="margin-top: 4px;">● ${down} service${down===1?'':'s'} failing — check logs below</div>`;
   }
+  previousOverallStatus = overallStatus;
 }
 
 // buildBarEvents 把样本与暂停区间合并为按时间升序的渲染事件。
@@ -402,6 +435,7 @@ function renderBarsHtml(service, historyLen, generatedAt) {
 
 function renderServices(services, page, generatedAt) {
   const out = document.getElementById('svc-out');
+  hideTip();
   document.getElementById('cmd-models').innerHTML = services.length
     ? ' ' + services.map(svc => {
         const last = svc.last;
@@ -411,6 +445,7 @@ function renderServices(services, page, generatedAt) {
       }).join(' ')
     : ' (no services)';
 
+  const nextServiceStates = new Map();
   out.innerHTML = services.map(svc => {
     const last = svc.last;
     let statusCls = 'warn', statusText = 'pending';
@@ -418,6 +453,12 @@ function renderServices(services, page, generatedAt) {
       if (last.ok) { statusCls = 'ok'; statusText = 'online'; }
       else         { statusCls = 'bad'; statusText = 'failing'; }
     }
+    const serviceKey = svc.id || svc.model;
+    const serviceStatus = last ? (last.ok ? 'ok' : 'bad') : 'pending';
+    const statusChanged = previousServiceStates.has(serviceKey)
+      && previousServiceStates.get(serviceKey) !== serviceStatus;
+    nextServiceStates.set(serviceKey, serviceStatus);
+    const statusMotionClass = statusChanged ? ' status-change' : '';
     const uptimeCls = svc.uptime_pct >= 99 ? 'ok' : (svc.uptime_pct >= 95 ? 'warn' : 'bad');
 
     const meta = [];
@@ -425,11 +466,12 @@ function renderServices(services, page, generatedAt) {
     if (page.show_samples) meta.push(`<span>samples <b>${(svc.history || []).length}/${page.history_len}</b></span>`);
     if (page.show_latency && last) meta.push(`<span>latency <b class="${last.ok ? 'ok' : 'bad'}">${last.latency_ms}ms</b></span>`);
 
-    return `<div class="line" style="margin-top: 8px;"><span class="mute">→</span> <span class="cmd bold">${svc.model}</span> <span class="dim">·</span> <span class="${statusCls}">● ${statusText}</span></div>
+    return `<div class="line" style="margin-top: 8px;"><span class="mute">→</span> <span class="cmd bold">${svc.model}</span> <span class="dim">·</span> <span class="${statusCls}${statusMotionClass}">● ${statusText}</span></div>
 <div class="svc-meta" style="padding-left: 18px;">${meta.join('')}</div>
 <div style="padding-left: 18px; margin-top: 6px;">${renderBarsHtml(svc, page.history_len, generatedAt)}</div>
 <div class="axis" style="padding-left: 18px;">${axisLabels(page.history_len, svc.interval_sec || 60).map((l, i) => i>0 && i<4 ? `<span class="mid-label">${l}</span>` : `<span>${l}</span>`).join('')}</div>`;
   }).join('');
+  previousServiceStates = nextServiceStates;
 
   out.querySelectorAll('.bar').forEach(bar => {
     const showFromBar = () => {

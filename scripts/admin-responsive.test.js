@@ -15,6 +15,8 @@ const requiredMarkup = [
   'class="service-item-status"',
   'class="service-item-interval"',
   'class="service-item-actions"',
+  'class="telegram-token-row"',
+  'class="metric-options"',
   'class="btn icon-btn${action.destructive',
   'title="${action.label}" aria-label="${action.label}"',
   'data.services.map(renderServiceTableRow)',
@@ -32,10 +34,15 @@ const requiredStyles = [
   '.service-table-wrap { display: none; }',
   'grid-template-columns: 20px minmax(0, 1fr) auto',
   '.service-item-actions .icon-btn { width: 32px; height: 32px;',
+  '.telegram-token-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }',
+  '.telegram-token-row .btn { min-height: 38px; }',
+  '.metric-options .check-row { white-space: nowrap; }',
+  '.field > input, .field > select, .field > textarea { width: 100%; }',
   'overflow: hidden; text-overflow: ellipsis; white-space: nowrap;',
   '@media (max-width: 559px)',
   '.update-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
   '.subscription-row { grid-template-columns: 1fr;',
+  '.metric-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }',
   '.empty { color: var(--dim);',
 ];
 
@@ -43,7 +50,13 @@ for (const marker of requiredStyles) {
   if (!html.includes(marker)) throw new Error(`missing responsive admin style: ${marker}`);
 }
 
-for (const obsolete of ['@media (max-width: 960px)', 'content: attr(data-label)', 'data-label="protocol"', 'grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px']) {
+for (const obsolete of [
+  '@media (max-width: 960px)',
+  'content: attr(data-label)',
+  'data-label="protocol"',
+  'grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px',
+  '.field input, .field select, .field textarea { width: 100%; }',
+]) {
   if (html.includes(obsolete)) throw new Error(`obsolete low-density service layout remains: ${obsolete}`);
 }
 
