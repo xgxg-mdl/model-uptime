@@ -3,7 +3,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'internal', 'api', 'web', 'admin', 'index.html'), 'utf8');
-if (!html.includes('data-service-test-status="${esc(s.id)}"')) {
+if (!html.includes('data-service-test-status="${id}"')) {
   throw new Error('服务列表缺少行内测试结果区域');
 }
 
