@@ -145,7 +145,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err == nil {
-			return errors.New("request body must contain exactly one JSON value")
+			return errors.New("请求体只能包含一个 JSON 值")
 		}
 		return err
 	}
@@ -155,10 +155,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
 func writeDecodeError(w http.ResponseWriter, err error) {
 	var maxBytesError *http.MaxBytesError
 	if errors.As(err, &maxBytesError) {
-		writeError(w, http.StatusRequestEntityTooLarge, "request body exceeds the 1 MiB limit")
+		writeError(w, http.StatusRequestEntityTooLarge, "请求体超过 1 MiB 限制")
 		return
 	}
-	writeError(w, http.StatusBadRequest, "request body is not valid JSON")
+	writeError(w, http.StatusBadRequest, "请求体不是有效 JSON")
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -176,7 +176,6 @@ func writeError(w http.ResponseWriter, status int, message string) {
 
 func writeAdminError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
-	message := err.Error()
 	switch admin.KindOf(err) {
 	case admin.ErrorInvalid:
 		status = http.StatusBadRequest
@@ -184,11 +183,8 @@ func writeAdminError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case admin.ErrorConflict:
 		status = http.StatusConflict
-	default:
-		slog.Default().Error("admin request failed", "err", err)
-		message = "internal server error"
 	}
-	writeError(w, status, message)
+	writeError(w, status, err.Error())
 }
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {

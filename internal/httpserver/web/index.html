@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,8 +8,7 @@
 <link rel="stylesheet" href="/assets/styles/status.css" />
 </head>
 <body>
-  <main class="term" id="status-shell" aria-labelledby="status-title">
-    <h1 class="sr-only" id="status-title">model-uptime status</h1>
+  <div class="term" role="region" aria-label="model-uptime status terminal">
     <div class="titlebar">
       <div class="lights" aria-hidden="true">
         <span class="light close"></span>
@@ -19,7 +18,7 @@
       <div class="title-text">
         <span class="mute">—</span> <span id="term-subtitle">model-uptime</span> <span class="mute">—</span>
       </div>
-      <div class="title-spacer" aria-hidden="true"></div>
+      <div></div>
     </div>
 
     <div class="body">
@@ -30,19 +29,12 @@
 
       <div class="block">
         <div class="line"><span class="prompt">~ $</span> <span class="cmd">uptime</span></div>
-        <div class="out" id="banner-out" aria-busy="true"><span class="dim">connecting…</span></div>
-        <div class="sr-only" id="status-announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div class="out" id="banner-out"><span class="dim">connecting…</span></div>
       </div>
 
       <div class="block">
         <div class="line">
           <span class="prompt">~ $</span> <span class="cmd">monitor</span> <span class="flag">--watch</span><span id="cmd-models"></span>
-        </div>
-        <div class="timeline-legend sr-only" aria-label="Timeline legend">
-          <span><i class="legend-swatch ok" aria-hidden="true"></i>online</span>
-          <span><i class="legend-swatch bad" aria-hidden="true"></i>failing</span>
-          <span><i class="legend-swatch paused" aria-hidden="true"></i>paused</span>
-          <span><i class="legend-swatch none" aria-hidden="true"></i>no sample</span>
         </div>
         <div class="out" id="svc-out"></div>
       </div>
@@ -56,7 +48,7 @@
         <span>built with go · <a href="/admin/">manage</a></span>
       </div>
     </div>
-  </main>
+  </div>
 
   <div class="tip" id="tip" role="tooltip"></div>
   <script type="module" src="/assets/scripts/status-page.js"></script>

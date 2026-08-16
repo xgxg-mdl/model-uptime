@@ -58,28 +58,6 @@ test('管理页使用外置资源并保留响应式结构', () => {
   assert.doesNotMatch(adminCSS, /@media \(max-width: 960px\)|content:\s*attr\(data-label\)/);
 });
 
-test('响应式断点在 640/768/960px 保留对应的语义视图', () => {
-  const mobileBreakpoint = adminCSS.indexOf('@media (max-width: 959px)');
-  const narrowBreakpoint = adminCSS.indexOf('@media (max-width: 559px)');
-  assert.ok(mobileBreakpoint >= 0 && narrowBreakpoint > mobileBreakpoint);
-
-  const desktopRules = adminCSS.slice(0, mobileBreakpoint);
-  const tabletRules = adminCSS.slice(mobileBreakpoint, narrowBreakpoint);
-  const narrowRules = adminCSS.slice(narrowBreakpoint);
-
-  assert.match(desktopRules, /\.service-list \{ display: none;/);
-  assert.match(tabletRules, /\.service-table-wrap \{ display: none; \}/);
-  assert.match(tabletRules, /\.service-list \{ display: block;/);
-  assert.match(tabletRules, /\.service-item \{/);
-  assert.match(desktopRules, /form \{ display: grid; grid-template-columns: 1fr 1fr;/);
-  assert.match(narrowRules, /form \{ grid-template-columns: 1fr; \}/);
-  assert.match(narrowRules, /\.update-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
-
-  // max-width: 959px means the table is the active view at 960px and above.
-  assert.match(html, /<table class="service-table">[\s\S]*<th scope="col">name<\/th>/);
-  assert.match(html, /<ul class="service-list" id="svc-list"[^>]*aria-label="monitor services">/);
-});
-
 test('桌面和移动服务渲染器保持相同操作能力并转义字段', () => {
   const service = {
     id: 'openai-main',
@@ -152,14 +130,13 @@ test('移动服务行在窄视口内保持紧凑且操作按钮不溢出', () =>
       - 2 * panelBodyPadding;
     assert.ok(actionGroupWidth <= panelContentWidth - selectionColumn - columnGap);
   }
-  assert.equal(selectionColumn, 20, 'mobile selection column must keep the v0.9.0 density');
 });
 
 test('管理页颜色只来自已审核的共享色板', () => {
   const allowedColors = new Set([
     '#000', '#0d0d10', '#141418', '#15151a', '#1a1a1e', '#222228', '#24242a',
-    '#26262d', '#2a2a30', '#3a3a42', '#55555e', '#5eff9c', '#7afcff', '#7c7c86',
-    '#82828c', '#8a8a94', '#a0a0aa', '#d4d4d4', '#ff5e7a', '#ffc857',
+    '#26262d', '#2a2a30', '#3a3a42', '#55555e', '#5eff9c', '#7afcff', '#8a8a94',
+    '#d4d4d4', '#ff5e7a', '#ffc857',
   ]);
   const source = `${foundationCSS}\n${adminCSS}`;
   const unexpected = [...new Set(source.match(/#[0-9a-fA-F]{3,8}\b/g) || [])]

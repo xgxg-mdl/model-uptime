@@ -1,9 +1,4 @@
-import {
-  escapeHTML,
-  focusWithoutScroll,
-  revealPanel,
-  setButtonPending,
-} from './shared.js';
+import { escapeHTML, revealPanel } from './shared.js';
 
 export const DEFAULT_TELEGRAM_LANGUAGE = 'zh-CN';
 
@@ -29,11 +24,7 @@ export function normalizeTelegramSubscription(subscription, templates = {}) {
   };
 }
 
-export function selectSubscriptionEditTrigger(buttons, index) {
-  return [...buttons].find(button => Number(button.dataset.index) === index) || null;
-}
-
-export async function sendTelegramTest({ subscription, results, buttons = [], save, api, toast }) {
+export async function sendTelegramTest({ subscription, results, save, api, toast }) {
   const setResult = (state, text) => results.forEach(result => {
     const base = result.id === 'tg-test-result'
       ? 'test-result feedback-in'
@@ -41,7 +32,6 @@ export async function sendTelegramTest({ subscription, results, buttons = [], sa
     result.className = `${base} ${state}`.trim();
     result.textContent = text;
   });
-  buttons.forEach(button => setButtonPending(button, true, 'sending…'));
   setResult('', 'saving config…');
   try {
     await save({ quiet: true });
@@ -57,8 +47,6 @@ export async function sendTelegramTest({ subscription, results, buttons = [], sa
     setResult('bad', error.message);
     toast(error.message);
     return false;
-  } finally {
-    buttons.forEach(button => setButtonPending(button, false));
   }
 }
 
@@ -73,22 +61,8 @@ export function createTelegramController({
   let config = { bot_token: '', subscriptions: [] };
   let templates = normalizeTelegramTemplates();
   let editingIndex = null;
-  let editorReturnFocus = null;
   let tokenConfigured = false;
-  let telegramBusy = false;
-  const testingSubscriptionIDs = new Set();
   const element = id => documentRef.getElementById(id);
-
-  function setPeerBusyButtons(pending, sourceButton = null) {
-    const buttons = [
-      element('tg-save-btn'),
-      element('tg-test-btn'),
-      ...(documentRef.querySelectorAll?.('[data-tg-action="test"]') || []),
-    ];
-    [...new Set(buttons)].filter(Boolean).forEach(button => {
-      if (button !== sourceButton) setButtonPending(button, pending, 'busy…');
-    });
-  }
 
   function selectedServiceIDs() {
     return Array.from(documentRef.querySelectorAll('#tg-model-picker input:checked')).map(input => input.value);
@@ -104,7 +78,7 @@ export function createTelegramController({
     const picker = element('tg-model-picker');
     const selected = new Set(selectedIDs);
     if (!services.length) {
-      picker.innerHTML = '<div class="empty model-picker-empty">no models available</div>';
+      picker.innerHTML = '<div class="empty" style="grid-column:1/-1;">no models available</div>';
       return;
     }
     picker.innerHTML = services.map(service => {
@@ -136,10 +110,10 @@ export function createTelegramController({
         <div class="subscription-meta">
           <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${escapeHTML(subscription.name || subscription.id)}</b>
           <div class="subscription-summary">#${escapeHTML(subscription.id)} · chat ${escapeHTML(subscription.chat_id)} · ${escapeHTML(subscription.language)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
-          <div class="subscription-test-result feedback-in hidden" data-tg-test-status="${index}" role="status" aria-live="polite"></div>
+          <div class="subscription-test-result feedback-in hidden" data-tg-test-status="${index}"></div>
         </div>
         <div class="actions">
-          <button class="btn" type="button" data-tg-action="edit" data-index="${index}" aria-controls="tg-editor" aria-expanded="false">edit</button>
+          <button class="btn" type="button" data-tg-action="edit" data-index="${index}">edit</button>
           <button class="btn" type="button" data-tg-action="test" data-index="${index}">test</button>
           <button class="btn bad" type="button" data-tg-action="delete" data-index="${index}">del</button>
         </div>
@@ -148,8 +122,8 @@ export function createTelegramController({
     list.querySelectorAll('[data-tg-action]').forEach(button => {
       button.addEventListener('click', () => {
         const index = Number(button.dataset.index);
-        if (button.dataset.tgAction === 'edit') openEditor(index, button);
-        else if (button.dataset.tgAction === 'test') void testSubscription(index, button);
+        if (button.dataset.tgAction === 'edit') openEditor(index);
+        else if (button.dataset.tgAction === 'test') void testSubscription(index);
         else if (button.dataset.tgAction === 'delete') deleteSubscription(index);
       });
     });
@@ -174,13 +148,7 @@ export function createTelegramController({
         : 'not configured';
       renderSubscriptions();
       if (editingIndex !== null) {
-        if (config.subscriptions[editingIndex]) {
-          const trigger = selectSubscriptionEditTrigger(
-            element('tg-subscription-list').querySelectorAll('[data-tg-action="edit"]'),
-            editingIndex,
-          );
-          openEditor(editingIndex, trigger || editorReturnFocus);
-        }
+        if (config.subscriptions[editingIndex]) openEditor(editingIndex);
         else closeEditor();
       }
       return config;
@@ -190,11 +158,8 @@ export function createTelegramController({
     }
   }
 
-  function openEditor(index = null, returnFocus = null) {
+  function openEditor(index = null) {
     editingIndex = index;
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'false');
-    editorReturnFocus = returnFocus || documentRef.activeElement || element('tg-new-btn');
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'true');
     const subscription = index === null
       ? normalizeTelegramSubscription({}, templates)
       : config.subscriptions[index];
@@ -207,25 +172,14 @@ export function createTelegramController({
     language.dataset.previousLanguage = subscription.language;
     element('tg-enabled').checked = subscription.enabled;
     element('tg-template').value = subscription.template || templates[subscription.language];
-    element('tg-editor-title').textContent = index === null
-      ? 'new subscription'
-      : `edit subscription · ${subscription.id}`;
     element('tg-test-result').className = 'test-result feedback-in hidden';
     renderModelPicker(subscription.service_ids);
-    revealPanel(
-      element('tg-editor'),
-      windowRef,
-      'nearest',
-      element(index === null ? 'tg-id' : 'tg-name'),
-    );
+    revealPanel(element('tg-editor'), windowRef);
   }
 
-  function closeEditor(restoreFocus = true) {
+  function closeEditor() {
     editingIndex = null;
     element('tg-editor').classList.add('hidden');
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'false');
-    if (restoreFocus) focusWithoutScroll(editorReturnFocus || element('tg-new-btn'));
-    editorReturnFocus = null;
   }
 
   function collectSubscription() {
@@ -251,95 +205,51 @@ export function createTelegramController({
 
   function applyEditor(options = {}) {
     const subscription = collectSubscription();
-    let appliedIndex = editingIndex;
     if (editingIndex === null) {
       config.subscriptions.push(subscription);
-      appliedIndex = config.subscriptions.length - 1;
-      if (options.close === false) editingIndex = appliedIndex;
+      if (options.close === false) editingIndex = config.subscriptions.length - 1;
     } else {
       config.subscriptions[editingIndex] = subscription;
     }
     renderSubscriptions();
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'false');
-    editorReturnFocus = selectSubscriptionEditTrigger(
-      element('tg-subscription-list').querySelectorAll('[data-tg-action="edit"]'),
-      appliedIndex,
-    ) || element('tg-new-btn');
-    editorReturnFocus.setAttribute?.('aria-expanded', 'true');
     if (options.close !== false) closeEditor();
     return subscription;
   }
 
   async function save(options = {}) {
-    if (telegramBusy && !options.allowWhileBusy) return false;
-    const ownsBusy = !telegramBusy;
-    if (ownsBusy) telegramBusy = true;
-    if (options.button) setButtonPending(options.button, true, 'saving…');
     const tokenInput = element('tg-bot-token');
     const body = {
       bot_token: tokenInput.value.trim(),
       subscriptions: config.subscriptions,
     };
-    try {
-      await api('/api/admin/telegram', { method: 'PUT', body: JSON.stringify(body) });
-      if (body.bot_token) tokenConfigured = true;
-      tokenInput.value = '';
-      tokenInput.placeholder = tokenConfigured ? 'configured — leave blank to keep' : 'not configured';
-      if (!options.quiet) toast('Telegram config saved.');
-    } finally {
-      if (options.button) setButtonPending(options.button, false);
-      if (ownsBusy) telegramBusy = false;
-    }
+    await api('/api/admin/telegram', { method: 'PUT', body: JSON.stringify(body) });
+    if (body.bot_token) tokenConfigured = true;
+    tokenInput.value = '';
+    tokenInput.placeholder = tokenConfigured ? 'configured — leave blank to keep' : 'not configured';
+    if (!options.quiet) toast('Telegram config saved');
   }
 
-  async function testSubscription(index, button = null) {
+  async function testSubscription(index) {
     const subscription = config.subscriptions[index];
     if (!subscription) return;
-    const key = subscription.id || `index:${index}`;
-    if (telegramBusy || testingSubscriptionIDs.has(key)) return false;
-    testingSubscriptionIDs.add(key);
-    telegramBusy = true;
-    setPeerBusyButtons(true, button);
     const rowResult = documentRef.querySelector(`[data-tg-test-status="${index}"]`);
     const editorResult = editingIndex === index ? element('tg-test-result') : null;
     const results = [rowResult, editorResult].filter(Boolean);
-    try {
-      return await sendTelegramTest({
-        subscription,
-        results,
-        buttons: button ? [button] : [],
-        save: options => save({ ...options, allowWhileBusy: true }),
-        api,
-        toast,
-      });
-    } finally {
-      setPeerBusyButtons(false, button);
-      testingSubscriptionIDs.delete(key);
-      telegramBusy = false;
-    }
+    await sendTelegramTest({ subscription, results, save, api, toast });
   }
 
   function deleteSubscription(index) {
     const subscription = config.subscriptions[index];
     if (!subscription || !confirmAction(`Delete subscription ${subscription.name || subscription.id}?`)) return;
     config.subscriptions.splice(index, 1);
-    if (editingIndex === index) closeEditor(false);
+    if (editingIndex === index) closeEditor();
     else if (editingIndex !== null && editingIndex > index) editingIndex--;
     renderSubscriptions();
-    if (editingIndex !== null) {
-      editorReturnFocus?.setAttribute?.('aria-expanded', 'false');
-      editorReturnFocus = selectSubscriptionEditTrigger(
-        element('tg-subscription-list').querySelectorAll('[data-tg-action="edit"]'),
-        editingIndex,
-      );
-      editorReturnFocus?.setAttribute?.('aria-expanded', 'true');
-    }
-    focusWithoutScroll(editingIndex !== null ? element('tg-name') : element('tg-new-btn'));
-    toast('Subscription removed from draft.');
+    toast('Subscription removed from draft');
   }
 
-  element('tg-new-btn').addEventListener('click', event => openEditor(null, event.currentTarget));
-  element('tg-editor-cancel').addEventListener('click', () => closeEditor());
+  element('tg-new-btn').addEventListener('click', () => openEditor());
+  element('tg-editor-cancel').addEventListener('click', closeEditor);
   element('tg-language').addEventListener('change', event => {
     const previousLanguage = event.target.dataset.previousLanguage || DEFAULT_TELEGRAM_LANGUAGE;
     const nextLanguage = event.target.value;
@@ -358,21 +268,19 @@ export function createTelegramController({
       toast(error.message);
     }
   });
-  element('tg-test-btn').addEventListener('click', async event => {
-    if (telegramBusy) return;
+  element('tg-test-btn').addEventListener('click', async () => {
     try {
       const index = editingIndex === null ? config.subscriptions.length : editingIndex;
       applyEditor({ close: false });
-      await testSubscription(index, event.currentTarget);
+      await testSubscription(index);
     } catch (error) {
       toast(error.message);
     }
   });
-  element('tg-save-btn').addEventListener('click', async event => {
-    if (telegramBusy) return;
+  element('tg-save-btn').addEventListener('click', async () => {
     try {
       if (!element('tg-editor').classList.contains('hidden')) applyEditor();
-      await save({ button: event.currentTarget });
+      await save();
     } catch (error) {
       toast(error.message);
     }

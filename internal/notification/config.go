@@ -169,24 +169,24 @@ func compileConfig(config Config) (runtimeConfig, error) {
 		subscription.ServiceIDs = append([]string(nil), subscription.ServiceIDs...)
 		normalizeSubscription(&subscription)
 		if subscription.ID == "" {
-			return runtimeConfig{}, errors.New("Telegram subscription id is required")
+			return runtimeConfig{}, errors.New("Telegram 订阅 id 不能为空")
 		}
 		if _, exists := seen[subscription.ID]; exists {
-			return runtimeConfig{}, fmt.Errorf("duplicate Telegram subscription id: %q", subscription.ID)
+			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 id 重复: %q", subscription.ID)
 		}
 		seen[subscription.ID] = struct{}{}
 		if subscription.Enabled && runtime.botToken == "" {
-			return runtimeConfig{}, fmt.Errorf("Telegram subscription %q is enabled but the bot token is empty", subscription.ID)
+			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 %q 已启用但 bot token 为空", subscription.ID)
 		}
 		if subscription.Enabled && subscription.ChatID == "" {
-			return runtimeConfig{}, fmt.Errorf("Telegram subscription %q is enabled but the chat id is empty", subscription.ID)
+			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 %q 已启用但 chat id 为空", subscription.ID)
 		}
 		if subscription.Language != DefaultLanguage && subscription.Language != LanguageEnglish {
-			return runtimeConfig{}, fmt.Errorf("Telegram subscription %q has unsupported language %q", subscription.ID, subscription.Language)
+			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 %q 的 language 不受支持: %q", subscription.ID, subscription.Language)
 		}
 		tmpl, err := parseTemplate(subscription.Template)
 		if err != nil {
-			return runtimeConfig{}, fmt.Errorf("Telegram subscription %q has an invalid template: %w", subscription.ID, err)
+			return runtimeConfig{}, fmt.Errorf("Telegram 订阅 %q 模板无效: %w", subscription.ID, err)
 		}
 		runtime.subscriptions = append(runtime.subscriptions, compiledSubscription{
 			Subscription: subscription,

@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	ErrClosed                     = errors.New("Telegram notifier is closed")
-	ErrSubscriptionNotFound       = errors.New("Telegram subscription not found")
+	ErrClosed                     = errors.New("Telegram 通知器已关闭")
+	ErrSubscriptionNotFound       = errors.New("Telegram 订阅不存在")
 	defaultPersistenceRetryDelays = []time.Duration{
 		100 * time.Millisecond,
 		500 * time.Millisecond,
@@ -204,11 +204,11 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID, statusPageURL s
 		})
 		text, err := executeTemplate(subscription.template, templateContext)
 		if err != nil {
-			return fmt.Errorf("render Telegram subscription %q: %w", subscriptionID, err)
+			return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
 		}
 		text, err = appendStatusPageLink(text, statusPageURL, subscription.Language)
 		if err != nil {
-			return fmt.Errorf("render Telegram subscription %q: %w", subscriptionID, err)
+			return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
 		}
 		return n.sendWithRetry(operationCtx, sendJob{
 			botToken: config.botToken, chatID: subscription.ChatID,

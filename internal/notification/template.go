@@ -67,8 +67,8 @@ Availability: {{printf "%.2f" .TodayUptimePct}}%
 {{end}}{{end}}`
 
 var (
-	ErrMessageTooLong       = errors.New("Telegram message exceeds 4096 characters")
-	ErrInvalidStatusPageURL = errors.New("status page URL must be a complete http/https URL without credentials")
+	ErrMessageTooLong       = errors.New("Telegram 消息超过 4096 字符")
+	ErrInvalidStatusPageURL = errors.New("探针页地址必须是无账号密码的完整 http/https 地址")
 	beijingLocation         = time.FixedZone("Asia/Shanghai", 8*60*60)
 	templateFunctions       = template.FuncMap{
 		"beijingDate":   formatBeijingDate,

@@ -1,9 +1,4 @@
-import {
-  escapeHTML,
-  focusWithoutScroll,
-  revealPanel,
-  setButtonPending,
-} from './shared.js';
+import { escapeHTML, revealPanel } from './shared.js';
 
 export const SERVICE_ACTIONS = [
   {
@@ -25,8 +20,7 @@ export const SERVICE_ACTIONS = [
 ];
 
 export function serviceActionButton(action, id) {
-  const disclosure = action.id === 'edit' ? ' aria-controls="editor" aria-expanded="false"' : '';
-  return `<button class="btn icon-btn${action.destructive ? ' bad' : ''}" type="button" data-act="${action.id}" data-id="${id}" title="${action.label}" aria-label="${action.label}"${disclosure}>
+  return `<button class="btn icon-btn${action.destructive ? ' bad' : ''}" type="button" data-act="${action.id}" data-id="${id}" title="${action.label}" aria-label="${action.label}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${action.icon}</svg>
   </button>`;
 }
@@ -95,30 +89,6 @@ export function createEditorSessionState() {
   };
 }
 
-export function setEditorSavePending(button, editorState, sessionVersion, pending) {
-  if (!editorState.isCurrent(sessionVersion)) return false;
-  button.disabled = pending;
-  button.textContent = pending ? 'saving…' : 'save';
-  button.setAttribute?.('aria-busy', String(pending));
-  return true;
-}
-
-// 将服务写操作串行化，避免旧请求完成后以过期快照覆盖新状态。
-export function createMutationQueue() {
-  let tail = Promise.resolve();
-  return task => {
-    const next = tail.then(task, task);
-    tail = next.catch(() => {});
-    return next;
-  };
-}
-
-export function selectEditorTrigger(tableCandidates, listCandidates, serviceID, viewportWidth) {
-  const preferred = viewportWidth < 960 ? listCandidates : tableCandidates;
-  return [...preferred, ...tableCandidates, ...listCandidates]
-    .find(button => button.dataset.id === serviceID) || null;
-}
-
 export async function showServiceTestResult({ api, id, result, button }) {
   const baseClass = result.className.includes('service-test-result')
     ? 'service-test-result feedback-in'
@@ -127,7 +97,6 @@ export async function showServiceTestResult({ api, id, result, button }) {
   result.className = baseClass;
   result.textContent = 'probing…';
   button.disabled = true;
-  button.setAttribute?.('aria-busy', 'true');
   try {
     const response = await api(`/api/admin/services/${encodeURIComponent(id)}/test`, { method: 'POST' });
     result.className = `${baseClass} ${response.ok ? 'ok' : 'bad'}`;
@@ -139,7 +108,6 @@ export async function showServiceTestResult({ api, id, result, button }) {
     return null;
   } finally {
     button.disabled = false;
-    button.setAttribute?.('aria-busy', 'false');
   }
 }
 
@@ -154,11 +122,6 @@ export function createServicesController({
 } = {}) {
   const editorState = createEditorSessionState();
   let services = [];
-  let editorReturnFocus = null;
-  let bulkReturnFocus = null;
-  let bulkUpdating = false;
-  const enqueueMutation = createMutationQueue();
-  let loadSequence = 0;
 
   const element = id => documentRef.getElementById(id);
 
@@ -173,7 +136,7 @@ export function createServicesController({
     const count = ids.length;
     element('bulk-count').textContent = `${count} selected`;
     ['bulk-enable', 'bulk-disable', 'bulk-settings'].forEach(id => {
-      element(id).disabled = count === 0 || bulkUpdating;
+      element(id).disabled = count === 0;
     });
     element('bulk-actions').classList.toggle('hidden', count === 0);
     const selectAll = element('select-all');
@@ -189,42 +152,13 @@ export function createServicesController({
     updateBulkBar();
   }
 
-  function findEditorTrigger(serviceID, table = element('svc-table'), list = element('svc-list')) {
-    const tableCandidates = [...table.querySelectorAll('button[data-act="edit"]')];
-    const listCandidates = [...list.querySelectorAll('button[data-act="edit"]')];
-    const viewportWidth = windowRef?.innerWidth || documentRef.documentElement?.clientWidth || 1024;
-    return selectEditorTrigger(tableCandidates, listCandidates, serviceID, viewportWidth);
-  }
-
-  function refreshEditorReturnFocus(table, list) {
-    if (!editorState.editingID) return;
-    const candidates = [
-      ...table.querySelectorAll('button[data-act="edit"]'),
-      ...list.querySelectorAll('button[data-act="edit"]'),
-    ];
-    const replacement = findEditorTrigger(editorState.editingID, table, list);
-    if (!replacement) return;
-    editorReturnFocus = replacement;
-    candidates.forEach(button => button.setAttribute(
-      'aria-expanded',
-      String(button.dataset.id === editorState.editingID),
-    ));
-  }
-
-  function setEditorDisclosure(serviceID, expanded) {
-    if (!serviceID) return;
-    (documentRef.querySelectorAll?.('button[data-act="edit"]') || []).forEach(button => {
-      if (button.dataset.id === serviceID) button.setAttribute('aria-expanded', String(expanded));
-    });
-  }
-
   function dispatchServiceAction(actionID, service, button) {
-    if (actionID === 'edit') openEditor(service, button);
-    else if (actionID === 'copy') duplicateService(service.id, button);
+    if (actionID === 'edit') openEditor(service);
+    else if (actionID === 'copy') duplicateService(service.id);
     else if (actionID === 'test') {
       const result = button.closest('[data-service-row]').querySelector('[data-service-test-status]');
       void showServiceTestResult({ api, id: service.id, result, button });
-    } else if (actionID === 'del') deleteService(service.id, button);
+    } else if (actionID === 'del') deleteService(service.id);
   }
 
   function bindServiceControls(root, renderedServices) {
@@ -240,12 +174,10 @@ export function createServicesController({
   }
 
   async function load() {
-    const sequence = ++loadSequence;
     const table = element('svc-table');
     const list = element('svc-list');
     try {
       const data = await api('/api/admin/services');
-      if (sequence !== loadSequence) return services;
       services = data.services || [];
       if (editorState.editingID && !services.some(service => service.id === editorState.editingID)) closeEditor();
       onServicesChanged(services);
@@ -259,12 +191,10 @@ export function createServicesController({
       list.innerHTML = services.map(renderServiceListItem).join('');
       bindServiceControls(table, services);
       bindServiceControls(list, services);
-      refreshEditorReturnFocus(table, list);
       element('select-all').checked = false;
       updateBulkBar();
       return services;
     } catch (error) {
-      if (sequence !== loadSequence) return services;
       services = [];
       onServicesChanged(services);
       table.innerHTML = `<tr><td colspan="8" class="empty">${escapeHTML(error.message)}</td></tr>`;
@@ -281,33 +211,22 @@ export function createServicesController({
     });
   }
 
-  async function bulkSetEnabled(enabled, button) {
+  async function bulkSetEnabled(enabled) {
     const ids = selectedIDs();
-    if (!ids.length || bulkUpdating) return;
-    bulkUpdating = true;
-    updateBulkBar();
-    setButtonPending(button, true, enabled ? 'enabling…' : 'disabling…');
+    if (!ids.length) return;
     try {
-      await enqueueMutation(async () => {
-        await bulkUpdate(ids, { enabled });
-        toast(`${ids.length} service${ids.length === 1 ? '' : 's'} ${enabled ? 'enabled' : 'disabled'}.`);
-        await load();
-        focusWithoutScroll(element('select-all'));
-      });
+      await bulkUpdate(ids, { enabled });
+      toast(`${ids.length} 个服务已${enabled ? '启用' : '禁用'}`);
+      await load();
     } catch (error) {
       toast(error.message);
-    } finally {
-      setButtonPending(button, false);
-      bulkUpdating = false;
-      updateBulkBar();
     }
   }
 
   async function applyBulkSettings(event) {
     event.preventDefault();
-    if (bulkUpdating) return;
     const ids = selectedIDs();
-    if (!ids.length) { toast('Select at least one service.'); return; }
+    if (!ids.length) { toast('请先选择服务'); return; }
     const patch = {};
     const interval = element('b-interval').value.trim();
     if (interval) patch.interval_sec = Number.parseInt(interval, 10);
@@ -316,59 +235,36 @@ export function createServicesController({
     const stream = element('b-stream').value;
     if (stream === 'true') patch.stream = true;
     else if (stream === 'false') patch.stream = false;
-    if (!Object.keys(patch).length) { toast('Complete at least one field to apply.'); return; }
-    const button = element('bulk-apply');
-    bulkUpdating = true;
-    updateBulkBar();
-    setButtonPending(button, true, 'applying…');
+    if (!Object.keys(patch).length) { toast('请至少填写一项要批量修改的字段'); return; }
     try {
-      await enqueueMutation(async () => {
-        await bulkUpdate(ids, patch);
-        toast(`${ids.length} service${ids.length === 1 ? '' : 's'} updated.`);
-        closeBulkEditor(false);
-        await load();
-        focusWithoutScroll(element('select-all'));
-      });
+      await bulkUpdate(ids, patch);
+      toast(`已批量更新 ${ids.length} 个服务`);
+      element('bulk-editor').classList.add('hidden');
+      await load();
     } catch (error) {
       toast(error.message);
-    } finally {
-      setButtonPending(button, false);
-      bulkUpdating = false;
-      updateBulkBar();
     }
   }
 
-  async function deleteService(id, button) {
-    if (!confirmAction(`Delete service ${id}? This cannot be undone.`)) return;
-    setButtonPending(button, true, null);
+  async function deleteService(id) {
+    if (!confirmAction(`删除服务 ${id}？此操作不可恢复。`)) return;
     try {
-      await enqueueMutation(async () => {
-        await api(`/api/admin/services/${encodeURIComponent(id)}`, { method: 'DELETE' });
-        if (editorState.editingID === id) closeEditor(false);
-        toast('Service deleted.');
-        await Promise.all([load(), onServiceDeleted()]);
-        focusWithoutScroll(element('new-btn'));
-      });
+      await api(`/api/admin/services/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (editorState.editingID === id) closeEditor();
+      toast('已删除');
+      await Promise.all([load(), onServiceDeleted()]);
     } catch (error) {
       toast(error.message);
-    } finally {
-      setButtonPending(button, false);
     }
   }
 
-  async function duplicateService(id, button) {
-    setButtonPending(button, true, null);
+  async function duplicateService(id) {
     try {
-      await enqueueMutation(async () => {
-        await api(`/api/admin/services/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
-        toast('Service duplicated.');
-        await load();
-        focusWithoutScroll(element('new-btn'));
-      });
+      await api(`/api/admin/services/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
+      toast('已复制');
+      await load();
     } catch (error) {
       toast(error.message);
-    } finally {
-      setButtonPending(button, false);
     }
   }
 
@@ -377,33 +273,20 @@ export function createServicesController({
     documentRef.querySelectorAll('.http').forEach(field => field.classList.toggle('hidden', protocol !== 'http'));
   }
 
-  function beginEditor(serviceID, returnFocus) {
-    setEditorDisclosure(editorState.editingID, false);
-    const version = editorState.open(serviceID);
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'false');
-    editorReturnFocus = returnFocus || documentRef.activeElement || element('new-btn');
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'true');
-    setEditorDisclosure(serviceID, true);
-    setEditorSavePending(element('save-btn'), editorState, version, false);
+  function beginEditor(serviceID) {
+    editorState.open(serviceID);
+    element('save-btn').disabled = false;
   }
 
-  function closeEditor(restoreFocus = true) {
-    const serviceID = editorState.editingID;
-    const returnFocus = serviceID
-      ? findEditorTrigger(serviceID) || editorReturnFocus || element('new-btn')
-      : editorReturnFocus || element('new-btn');
-    setEditorDisclosure(serviceID, false);
-    const version = editorState.close();
+  function closeEditor() {
+    editorState.close();
     element('editor').classList.add('hidden');
     element('test-result').className = 'test-result feedback-in hidden';
-    setEditorSavePending(element('save-btn'), editorState, version, false);
-    editorReturnFocus?.setAttribute?.('aria-expanded', 'false');
-    if (restoreFocus) focusWithoutScroll(returnFocus);
-    editorReturnFocus = null;
+    element('save-btn').disabled = false;
   }
 
-  function openEditor(service, returnFocus = null) {
-    beginEditor(service.id, returnFocus);
+  function openEditor(service) {
+    beginEditor(service.id);
     element('editor-title').textContent = `edit service · ${service.id}`;
     element('f-id-input').value = service.id;
     element('f-id-input').disabled = true;
@@ -424,11 +307,11 @@ export function createServicesController({
     element('f-body').value = service.body || '';
     showHttpFields(service.protocol);
     element('test-result').hidden = true;
-    revealPanel(element('editor'), windowRef, 'nearest', element('f-name'));
+    revealPanel(element('editor'), windowRef);
   }
 
-  function openNew(returnFocus = null) {
-    beginEditor(null, returnFocus);
+  function openNew() {
+    beginEditor(null);
     element('editor-title').textContent = 'new service';
     element('f-id-input').value = '';
     element('f-id-input').disabled = false;
@@ -443,14 +326,7 @@ export function createServicesController({
     element('f-expect').value = 200;
     showHttpFields('chat');
     element('test-result').hidden = true;
-    revealPanel(element('editor'), windowRef, 'nearest', element('f-id-input'));
-  }
-
-  function closeBulkEditor(restoreFocus = true) {
-    element('bulk-editor').classList.add('hidden');
-    element('bulk-settings').setAttribute('aria-expanded', 'false');
-    if (restoreFocus) focusWithoutScroll(bulkReturnFocus || element('bulk-settings'));
-    bulkReturnFocus = null;
+    revealPanel(element('editor'), windowRef);
   }
 
   function collectService() {
@@ -458,7 +334,7 @@ export function createServicesController({
     let headers;
     if (headersRaw) {
       try { headers = JSON.parse(headersRaw); }
-      catch { throw new Error('Headers must contain valid JSON.'); }
+      catch { throw new Error('Headers 不是合法 JSON'); }
     }
     const protocol = element('f-protocol').value;
     return {
@@ -489,30 +365,24 @@ export function createServicesController({
     const session = editorState.beginSave();
     if (!session) return;
     const saveButton = element('save-btn');
-    setEditorSavePending(saveButton, editorState, session.version, true);
+    saveButton.disabled = true;
     try {
-      await enqueueMutation(async () => {
-        // 编辑器取消后可能仍在等待前一个 mutation；新会话已打开时丢弃旧草稿。
-        if (!editorState.isCurrent(session.version)) return;
-        if (session.serviceID) {
-          await api(`/api/admin/services/${encodeURIComponent(session.serviceID)}`, {
-            method: 'PUT', body: JSON.stringify(service),
-          });
-          toast('Service saved.');
-        } else {
-          await api('/api/admin/services', { method: 'POST', body: JSON.stringify(service) });
-          toast('Service created.');
-        }
-        const shouldClose = editorState.isCurrent(session.version);
-        if (shouldClose) closeEditor(false);
-        await load();
-        if (shouldClose) focusWithoutScroll(element('new-btn'));
-      });
+      if (session.serviceID) {
+        await api(`/api/admin/services/${encodeURIComponent(session.serviceID)}`, {
+          method: 'PUT', body: JSON.stringify(service),
+        });
+        toast('已保存');
+      } else {
+        await api('/api/admin/services', { method: 'POST', body: JSON.stringify(service) });
+        toast('已创建');
+      }
+      if (editorState.isCurrent(session.version)) closeEditor();
+      await load();
     } catch (error) {
       toast(error.message);
     } finally {
       editorState.finishSave(session.version);
-      setEditorSavePending(saveButton, editorState, session.version, false);
+      if (editorState.isCurrent(session.version)) saveButton.disabled = false;
     }
   }
 
@@ -520,25 +390,22 @@ export function createServicesController({
     documentRef.querySelectorAll('.row-check').forEach(checkbox => { checkbox.checked = event.target.checked; });
     updateBulkBar();
   });
-  element('bulk-enable').addEventListener('click', event => { void bulkSetEnabled(true, event.currentTarget); });
-  element('bulk-disable').addEventListener('click', event => { void bulkSetEnabled(false, event.currentTarget); });
+  element('bulk-enable').addEventListener('click', () => { void bulkSetEnabled(true); });
+  element('bulk-disable').addEventListener('click', () => { void bulkSetEnabled(false); });
   element('bulk-settings').addEventListener('click', () => {
-    if (bulkUpdating) return;
-    bulkReturnFocus = documentRef.activeElement || element('bulk-settings');
     ['b-interval', 'b-timeout'].forEach(id => { element(id).value = ''; });
     element('b-stream').value = '';
     element('bulk-editor-count').textContent = selectedIDs().length;
-    element('bulk-settings').setAttribute('aria-expanded', 'true');
-    revealPanel(element('bulk-editor'), windowRef, 'start', element('b-interval'));
+    revealPanel(element('bulk-editor'), windowRef, 'start');
   });
-  element('bulk-cancel').addEventListener('click', () => closeBulkEditor());
+  element('bulk-cancel').addEventListener('click', () => element('bulk-editor').classList.add('hidden'));
   element('bulk-form').addEventListener('submit', event => { void applyBulkSettings(event); });
   element('f-protocol').addEventListener('change', event => showHttpFields(event.target.value));
-  element('new-btn').addEventListener('click', event => openNew(event.currentTarget));
-  element('cancel-btn').addEventListener('click', () => closeEditor());
+  element('new-btn').addEventListener('click', openNew);
+  element('cancel-btn').addEventListener('click', closeEditor);
   element('test-btn').addEventListener('click', () => {
     const id = editorState.editingID;
-    if (!id) { toast('Save the service before testing it.'); return; }
+    if (!id) { toast('先保存服务再测试'); return; }
     void showServiceTestResult({ api, id, result: element('test-result'), button: element('test-btn') });
   });
   element('svc-form').addEventListener('submit', event => { void saveService(event); });

@@ -1,9 +1,4 @@
-import {
-  createAdminClient,
-  createToast,
-  focusWithoutScroll,
-  setButtonPending,
-} from './shared.js';
+import { createAdminClient, createToast } from './shared.js';
 import { createServicesController } from './services.js';
 import { createTelegramController } from './telegram.js';
 import { createUpdateController } from './updater.js';
@@ -59,7 +54,6 @@ export function startAdminApp({
   });
 
   function enterApp() {
-    documentRef.getElementById('auth-loading').hidden = true;
     documentRef.getElementById('login-view').hidden = true;
     documentRef.getElementById('setup-view').hidden = true;
     documentRef.getElementById('app-view').hidden = false;
@@ -68,7 +62,6 @@ export function startAdminApp({
     void telegram.load();
     void pageSettings.load();
     void updater.load();
-    focusWithoutScroll(documentRef.getElementById('app-view'));
   }
 
   async function initView() {
@@ -79,25 +72,17 @@ export function startAdminApp({
     let configured = true;
     try {
       const response = await fetchImpl('/api/admin/setup-status', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       configured = Boolean(data.token_configured);
     } catch {
       configured = true;
     }
-    documentRef.getElementById('auth-loading').hidden = true;
-    const viewID = configured ? 'login-view' : 'setup-view';
-    documentRef.getElementById(viewID).hidden = false;
-    focusWithoutScroll(documentRef.getElementById(configured ? 'login-token' : 'setup-token'));
+    documentRef.getElementById(configured ? 'login-view' : 'setup-view').hidden = false;
   }
 
   documentRef.getElementById('login-form').addEventListener('submit', async event => {
     event.preventDefault();
     const value = documentRef.getElementById('login-token').value.trim();
-    const submit = documentRef.getElementById('login-submit');
-    if (submit.getAttribute?.('aria-busy') === 'true') return;
-    if (!value) { toast('Enter the admin password.'); return; }
-    setButtonPending(submit, true, 'checking…');
     try {
       const response = await fetchImpl('/api/admin/login', {
         method: 'POST',
@@ -105,15 +90,13 @@ export function startAdminApp({
         body: JSON.stringify({ token: value }),
       });
       if (!response.ok) {
-        toast('Invalid password.');
+        toast('密码无效');
         return;
       }
       storage.setItem(TOKEN_KEY, value);
       enterApp();
     } catch (error) {
       toast(error.message);
-    } finally {
-      setButtonPending(submit, false);
     }
   });
 
@@ -121,11 +104,8 @@ export function startAdminApp({
     event.preventDefault();
     const value = documentRef.getElementById('setup-token').value.trim();
     const confirmation = documentRef.getElementById('setup-confirm').value.trim();
-    const submit = documentRef.getElementById('setup-submit');
-    if (submit.getAttribute?.('aria-busy') === 'true') return;
-    if (value.length < 8) { toast('Password must contain at least 8 characters.'); return; }
-    if (value !== confirmation) { toast('Passwords do not match.'); return; }
-    setButtonPending(submit, true, 'saving…');
+    if (value.length < 8) { toast('密码至少 8 个字符'); return; }
+    if (value !== confirmation) { toast('两次输入的密码不一致'); return; }
     try {
       const response = await fetchImpl('/api/admin/setup', {
         method: 'POST',
@@ -134,15 +114,13 @@ export function startAdminApp({
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        toast(data.error || 'Could not set the password.');
+        toast(data.error || '设置失败');
         return;
       }
       storage.setItem(TOKEN_KEY, value);
       enterApp();
     } catch (error) {
       toast(error.message);
-    } finally {
-      setButtonPending(submit, false);
     }
   });
 
