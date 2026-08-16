@@ -4,7 +4,7 @@
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
 - **终端风格状态页**：60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
-- **Telegram 聚合通知**：按订阅合并同一调度轮的多模型变化，仅在异常/恢复切换时发送可自定义 HTML 消息
+- **Telegram 聚合通知**：按订阅在持久化聚合窗口内合并多模型变化，仅在异常/恢复切换时发送可自定义 HTML 消息
 - **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载
 - **一键更新**：检查 GitHub 稳定版本，并确认目标版本与 GHCR `latest` digest 一致后更新容器
 - **Docker Compose 一键部署**：Go 单二进制 + SQLite，最终镜像约 15MB
@@ -99,9 +99,9 @@ docker compose up -d
 ## 本地运行
 
 ```bash
-# 需要 Go 1.25+
-go run ./cmd/server                # 默认 :8080，数据目录 ./data
-ADMIN_TOKEN=xxx go run ./cmd/server --port 9090 --data ./data
+# 需要 Go 1.25.13
+go run ./cmd/model-uptime                # 默认 :8080，数据目录 ./data
+ADMIN_TOKEN=xxx go run ./cmd/model-uptime --port 9090 --data ./data
 ```
 
 ## 支持的协议
@@ -169,10 +169,12 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 
 - 首次有效探测只建立状态基线，不发送通知。
 - 只有 `up → down` 和 `down → up` 会发送；持续异常或持续正常不重复发送。
-- 同一调度轮中，每个订阅最多发送一条消息，异常模型和恢复模型分区展示。
-- 管理页的手动测试连接使用 3 秒聚合窗口，连续测试多个模型时不会逐条刷屏。
+- 相邻状态变化使用 3 秒持久化聚合窗口；每个订阅每批通常发送一条消息，超长批次会稳定拆分，异常模型和恢复模型分区展示。
+- 探测结果与状态变化原子写入 SQLite，状态变化确认与通知入箱也在同一事务提交；进程重启后会继续处理未确认变化。
+- Telegram `429`、网络错误和服务端故障按 `Retry-After` 与退避策略重试。连续四次确定性 `4xx` 会把该消息持久化隔离，避免阻塞同订阅的后续消息。
+- 修改相关订阅的 Bot Token、Chat ID、模板、语言或服务筛选后，隔离项会恢复并按新配置重新渲染；停机编辑配置后重启同样生效。无关配置或相同 Telegram 配置不会打断临时错误的退避，也不会反复唤醒隔离项。
 
-每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。默认模板使用北京时间，按模型展示异常持续时间、确认时间，以及当天运行时间、异常时间、异常次数和基于已观测时间计算的可用率；同一轮多个模型变化仍合并在一条消息中。
+每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。默认模板使用北京时间，按模型展示异常持续时间、确认时间，以及当天运行时间、异常时间、异常次数和基于已观测时间计算的可用率；同一固定持久化窗口内的多个模型变化会合并发送。
 
 `page.public_url` 可配置探针页的对外访问地址。配置后，所有状态变化通知和测试通知都会在消息末尾自动追加本地化链接；留空时不追加。地址必须是无账号密码的完整 `http://` 或 `https://` URL。
 
@@ -201,12 +203,15 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 
 | 端点 | 方法 | 认证 | 说明 |
 |---|---|---|---|
+| `/healthz` | GET | 公开 | 轻量进程健康检查（`204 No Content`） |
 | `/api/status` | GET | 公开 | 状态页数据（保持状态 API 的稳定数据结构） |
 | `/api/admin/setup-status` | GET | 公开 | 管理密码是否已配置（前端选择登录/设置视图） |
 | `/api/admin/setup` | POST | — | 首次设置管理密码（仅未配置时可用） |
 | `/api/admin/login` | POST | — | `{token}` 校验 |
 | `/api/admin/services` | GET / POST | Bearer | 列表 / 新增 |
+| `/api/admin/services` | PATCH | Bearer | 批量启用、禁用或删除服务 |
 | `/api/admin/services/{id}` | PUT / DELETE | Bearer | 更新 / 删除 |
+| `/api/admin/services/{id}/duplicate` | POST | Bearer | 复制服务并生成新 ID |
 | `/api/admin/services/{id}/test` | POST | Bearer | 立即探测一次 |
 | `/api/admin/page` | GET / PUT | Bearer | 页面显示配置 |
 | `/api/admin/telegram` | GET / PUT | Bearer | 获取（Token 脱敏）/ 更新 Telegram 配置 |
@@ -217,7 +222,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 ## 存储与数据
 
 - `data/config.yaml` — 配置源（配置页在线修改落盘于此）
-- `data/probe.db` — SQLite 探测历史（用于重启恢复状态条），保留 30 天
+- `data/probe.db` — SQLite 探测历史、待处理状态变化与通知 outbox；探测历史保留 30 天
 
 Docker 部署使用命名卷持久化 `/data`。若改用绑定挂载，需确保宿主目录对容器非 root 用户（uid 65534）可写：
 
@@ -227,24 +232,34 @@ mkdir -p data && sudo chown -R 65534:65534 data
 
 ## 项目结构
 
-```
-cmd/server/          入口：装配配置 / 存储 / 调度器 / HTTP
+```text
+cmd/model-uptime/       进程入口：参数、信号与应用启动
 internal/
-  model/             领域模型（服务定义、探测结果、页面配置）
-  config/            YAML 配置加载 / 校验 / 原子写回
-  store/             SQLite 历史持久化（纯 Go，无 cgo）
-  prober/            协议探针适配器（chat / response / message / http）
-  scheduler/         1s 级调度、并发探测、历史窗口、聚合快照
-  notifier/          Telegram 聚合模板、异步发送与失败重试
-  updater/           稳定版本检查、GHCR 发布确认与容器更新触发
-  api/               HTTP 路由、管理 API、token 认证、embed 前端
-    web/             前端：状态页（复刻）+ 配置页 + JetBrains Mono 字体
+  app/                  依赖装配与生命周期管理
+  admin/                配置事务与管理操作
+  httpserver/           HTTP 路由、认证与静态资源服务
+    web/                状态页、配置页、样式、脚本与字体
+  model/                领域模型（服务定义、探测结果、页面配置）
+  monitor/              探测调度、并发控制、历史窗口与状态快照
+    probe/              协议探针适配器（chat / response / message / http）
+  notification/         Telegram 聚合模板、outbox 与可靠投递
+  settings/             YAML 配置加载、校验、归一化与原子写回
+  storage/sqlite/       SQLite 历史、状态变化 ledger 与通知 outbox
+  update/               稳定版本检查、镜像确认与容器更新触发
+tests/
+  integration/          跨内部模块的 Go 行为测试
+  web/                  跨前端模块的 Node.js 回归测试
+  deployment/           Docker 与发布配置契约测试
 ```
 
 ## 测试
 
 ```bash
 go test ./...
+make web-test
+make deployment-test
 ```
 
-覆盖：各协议探测成功/失败/超时/路径拼接/鉴权头、配置加载与校验、SQLite 读写、调度轮次聚合、Telegram 模板与重试、管理 API 全流程（认证、CRUD、密钥保留、热重载）。
+Go 包测试遵循标准工具链约定，以 `*_test.go` 与被测包共置，便于直接测试包内行为；不额外建立 `__test__` 目录。跨多个内部包的 Go 行为测试放在 `tests/integration/`，Web 回归测试和部署契约测试分别放在 `tests/web/` 与 `tests/deployment/`，测试夹具放在对应包或测试目录的 `testdata/` 中。
+
+覆盖：各协议探测成功/失败/超时/路径拼接/鉴权头、配置加载与校验、SQLite 事务与迁移、持久化状态变化聚合、Telegram 模板与重试、管理 API 全流程（认证、CRUD、密钥保留、热重载）。

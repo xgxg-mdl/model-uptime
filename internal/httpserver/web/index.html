@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>model-uptime // status</title>
+<link rel="stylesheet" href="/assets/styles/foundation.css" />
+<link rel="stylesheet" href="/assets/styles/status.css" />
+</head>
+<body>
+  <div class="term" role="region" aria-label="model-uptime status terminal">
+    <div class="titlebar">
+      <div class="lights" aria-hidden="true">
+        <span class="light close"></span>
+        <span class="light min"></span>
+        <span class="light max"></span>
+      </div>
+      <div class="title-text">
+        <span class="mute">—</span> <span id="term-subtitle">model-uptime</span> <span class="mute">—</span>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="body">
+      <div class="block">
+        <div class="line"><span class="comment" id="probe-comment"># …</span></div>
+        <div class="line"><span class="comment"># Last login: <span id="login-time">—</span></span></div>
+      </div>
+
+      <div class="block">
+        <div class="line"><span class="prompt">~ $</span> <span class="cmd">uptime</span></div>
+        <div class="out" id="banner-out"><span class="dim">connecting…</span></div>
+      </div>
+
+      <div class="block">
+        <div class="line">
+          <span class="prompt">~ $</span> <span class="cmd">monitor</span> <span class="flag">--watch</span><span id="cmd-models"></span>
+        </div>
+        <div class="out" id="svc-out"></div>
+      </div>
+
+      <div class="block">
+        <div class="line"><span class="prompt">~ $</span><span class="cursor"></span></div>
+      </div>
+
+      <div class="foot">
+        <span>updated <span id="updated">—</span></span>
+        <span>built with go · <a href="/admin/">manage</a></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" id="tip" role="tooltip"></div>
+  <script type="module" src="/assets/scripts/status-page.js"></script>
+</body>
+</html>

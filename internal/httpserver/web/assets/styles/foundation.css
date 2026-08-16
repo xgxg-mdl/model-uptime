@@ -1,0 +1,52 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+}
+
+:root {
+  --page-bg: #1a1a1e;
+  --term-bg: #0d0d10;
+  --fg: #d4d4d4;
+  --fg-dim: #8a8a94;
+  --fg-mute: #55555e;
+  --ok: #5eff9c;
+  --bad: #ff5e7a;
+  --warn: #ffc857;
+  --info: #7afcff;
+
+  /* Admin aliases keep both pages on one palette without coupling page rules. */
+  --bg: var(--page-bg);
+  --panel: var(--term-bg);
+  --dim: var(--fg-dim);
+  --mute: var(--fg-mute);
+  --accent: var(--info);
+
+  --motion-fast: 100ms;
+  --motion-base: 160ms;
+  --motion-slow: 240ms;
+  --motion-ease-out: cubic-bezier(0, 0, .2, 1);
+  --motion-distance: 4px;
+}
+
+* {
+  box-sizing: border-box;
+}

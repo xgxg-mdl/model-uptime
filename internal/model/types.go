@@ -2,10 +2,10 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // 支持的协议类型。
@@ -122,6 +122,44 @@ type ProbeResult struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// StatusChange 描述单个服务一次最终状态变化，不包含任何投递渠道语义。
+type StatusChange struct {
+	ServiceID         string  `json:"service_id"`
+	Model             string  `json:"model"`
+	Provider          string  `json:"provider"`
+	Protocol          string  `json:"protocol"`
+	OK                bool    `json:"ok"`
+	LatencyMS         int64   `json:"latency_ms"`
+	Error             string  `json:"error,omitempty"`
+	UptimePct         float64 `json:"uptime_pct"`
+	Samples           int     `json:"samples"`
+	PreviousStatus    string  `json:"previous_status"`
+	Status            string  `json:"status"`
+	LastTS            int64   `json:"last_ts"`
+	OutageDurationSec int64   `json:"outage_duration_sec"`
+	TodayUpSec        int64   `json:"today_up_sec"`
+	TodayDownSec      int64   `json:"today_down_sec"`
+	TodayDownCount    int     `json:"today_down_count"`
+	TodayUptimePct    float64 `json:"today_uptime_pct"`
+}
+
+// StatusTransition 是与探测结果原子持久化的中性状态变化事件。
+// AvailableAt 允许上层用持久化防抖窗口聚合相邻变化。
+type StatusTransition struct {
+	Change        StatusChange `json:"change"`
+	ChangedAt     time.Time    `json:"changed_at"`
+	AvailableAt   time.Time    `json:"available_at"`
+	StatusPageURL string       `json:"status_page_url,omitempty"`
+}
+
+// TransitionBatch 是消费者一次领取到的稳定事件组。
+type TransitionBatch struct {
+	Key           string         `json:"key"`
+	ChangedAt     time.Time      `json:"changed_at"`
+	StatusPageURL string         `json:"status_page_url,omitempty"`
+	Changes       []StatusChange `json:"changes"`
+}
+
 // PageConfig 是探针页的显示配置（"统计维度"开关所在）。
 type PageConfig struct {
 	Title        string `yaml:"title" json:"title"`
@@ -182,7 +220,7 @@ func (p *PageConfig) Validate() error {
 }
 
 // PauseSpan 表示一段暂停区间，用于状态页显式渲染禁用空档。
-// 区间在运行时由 scheduler 记录，不持久化：重启后历史样本本身已表达那段时间的状态。
+// 区间在运行时由 monitor 记录，不持久化：重启后历史样本本身已表达那段时间的状态。
 type PauseSpan struct {
 	From int64 `json:"from"` // 暂停起始 unix 秒
 	To   int64 `json:"to"`   // 恢复 unix 秒（闭区间右边界）
@@ -190,6 +228,7 @@ type PauseSpan struct {
 
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
+	ID          string        `json:"id"`
 	Model       string        `json:"model"`
 	Provider    string        `json:"provider,omitempty"`
 	IntervalSec int           `json:"interval_sec"`
@@ -206,10 +245,4 @@ type StatusResponse struct {
 	AllOK       bool          `json:"all_ok"`
 	Page        *PageConfig   `json:"page,omitempty"`
 	Services    []ServiceView `json:"services"`
-}
-
-// JSON 序列化帮助（供测试与调试）。
-func (r ProbeResult) String() string {
-	b, _ := json.Marshal(r)
-	return string(b)
 }

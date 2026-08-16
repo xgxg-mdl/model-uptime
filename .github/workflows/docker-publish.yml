@@ -9,16 +9,21 @@ on:
 
 permissions:
   contents: read
-  packages: write
+
+env:
+  GO_VERSION: "1.25.13"
+  NODE_VERSION: "24.13.1"
+  GOTOOLCHAIN: local
+  GOVULNCHECK_VERSION: "v1.7.0"
 
 jobs:
-  docker:
+  quality:
+    name: Release quality gates
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Validate stable release tag
         shell: bash
@@ -27,6 +32,50 @@ jobs:
             echo "Only stable SemVer tags such as v1.2.3 may publish images." >&2
             exit 1
           fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: false
+
+      - name: Check formatting, modules, and vet
+        run: make check
+
+      - name: Run race-enabled Go tests
+        run: make race
+
+      - name: Check JavaScript syntax
+        run: make js-check
+
+      - name: Run web regression tests
+        run: make web-test
+
+      - name: Validate deployment configuration
+        run: make deployment-test
+
+      - name: Scan Go dependencies for vulnerabilities
+        run: make vuln
+
+  docker:
+    name: Build and publish image
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
