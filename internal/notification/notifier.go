@@ -241,13 +241,13 @@ func (n *Notifier) SendDailyTest(ctx context.Context, subscriptionID, statusPage
 		}
 		now := time.Now()
 		report := dailyReport{
-			Date: now.AddDate(0, 0, -1), Total: 12, Healthy: 10, Unavailable: 1, Unobserved: 1,
+			Date: now.AddDate(0, 0, -1), Total: 12, Healthy: 10, Unavailable: 1, CurrentDown: 1, Unobserved: 1,
 			UpSec: 1_031_400, DownSec: 3_600, DownCount: 2,
-			Incidents: []dailyModel{{
+			Models: []dailyModel{{
 				Model: "example-model", Provider: "example", Stats: model.DailyStats{UpSec: 82_800, DownSec: 3_600, DownCount: 2},
 			}},
 		}
-		text, err := renderDailyText(subscription.Language, report, report.Incidents, statusPageURL)
+		text, err := renderDailyText(subscription.Language, report, report.Models, statusPageURL)
 		if err != nil {
 			return fmt.Errorf("渲染订阅 %q 日报测试: %w", subscriptionID, err)
 		}

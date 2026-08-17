@@ -275,7 +275,7 @@
             </div>
             <div class="field full">
               <div class="template-help">
-                Summary: <code>{{.ChangedAt}}</code> <code>{{.DownCount}}</code> <code>{{.RecoveryCount}}</code> <code>{{.TotalChanges}}</code><br />
+                Summary: <code>{{.ChangedAt}}</code> <code>{{.ChangedTime}}</code> <code>{{.DownCount}}</code> <code>{{.RecoveryCount}}</code> <code>{{.TotalChanges}}</code><br />
                 Lists: <code>{{range .DownModels}}…{{end}}</code> <code>{{range .RecoveredModels}}…{{end}}</code> <code>{{range .Changes}}…{{end}}</code><br />
                 Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code> <code>{{.OutageDurationSec}}</code> <code>{{.TodayUpSec}}</code> <code>{{.TodayDownSec}}</code> <code>{{.TodayDownCount}}</code> <code>{{.TodayUptimePct}}</code><br />
                 Helpers: <code>{{formatBeijing .LastTS}}</code> <code>{{beijingDate .LastTS}}</code> <code>{{durationCN .TodayUpSec}}</code> <code>{{durationEN .TodayUpSec}}</code>

@@ -46,6 +46,28 @@ const legacyEnglishTemplate = `<b>MODEL STATUS UPDATE</b>
   Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
 {{end}}{{end}}`
 
+const legacyCompactChineseTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更{{else if .DownModels}}❌ 检测到模型异常{{else}}✅ 模型恢复正常{{end}}</b>
+<code>{{.ChangedAt}}</code>（北京时间）
+异常 {{.DownCount}} · 恢复 {{.RecoveryCount}}
+{{if .DownModels}}
+<b>异常模型</b>
+{{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+{{end}}{{end}}{{if .RecoveredModels}}
+<b>恢复模型</b>
+{{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · 异常 {{durationCN .OutageDurationSec}}{{end}}
+{{end}}{{end}}`
+
+const legacyCompactEnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update{{else if .DownModels}}❌ Model incident detected{{else}}✅ Model recovered{{end}}</b>
+<code>{{.ChangedAt}}</code> (UTC+8)
+Down {{.DownCount}} · Recovered {{.RecoveryCount}}
+{{if .DownModels}}
+<b>DOWN</b>
+{{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+{{end}}{{end}}{{if .RecoveredModels}}
+<b>RECOVERED</b>
+{{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · {{durationEN .OutageDurationSec}}{{end}}
+{{end}}{{end}}`
+
 // legacyVerbose*Template 是 v0.6 期间写入配置的默认模板。仅精确匹配时升级，
 // 以免覆盖用户刻意保留每日字段的自定义模板。
 const legacyVerboseChineseTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
@@ -176,6 +198,8 @@ func normalizeSubscription(subscription *Subscription) {
 	// 识别历史版本写入配置的内置模板并升级；用户修改过的自定义模板保持不变。
 	legacyBuiltIn := templateText == strings.TrimSpace(legacyChineseTemplate) ||
 		templateText == strings.TrimSpace(legacyEnglishTemplate) ||
+		templateText == strings.TrimSpace(legacyCompactChineseTemplate) ||
+		templateText == strings.TrimSpace(legacyCompactEnglishTemplate) ||
 		templateText == strings.TrimSpace(legacyVerboseChineseTemplate) ||
 		templateText == strings.TrimSpace(legacyVerboseEnglishTemplate) ||
 		templateText == strings.TrimSpace(legacyStatisticsTemplate(DefaultLanguage)) ||

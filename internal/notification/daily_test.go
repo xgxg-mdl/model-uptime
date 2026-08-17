@@ -17,6 +17,29 @@ type dailyRepositoryStub struct {
 	runs       map[string]bool
 }
 
+func TestDailyReporterDoesNotSendOnStartup(t *testing.T) {
+	repository := &dailyRepositoryStub{runs: map[string]bool{}, histories: map[string][]model.ProbeResult{}}
+	reporter, err := NewDailyReporter(repository, func() DailySnapshot {
+		return DailySnapshot{
+			Telegram: Config{BotToken: "token", Subscriptions: []Subscription{{
+				ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"alpha"},
+			}}},
+			Services: []model.Service{{ID: "alpha", Model: "alpha"}},
+		}
+	}, discardLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reporter.Start()
+	time.Sleep(20 * time.Millisecond)
+	if err := reporter.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(repository.deliveries) != 0 {
+		t.Fatalf("日报器启动时发送了 %d 条日报，必须只在北京时间零点发送", len(repository.deliveries))
+	}
+}
+
 func (s *dailyRepositoryStub) LoadResultsSinceWithPrevious(_ context.Context, id string, _, _ int64) ([]model.ProbeResult, error) {
 	return append([]model.ProbeResult(nil), s.histories[id]...), nil
 }
@@ -38,6 +61,10 @@ func TestDailyReporterSummarizesSelectedModelsAndDoesNotDuplicate(t *testing.T) 
 	repository := &dailyRepositoryStub{
 		runs: map[string]bool{},
 		histories: map[string][]model.ProbeResult{
+			"active-incident": {
+				{TS: start.Add(-time.Minute).Unix(), OK: true},
+				{TS: start.Add(4 * time.Hour).Unix(), OK: false},
+			},
 			"incident": {
 				{TS: start.Add(-time.Minute).Unix(), OK: true},
 				{TS: start.Add(2 * time.Hour).Unix(), OK: false},
@@ -49,9 +76,10 @@ func TestDailyReporterSummarizesSelectedModelsAndDoesNotDuplicate(t *testing.T) 
 	reporter, err := NewDailyReporter(repository, func() DailySnapshot {
 		return DailySnapshot{
 			Telegram: Config{BotToken: "token", Subscriptions: []Subscription{{
-				ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"incident", "healthy", "unobserved"},
+				ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"active-incident", "incident", "healthy", "unobserved"},
 			}}},
 			Services: []model.Service{
+				{ID: "active-incident", Model: "delta", Provider: "D"},
 				{ID: "incident", Model: "alpha", Provider: "A"},
 				{ID: "healthy", Model: "beta", Provider: "B"},
 				{ID: "unobserved", Model: "gamma", Provider: "C"},
@@ -72,20 +100,22 @@ func TestDailyReporterSummarizesSelectedModelsAndDoesNotDuplicate(t *testing.T) 
 		t.Fatalf("日报投递数 = %d，期望 1", len(repository.deliveries))
 	}
 	text := repository.deliveries[0].Text
-	for _, want := range []string{"模型运行日报 · 2026-08-16", "总计 3 · 正常 1 · 异常 1 · 未监测 1", "整体可用率 <code>", "故障 1 次", "<b>alpha</b> · A", "查看探针页"} {
+	for _, want := range []string{"📊 <b>模型运行日报</b>\n\n<blockquote>", "<b>日期</b>　<code>2026-08-16</code>（北京时间）", "<b>范围</b>　4 个模型 · 🟢 1 正常 · 🟡 1 已恢复 · 🔴 1 异常 · ⚪ 1 无数据", "<b>可用率</b>　<code>", "<b>故障</b>　2 次", "<b>模型状态</b>\n<blockquote>", "🟡 <b>A</b> / <code>alpha</code>", "🔴 <b>D</b> / <code>delta</code>", "查看探针页"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("日报缺少 %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "beta") || strings.Contains(text, "gamma") {
-		t.Fatalf("日报不应逐项罗列正常或未监测模型:\n%s", text)
+	for _, want := range []string{"🟢 <b>B</b> / <code>beta</code>", "⚪ <b>C</b> / <code>gamma</code>"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("日报必须列出所有订阅模型，缺少 %q:\n%s", want, text)
+		}
 	}
 }
 
 func TestBuildDailyDeliveriesSplitsOnlyBetweenModels(t *testing.T) {
 	report := dailyReport{Date: time.Date(2026, 8, 16, 0, 0, 0, 0, beijingLocation), Total: 2, Unavailable: 2}
 	for i := 0; i < 2; i++ {
-		report.Incidents = append(report.Incidents, dailyModel{
+		report.Models = append(report.Models, dailyModel{
 			ServiceID: string(rune('a' + i)), Model: strings.Repeat("model", 700), Provider: "provider",
 			Stats: model.DailyStats{DownSec: 60, DownCount: 1},
 		})

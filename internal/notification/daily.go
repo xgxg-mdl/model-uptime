@@ -51,7 +51,7 @@ func NewDailyReporter(repository DailyRepository, snapshot func() DailySnapshot,
 	return &DailyReporter{repository: repository, snapshot: snapshot, logger: logger, ctx: ctx, cancel: cancel}, nil
 }
 
-// Start 会补发昨天尚未入箱的日报，然后等待下一个北京时间零点。
+// Start 只等待下一个北京时间零点。进程启动或升级本身不属于日报触发条件。
 func (r *DailyReporter) Start() {
 	r.wg.Add(1)
 	go r.run()
@@ -66,7 +66,6 @@ func (r *DailyReporter) Close(context.Context) error {
 
 func (r *DailyReporter) run() {
 	defer r.wg.Done()
-	r.reportPreviousDay(time.Now())
 	for {
 		next := nextBeijingMidnight(time.Now())
 		timer := time.NewTimer(time.Until(next))
@@ -152,11 +151,13 @@ type dailyReport struct {
 	Total       int
 	Healthy     int
 	Unavailable int
+	CurrentDown int
+	Recovered   int
 	Unobserved  int
 	UpSec       int64
 	DownSec     int64
 	DownCount   int
-	Incidents   []dailyModel
+	Models      []dailyModel
 }
 
 func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, subscription compiledSubscription, services map[string]model.Service) (dailyReport, error) {
@@ -172,13 +173,6 @@ func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, s
 			return dailyReport{}, err
 		}
 		stats := model.CalculateDailyStats(history, start.Unix(), end.Unix())
-		if stats.ObservedSec() == 0 {
-			report.Unobserved++
-			continue
-		}
-		report.UpSec += stats.UpSec
-		report.DownSec += stats.DownSec
-		report.DownCount += stats.DownCount
 		name := service.Model
 		if name == "" {
 			name = service.Name
@@ -187,24 +181,40 @@ func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, s
 			ServiceID: id, Model: compactDailyLabel(name, 512),
 			Provider: compactDailyLabel(service.Provider, 256), Stats: stats,
 		}
+		if stats.ObservedSec() == 0 {
+			report.Unobserved++
+			report.Models = append(report.Models, item)
+			continue
+		}
+		report.UpSec += stats.UpSec
+		report.DownSec += stats.DownSec
+		report.DownCount += stats.DownCount
 		if stats.DownSec > 0 {
 			report.Unavailable++
-			report.Incidents = append(report.Incidents, item)
+			if stats.LastOK() {
+				report.Recovered++
+			} else {
+				report.CurrentDown++
+			}
 		} else {
 			report.Healthy++
 		}
+		report.Models = append(report.Models, item)
 	}
-	sort.SliceStable(report.Incidents, func(i, j int) bool {
-		if report.Incidents[i].Stats.DownSec != report.Incidents[j].Stats.DownSec {
-			return report.Incidents[i].Stats.DownSec > report.Incidents[j].Stats.DownSec
+	sort.SliceStable(report.Models, func(i, j int) bool {
+		left, right := dailyStatusRank(report.Models[i]), dailyStatusRank(report.Models[j])
+		if left != right {
+			return left < right
 		}
-		return strings.ToLower(report.Incidents[i].Model) < strings.ToLower(report.Incidents[j].Model)
+		leftName := strings.ToLower(report.Models[i].Provider + "/" + report.Models[i].Model)
+		rightName := strings.ToLower(report.Models[j].Provider + "/" + report.Models[j].Model)
+		return leftName < rightName
 	})
 	return report, nil
 }
 
 func buildDailyDeliveries(subscription compiledSubscription, dayStart time.Time, report dailyReport, statusPageURL string) ([]Delivery, error) {
-	items := report.Incidents
+	items := report.Models
 	if len(items) == 0 {
 		text, err := renderDailyText(subscription.Language, report, nil, statusPageURL)
 		if err != nil {
@@ -245,31 +255,43 @@ func buildDailyDeliveries(subscription compiledSubscription, dayStart time.Time,
 	}), nil
 }
 
-func renderDailyText(language string, report dailyReport, incidents []dailyModel, statusPageURL string) (string, error) {
+func renderDailyText(language string, report dailyReport, models []dailyModel, statusPageURL string) (string, error) {
 	availability := 0.0
 	if total := report.UpSec + report.DownSec; total > 0 {
 		availability = float64(report.UpSec) / float64(total) * 100
 	}
 	var output strings.Builder
 	if normalizeLanguage(language) == LanguageEnglish {
-		fmt.Fprintf(&output, "<b>Model daily report · %s (UTC+8)</b>\n", report.Date.Format("2006-01-02"))
-		fmt.Fprintf(&output, "Total %d · Healthy %d · Incident %d · Unobserved %d\n", report.Total, report.Healthy, report.Unavailable, report.Unobserved)
-		fmt.Fprintf(&output, "Availability <code>%.2f%%</code> · Incidents %d · Downtime %s", availability, report.DownCount, formatDurationEN(report.DownSec))
-		if len(incidents) > 0 {
-			output.WriteString("\n\n<b>INCIDENTS</b>")
-			for _, item := range incidents {
-				fmt.Fprintf(&output, "\n❌ <b>%s</b>%s · %.2f%% · %s · %d incidents", template.HTMLEscapeString(item.Model), dailyProviderEN(item.Provider), item.Stats.UptimePct(), formatDurationEN(item.Stats.DownSec), item.Stats.DownCount)
+		output.WriteString("📊 <b>Model daily report</b>\n\n")
+		fmt.Fprintf(&output, "<blockquote><b>Date</b>　<code>%s</code> (UTC+8)\n", report.Date.Format("2006-01-02"))
+		fmt.Fprintf(&output, "<b>Scope</b>　%d models · 🟢 %d healthy · 🟡 %d recovered · 🔴 %d down · ⚪ %d no data\n", report.Total, report.Healthy, report.Recovered, report.CurrentDown, report.Unobserved)
+		fmt.Fprintf(&output, "<b>Availability</b>　<code>%.2f%%</code>\n", availability)
+		fmt.Fprintf(&output, "<b>Incidents</b>　%d · %s downtime</blockquote>", report.DownCount, formatDurationEN(report.DownSec))
+		if len(models) > 0 {
+			output.WriteString("\n\n<b>Model status</b>\n<blockquote>")
+			for index, item := range models {
+				if index > 0 {
+					output.WriteByte('\n')
+				}
+				output.WriteString(renderDailyModelEN(item))
 			}
+			output.WriteString("</blockquote>")
 		}
 	} else {
-		fmt.Fprintf(&output, "<b>模型运行日报 · %s（北京时间）</b>\n", report.Date.Format("2006-01-02"))
-		fmt.Fprintf(&output, "总计 %d · 正常 %d · 异常 %d · 未监测 %d\n", report.Total, report.Healthy, report.Unavailable, report.Unobserved)
-		fmt.Fprintf(&output, "整体可用率 <code>%.2f%%</code> · 故障 %d 次 · 异常 %s", availability, report.DownCount, formatDurationCN(report.DownSec))
-		if len(incidents) > 0 {
-			output.WriteString("\n\n<b>异常模型</b>")
-			for _, item := range incidents {
-				fmt.Fprintf(&output, "\n❌ <b>%s</b>%s · %.2f%% · %s · %d 次", template.HTMLEscapeString(item.Model), dailyProviderCN(item.Provider), item.Stats.UptimePct(), formatDurationCN(item.Stats.DownSec), item.Stats.DownCount)
+		output.WriteString("📊 <b>模型运行日报</b>\n\n")
+		fmt.Fprintf(&output, "<blockquote><b>日期</b>　<code>%s</code>（北京时间）\n", report.Date.Format("2006-01-02"))
+		fmt.Fprintf(&output, "<b>范围</b>　%d 个模型 · 🟢 %d 正常 · 🟡 %d 已恢复 · 🔴 %d 异常 · ⚪ %d 无数据\n", report.Total, report.Healthy, report.Recovered, report.CurrentDown, report.Unobserved)
+		fmt.Fprintf(&output, "<b>可用率</b>　<code>%.2f%%</code>\n", availability)
+		fmt.Fprintf(&output, "<b>故障</b>　%d 次 · 累计异常 %s</blockquote>", report.DownCount, formatDurationCN(report.DownSec))
+		if len(models) > 0 {
+			output.WriteString("\n\n<b>模型状态</b>\n<blockquote>")
+			for index, item := range models {
+				if index > 0 {
+					output.WriteByte('\n')
+				}
+				output.WriteString(renderDailyModelCN(item))
 			}
+			output.WriteString("</blockquote>")
 		}
 	}
 	text := output.String()
@@ -279,14 +301,54 @@ func renderDailyText(language string, report dailyReport, incidents []dailyModel
 	return appendStatusPageLink(text, statusPageURL, language)
 }
 
-func dailyProviderCN(provider string) string {
-	if provider == "" {
-		return ""
+func renderDailyModelCN(item dailyModel) string {
+	label := dailyModelLabel(item)
+	if item.Stats.ObservedSec() == 0 {
+		return "⚪ " + label + " · 无数据"
 	}
-	return " · " + template.HTMLEscapeString(provider)
+	if !item.Stats.LastOK() {
+		return fmt.Sprintf("🔴 %s · <code>%.2f%%</code> · 异常 %s · %d 次", label, item.Stats.UptimePct(), formatDurationCN(item.Stats.DownSec), item.Stats.DownCount)
+	}
+	if item.Stats.DownSec > 0 {
+		return fmt.Sprintf("🟡 %s · <code>%.2f%%</code> · 异常 %s · %d 次", label, item.Stats.UptimePct(), formatDurationCN(item.Stats.DownSec), item.Stats.DownCount)
+	}
+	return fmt.Sprintf("🟢 %s · <code>%.2f%%</code>", label, item.Stats.UptimePct())
 }
 
-func dailyProviderEN(provider string) string { return dailyProviderCN(provider) }
+func renderDailyModelEN(item dailyModel) string {
+	label := dailyModelLabel(item)
+	if item.Stats.ObservedSec() == 0 {
+		return "⚪ " + label + " · no data"
+	}
+	if !item.Stats.LastOK() {
+		return fmt.Sprintf("🔴 %s · <code>%.2f%%</code> · %s down · %d incidents", label, item.Stats.UptimePct(), formatDurationEN(item.Stats.DownSec), item.Stats.DownCount)
+	}
+	if item.Stats.DownSec > 0 {
+		return fmt.Sprintf("🟡 %s · <code>%.2f%%</code> · %s down · %d incidents", label, item.Stats.UptimePct(), formatDurationEN(item.Stats.DownSec), item.Stats.DownCount)
+	}
+	return fmt.Sprintf("🟢 %s · <code>%.2f%%</code>", label, item.Stats.UptimePct())
+}
+
+func dailyModelLabel(item dailyModel) string {
+	modelName := "<code>" + template.HTMLEscapeString(item.Model) + "</code>"
+	if item.Provider == "" {
+		return modelName
+	}
+	return "<b>" + template.HTMLEscapeString(item.Provider) + "</b> / " + modelName
+}
+
+func dailyStatusRank(item dailyModel) int {
+	if item.Stats.ObservedSec() == 0 {
+		return 3
+	}
+	if !item.Stats.LastOK() {
+		return 0
+	}
+	if item.Stats.DownSec > 0 {
+		return 1
+	}
+	return 2
+}
 
 func compactDailyLabel(value string, maxRunes int) string {
 	if maxRunes <= 0 || utf8.RuneCountInString(value) <= maxRunes {

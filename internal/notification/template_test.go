@@ -23,13 +23,13 @@ func TestRenderTemplateAggregatesAndEscapes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"⚠️ 模型状态变更", "异常 1 · 恢复 1", "<code>2026-08-15 10:50:02</code>", "❌ <b>alpha &lt;fast&gt;</b>", "vendor &amp; co", "✅ <b>beta</b> · 异常 7.9 分钟"} {
+	for _, want := range []string{"⚠️ <b>模型状态更新</b>\n\n<blockquote>", "<b>时间</b>　<code>08-15 10:50</code>（北京时间）", "<b>变化</b>　🔴 1 异常 · 🟢 1 恢复", "<b>vendor &amp; co</b> / <code>alpha &lt;fast&gt;</code>", "<blockquote expandable><b>异常详情</b>", "<b>原因</b>　timeout &lt;5s", "<b>恢复</b>　🟢 <code>beta</code>", "<b>用时</b>　<code>7.9 分钟</code> · 延迟 <code>42 ms</code>", "</blockquote>"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("渲染结果缺少 %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "timeout") || strings.Contains(text, "今日运行时间") {
-		t.Fatalf("默认模板不应返回探测错误详情或重复日报统计:\n%s", text)
+	if strings.Contains(text, "今日运行时间") {
+		t.Fatalf("默认模板不应重复日报统计:\n%s", text)
 	}
 	custom, err := RenderTemplate(`{{range .Changes}}{{.Error}}{{end}}`, context)
 	if err != nil || custom != "timeout &lt;5s" {

@@ -12,6 +12,9 @@ type DailyStats struct {
 // ObservedSec 返回在时间窗内拥有已知状态的总秒数。
 func (s DailyStats) ObservedSec() int64 { return s.UpSec + s.DownSec }
 
+// LastOK 返回时间窗结束时最后一次已知探测是否正常。
+func (s DailyStats) LastOK() bool { return s.known && s.lastOK }
+
 // UptimePct 返回基于已观测时长的可用率。没有样本时返回 0，调用方可据此
 // 区分“未监测”和“全天正常”。
 func (s DailyStats) UptimePct() float64 {

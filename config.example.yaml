@@ -44,16 +44,20 @@ telegram:
       # 留空时自动使用以下默认模板。模板采用 Go html/template 语法，消息以
       # Telegram HTML 发送；变量值会自动转义。
       template: |
-        <b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更{{else if .DownModels}}❌ 检测到模型异常{{else}}✅ 模型恢复正常{{end}}</b>
-        <code>{{.ChangedAt}}</code>（北京时间）
-        异常 {{.DownCount}} · 恢复 {{.RecoveryCount}}
-        {{if .DownModels}}
-        <b>异常模型</b>
-        {{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-        {{end}}{{end}}{{if .RecoveredModels}}
-        <b>恢复模型</b>
-        {{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · 异常 {{durationCN .OutageDurationSec}}{{end}}
-        {{end}}{{end}}
+        {{if and .DownModels .RecoveredModels}}⚠️ <b>模型状态更新</b>{{else if .DownModels}}🔴 <b>模型异常告警</b>{{else}}🟢 <b>模型恢复通知</b>{{end}}
+
+        <blockquote><b>时间</b>　<code>{{.ChangedTime}}</code>（北京时间）
+        <b>变化</b>　🔴 {{.DownCount}} 异常 · 🟢 {{.RecoveryCount}} 恢复
+        {{range .DownModels}}<b>异常</b>　🔴 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
+        {{end}}{{range .RecoveredModels}}<b>恢复</b>　🟢 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}
+        <b>用时</b>　<code>{{durationCN .OutageDurationSec}}</code>{{if .LatencyMS}} · 延迟 <code>{{.LatencyMS}} ms</code>{{end}}{{else if .LatencyMS}}
+        <b>延迟</b>　<code>{{.LatencyMS}} ms</code>{{end}}
+        {{end}}</blockquote>{{if .DownModels}}
+
+        <blockquote expandable><b>异常详情</b>
+        {{range .DownModels}}<b>模型</b>　{{if .Provider}}{{.Provider}} / {{end}}<code>{{.Model}}</code>
+        <b>原因</b>　{{if .Error}}{{.Error}}{{else}}未返回错误详情{{end}}
+        {{end}}</blockquote>{{end}}
 
 # 监控目标。协议支持：
 #   chat     -> POST {base_url}/v1/chat/completions (OpenAI)

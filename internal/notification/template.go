@@ -16,29 +16,38 @@ import (
 // TelegramMessageLimit 是 Telegram sendMessage 接受的最大消息字符数。
 const TelegramMessageLimit = 4096
 
-// DefaultTemplate 是默认中文模板：摘要优先，模型明细只保留处置状态需要的信息。
-const DefaultTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更{{else if .DownModels}}❌ 检测到模型异常{{else}}✅ 模型恢复正常{{end}}</b>
-<code>{{.ChangedAt}}</code>（北京时间）
-异常 {{.DownCount}} · 恢复 {{.RecoveryCount}}
-{{if .DownModels}}
-<b>异常模型</b>
-{{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-{{end}}{{end}}{{if .RecoveredModels}}
-<b>恢复模型</b>
-{{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · 异常 {{durationCN .OutageDurationSec}}{{end}}
-{{end}}{{end}}`
+// DefaultTemplate 是默认中文模板：沿用 Smart_Group_Bot 的标题、引用卡片和
+// “粗体字段名 + 全角空格 + 值”结构，在紧凑布局中保留处置所需信息。
+const DefaultTemplate = `{{if and .DownModels .RecoveredModels}}⚠️ <b>模型状态更新</b>{{else if .DownModels}}🔴 <b>模型异常告警</b>{{else}}🟢 <b>模型恢复通知</b>{{end}}
+
+<blockquote><b>时间</b>　<code>{{.ChangedTime}}</code>（北京时间）
+<b>变化</b>　🔴 {{.DownCount}} 异常 · 🟢 {{.RecoveryCount}} 恢复
+{{range .DownModels}}<b>异常</b>　🔴 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
+{{end}}{{range .RecoveredModels}}<b>恢复</b>　🟢 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}
+<b>用时</b>　<code>{{durationCN .OutageDurationSec}}</code>{{if .LatencyMS}} · 延迟 <code>{{.LatencyMS}} ms</code>{{end}}{{else if .LatencyMS}}
+<b>延迟</b>　<code>{{.LatencyMS}} ms</code>{{end}}
+{{end}}</blockquote>{{if .DownModels}}
+
+<blockquote expandable><b>异常详情</b>
+{{range .DownModels}}<b>模型</b>　{{if .Provider}}{{.Provider}} / {{end}}<code>{{.Model}}</code>
+<b>原因</b>　{{if .Error}}{{.Error}}{{else}}未返回错误详情{{end}}
+{{end}}</blockquote>{{end}}`
 
 // EnglishTemplate 是英文内置模板，可按订阅选择。
-const EnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update{{else if .DownModels}}❌ Model incident detected{{else}}✅ Model recovered{{end}}</b>
-<code>{{.ChangedAt}}</code> (UTC+8)
-Down {{.DownCount}} · Recovered {{.RecoveryCount}}
-{{if .DownModels}}
-<b>DOWN</b>
-{{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
-{{end}}{{end}}{{if .RecoveredModels}}
-<b>RECOVERED</b>
-{{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · {{durationEN .OutageDurationSec}}{{end}}
-{{end}}{{end}}`
+const EnglishTemplate = `{{if and .DownModels .RecoveredModels}}⚠️ <b>Model status update</b>{{else if .DownModels}}🔴 <b>Model incident alert</b>{{else}}🟢 <b>Model recovery</b>{{end}}
+
+<blockquote><b>Time</b>　<code>{{.ChangedTime}}</code> (UTC+8)
+<b>Changes</b>　🔴 {{.DownCount}} down · 🟢 {{.RecoveryCount}} recovered
+{{range .DownModels}}<b>Down</b>　🔴 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
+{{end}}{{range .RecoveredModels}}<b>Recovered</b>　🟢 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}
+<b>Duration</b>　<code>{{durationEN .OutageDurationSec}}</code>{{if .LatencyMS}} · latency <code>{{.LatencyMS}} ms</code>{{end}}{{else if .LatencyMS}}
+<b>Latency</b>　<code>{{.LatencyMS}} ms</code>{{end}}
+{{end}}</blockquote>{{if .DownModels}}
+
+<blockquote expandable><b>Incident details</b>
+{{range .DownModels}}<b>Model</b>　{{if .Provider}}{{.Provider}} / {{end}}<code>{{.Model}}</code>
+<b>Reason</b>　{{if .Error}}{{.Error}}{{else}}No error details returned{{end}}
+{{end}}</blockquote>{{end}}`
 
 var (
 	ErrMessageTooLong       = errors.New("Telegram 消息超过 4096 字符")
@@ -55,6 +64,7 @@ var (
 // TemplateContext 是聚合模板可访问的完整上下文。
 type TemplateContext struct {
 	ChangedAt       string
+	ChangedTime     string
 	DownCount       int
 	RecoveryCount   int
 	DownModels      []model.StatusChange
@@ -84,6 +94,7 @@ func NewTemplateContext(changedAt time.Time, changes []model.StatusChange) Templ
 	sortChangesForDelivery(final)
 	context := TemplateContext{
 		ChangedAt:    changedAt.In(beijingLocation).Format("2006-01-02 15:04:05"),
+		ChangedTime:  changedAt.In(beijingLocation).Format("01-02 15:04"),
 		Changes:      final,
 		TotalChanges: len(final),
 	}
