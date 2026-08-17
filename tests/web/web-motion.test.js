@@ -63,6 +63,12 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 
+test('管理页背景固定且不重复，避免内容高度变化时出现渐变拼接', () => {
+  assert.match(adminCSS, /background-attachment:\s*fixed;/);
+  assert.match(adminCSS, /background-repeat:\s*no-repeat;/);
+  assert.match(adminCSS, /background-size:\s*100%\s+100%;/);
+});
+
 test('首次渲染不播放变化动效，整体状态实际变化时才播放', () => {
   const document = createStatusDocument();
   const renderer = createStatusRenderer({ document, window: { innerWidth: 1024 } });
