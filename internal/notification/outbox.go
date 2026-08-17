@@ -19,6 +19,7 @@ type Delivery struct {
 	DedupeKey                string
 	SubscriptionID           string
 	Text                     string
+	StatusPageURL            string
 	RenderPayload            *RenderPayload
 	CreatedAt                time.Time
 	AvailableAt              time.Time

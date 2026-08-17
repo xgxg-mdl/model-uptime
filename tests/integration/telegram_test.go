@@ -19,7 +19,7 @@ import (
 )
 
 func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
-	requests := make(chan string, 1)
+	requests := make(chan string, 2)
 	var rejectTelegram atomic.Bool
 	telegramAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
@@ -30,7 +30,7 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 			_, _ = io.WriteString(w, `{"ok":false,"description":"chat not found"}`)
 			return
 		}
-		requests <- r.URL.Path + "|" + r.Form.Get("chat_id") + "|" + r.Form.Get("parse_mode") + "|" + r.Form.Get("text")
+		requests <- r.URL.Path + "|" + r.Form.Get("chat_id") + "|" + r.Form.Get("parse_mode") + "|" + r.Form.Get("text") + "|" + r.Form.Get("reply_markup")
 		_, _ = io.WriteString(w, `{"ok":true}`)
 	}))
 	defer telegramAPI.Close()
@@ -95,17 +95,21 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("Telegram 测试发送失败: code=%d out=%v", code, out)
 	}
-	select {
-	case request := <-requests:
-		parts := strings.SplitN(request, "|", 4)
-		if len(parts) != 4 || parts[0] != "/botsecret-token/sendMessage" || parts[1] != "-100" || parts[2] != "HTML" {
-			t.Fatalf("Telegram 请求错误: %s", request)
+	for index := 0; index < 2; index++ {
+		select {
+		case request := <-requests:
+			parts := strings.SplitN(request, "|", 5)
+			if len(parts) != 5 || parts[0] != "/botsecret-token/sendMessage" || parts[1] != "-100" || parts[2] != "HTML" {
+				t.Fatalf("Telegram 请求错误: %s", request)
+			}
+			if strings.Contains(parts[3], "Open status page") ||
+				!strings.Contains(parts[4], `"text":"Open status page"`) ||
+				!strings.Contains(parts[4], `"url":"https://status.example.com/?from=test\u0026view=full"`) {
+				t.Fatalf("Telegram 测试消息未使用探针页按钮: %s", request)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("只收到 %d 条 Telegram 分类测试消息", index)
 		}
-		if !strings.Contains(parts[3], `<a href="https://status.example.com/?from=test&amp;view=full">Open status page</a>`) {
-			t.Fatalf("Telegram 测试消息缺少探针页链接: %s", parts[3])
-		}
-	case <-time.After(time.Second):
-		t.Fatal("没有收到 Telegram 测试请求")
 	}
 
 	rejectTelegram.Store(true)

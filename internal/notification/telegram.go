@@ -20,6 +20,8 @@ type sendJob struct {
 	botToken          string
 	chatID            string
 	text              string
+	statusPageURL     string
+	language          string
 	name              string
 	configFingerprint string
 }
@@ -67,6 +69,13 @@ func (n *Notifier) send(ctx context.Context, job sendJob) *deliveryError {
 		"text":                     {job.text},
 		"parse_mode":               {"HTML"},
 		"disable_web_page_preview": {"true"},
+	}
+	if job.statusPageURL != "" {
+		replyMarkup, err := statusPageButtonMarkup(job.statusPageURL, job.language)
+		if err != nil {
+			return &deliveryError{err: err}
+		}
+		form.Set("reply_markup", replyMarkup)
 	}
 	endpoint := n.apiBaseURL + "/bot" + job.botToken + "/sendMessage"
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))

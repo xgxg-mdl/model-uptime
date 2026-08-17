@@ -9,7 +9,7 @@ import (
 	"github.com/xgxg-mdl/model-uptime/internal/model"
 )
 
-func TestRenderTemplateAggregatesAndEscapes(t *testing.T) {
+func TestRenderTemplateSeparatesStatusCardsAndEscapes(t *testing.T) {
 	t.Parallel()
 	confirmedAt := time.Date(2026, 8, 15, 10, 50, 2, 0, time.FixedZone("UTC+8", 8*60*60)).Unix()
 	context := NewTemplateContext(time.Date(2026, 8, 15, 2, 50, 2, 0, time.UTC), []model.StatusChange{
@@ -19,17 +19,34 @@ func TestRenderTemplateAggregatesAndEscapes(t *testing.T) {
 	if context.ChangedAt != "2026-08-15 10:50:02" {
 		t.Fatalf("ChangedAt 未使用北京时间: %q", context.ChangedAt)
 	}
-	text, err := RenderTemplate(DefaultTemplate, context)
+	downText, err := RenderTemplate(DefaultTemplate, NewTemplateContext(
+		time.Date(2026, 8, 15, 2, 50, 2, 0, time.UTC), context.DownModels,
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"⚠️ <b>模型状态更新</b>\n\n<blockquote>", "<b>时间</b>　<code>08-15 10:50</code>（北京时间）", "<b>变化</b>　🔴 1 异常 · 🟢 1 恢复", "<b>vendor &amp; co</b> / <code>alpha &lt;fast&gt;</code>", "<blockquote expandable><b>异常详情</b>", "<b>原因</b>　timeout &lt;5s", "<b>恢复</b>　🟢 <code>beta</code>", "<b>用时</b>　<code>7.9 分钟</code> · 延迟 <code>42 ms</code>", "</blockquote>"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("渲染结果缺少 %q:\n%s", want, text)
+	for _, want := range []string{"🔴 <b>模型异常告警 · 1</b>", "<blockquote><b>异常模型</b>", "• <b>vendor &amp; co</b> / <code>alpha &lt;fast&gt;</code>", "<b>检测时间</b>　<code>08-15 10:50</code>（北京时间）", "<blockquote expandable><b>异常详情</b>", "• <code>alpha &lt;fast&gt;</code>　原因：timeout &lt;5s"} {
+		if !strings.Contains(downText, want) {
+			t.Errorf("异常卡片缺少 %q:\n%s", want, downText)
 		}
 	}
-	if strings.Contains(text, "今日运行时间") {
-		t.Fatalf("默认模板不应重复日报统计:\n%s", text)
+	if strings.Contains(downText, "beta") || strings.Count(downText, "🔴") != 1 {
+		t.Fatalf("异常卡片混入恢复模型或重复状态图标:\n%s", downText)
+	}
+
+	recoveryText, err := RenderTemplate(DefaultTemplate, NewTemplateContext(
+		time.Date(2026, 8, 15, 2, 50, 2, 0, time.UTC), context.RecoveredModels,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"🟢 <b>模型恢复通知 · 1</b>", "<blockquote><b>恢复模型</b>", "• <code>beta</code>　用时 <code>7.9 分钟</code> · 延迟 <code>42 ms</code>", "<b>恢复时间</b>"} {
+		if !strings.Contains(recoveryText, want) {
+			t.Errorf("恢复卡片缺少 %q:\n%s", want, recoveryText)
+		}
+	}
+	if strings.Contains(recoveryText, "alpha") || strings.Count(recoveryText, "🟢") != 1 {
+		t.Fatalf("恢复卡片混入异常模型或重复状态图标:\n%s", recoveryText)
 	}
 	custom, err := RenderTemplate(`{{range .Changes}}{{.Error}}{{end}}`, context)
 	if err != nil || custom != "timeout &lt;5s" {
@@ -56,23 +73,20 @@ func TestNewTemplateContextDropsNetUnchangedModel(t *testing.T) {
 	}
 }
 
-func TestAppendStatusPageLinkIsLocalizedAndChecksLength(t *testing.T) {
+func TestStatusPageButtonMarkupIsLocalizedAndValidated(t *testing.T) {
 	t.Parallel()
-	english, err := appendStatusPageLink("message", "https://status.example.com/", LanguageEnglish)
+	english, err := statusPageButtonMarkup("https://status.example.com/", LanguageEnglish)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if english != "message\n\n<a href=\"https://status.example.com/\">Open status page</a>" {
-		t.Fatalf("英文探针页链接错误: %q", english)
+	if !strings.Contains(english, `"text":"Open status page"`) || !strings.Contains(english, `"url":"https://status.example.com/"`) {
+		t.Fatalf("英文探针页按钮错误: %q", english)
 	}
-	plain, err := appendStatusPageLink("message", "", DefaultLanguage)
-	if err != nil || plain != "message" {
-		t.Fatalf("空地址不应修改消息: text=%q err=%v", plain, err)
+	empty, err := statusPageButtonMarkup("", DefaultLanguage)
+	if err != nil || empty != "" {
+		t.Fatalf("空地址不应生成按钮: markup=%q err=%v", empty, err)
 	}
-	if _, err := appendStatusPageLink(strings.Repeat("界", TelegramMessageLimit), "https://status.example.com/", DefaultLanguage); !errors.Is(err, ErrMessageTooLong) {
-		t.Fatalf("追加链接后超长应失败: %v", err)
-	}
-	if _, err := appendStatusPageLink("message", "javascript:alert(1)", DefaultLanguage); !errors.Is(err, ErrInvalidStatusPageURL) {
+	if _, err := statusPageButtonMarkup("javascript:alert(1)", DefaultLanguage); !errors.Is(err, ErrInvalidStatusPageURL) {
 		t.Fatalf("危险探针页地址应被拒绝: %v", err)
 	}
 }

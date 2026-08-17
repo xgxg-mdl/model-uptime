@@ -83,8 +83,8 @@ func enqueueDeliveries(ctx context.Context, tx *sql.Tx, deliveries []notificatio
 	}
 	statement, err := tx.PrepareContext(ctx, `
 		INSERT INTO notification_outbox(
-			dedupe_key, subscription_id, message, payload_json, created_at_ms, available_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?)
+			dedupe_key, subscription_id, message, payload_json, status_page_url, created_at_ms, available_at_ms
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(dedupe_key) WHERE dedupe_key <> '' DO NOTHING`)
 	if err != nil {
 		return fmt.Errorf("准备通知 outbox 写入失败: %w", err)
@@ -108,7 +108,7 @@ func enqueueDeliveries(ctx context.Context, tx *sql.Tx, deliveries []notificatio
 			payloadJSON = string(encoded)
 		}
 		if _, err := statement.ExecContext(ctx,
-			delivery.DedupeKey, delivery.SubscriptionID, delivery.Text, payloadJSON,
+			delivery.DedupeKey, delivery.SubscriptionID, delivery.Text, payloadJSON, delivery.StatusPageURL,
 			createdAt.UnixMilli(), availableAt.UnixMilli(),
 		); err != nil {
 			return fmt.Errorf("写入通知 outbox 失败: %w", err)
@@ -173,7 +173,7 @@ func (s *Store) Claim(ctx context.Context, now, leaseUntil time.Time) (*notifica
 			ORDER BY candidate.available_at_ms, candidate.id
 			LIMIT 1
 		)
-		RETURNING id, dedupe_key, subscription_id, message, payload_json,
+		RETURNING id, dedupe_key, subscription_id, message, payload_json, status_page_url,
 		          created_at_ms, available_at_ms, attempts, permanent_fails,
 		          failure_config_fingerprint, last_error, lease_token, quarantined`,
 		leaseUntil.UnixMilli(), leaseToken, now.UnixMilli(),
@@ -184,7 +184,7 @@ func (s *Store) Claim(ctx context.Context, now, leaseUntil time.Time) (*notifica
 	var quarantined int
 	if err := row.Scan(
 		&delivery.ID, &delivery.DedupeKey, &delivery.SubscriptionID, &delivery.Text,
-		&payloadJSON, &createdAtMillis, &availableAtMillis, &delivery.Attempts,
+		&payloadJSON, &delivery.StatusPageURL, &createdAtMillis, &availableAtMillis, &delivery.Attempts,
 		&delivery.PermanentFails, &delivery.FailureConfigFingerprint,
 		&delivery.LastError, &delivery.LeaseToken, &quarantined,
 	); err != nil {

@@ -31,6 +31,14 @@ export function serviceActionsMarkup(service) {
   return `<div class="actions">${buttons}</div><div class="service-test-result feedback-in hidden" data-service-test-status="${id}" role="status" aria-live="polite"></div>`;
 }
 
+export function compareServiceOrder(left, right) {
+  const orderDifference = (left.sort_order || Number.MAX_SAFE_INTEGER)
+    - (right.sort_order || Number.MAX_SAFE_INTEGER);
+  if (orderDifference) return orderDifference;
+  return String(left.name || '').localeCompare(String(right.name || ''))
+    || String(left.id || '').localeCompare(String(right.id || ''));
+}
+
 export function renderServiceTableRow(service) {
   return `<tr data-service-row>
     <td><input type="checkbox" class="row-check" data-id="${escapeHTML(service.id)}" aria-label="select ${escapeHTML(service.name)}" /></td>
@@ -38,6 +46,7 @@ export function renderServiceTableRow(service) {
     <td>${escapeHTML(service.protocol)}</td>
     <td>${escapeHTML(service.model || '—')}</td>
     <td>${escapeHTML(service.provider || '—')}</td>
+    <td>${escapeHTML(service.sort_order || '—')}</td>
     <td>${service.interval_sec || 60}s</td>
     <td><span class="dot ${service.enabled ? 'on' : 'off'}"></span>${service.enabled ? 'on' : 'off'}</td>
     <td class="service-actions">${serviceActionsMarkup(service)}</td>
@@ -45,7 +54,7 @@ export function renderServiceTableRow(service) {
 }
 
 export function renderServiceListItem(service) {
-  const metadata = [service.protocol, service.model, service.provider].filter(Boolean).join(' · ');
+  const metadata = [service.protocol, service.model, service.provider, `order ${service.sort_order || '—'}`].filter(Boolean).join(' · ');
   return `<li class="service-item" data-service-row>
     <label class="service-item-select">
       <input type="checkbox" class="row-check" data-id="${escapeHTML(service.id)}" aria-label="select ${escapeHTML(service.name)}" />
@@ -178,11 +187,11 @@ export function createServicesController({
     const list = element('svc-list');
     try {
       const data = await api('/api/admin/services');
-      services = data.services || [];
+      services = (data.services || []).slice().sort(compareServiceOrder);
       if (editorState.editingID && !services.some(service => service.id === editorState.editingID)) closeEditor();
       onServicesChanged(services);
       if (!services.length) {
-        table.innerHTML = '<tr><td colspan="8" class="empty">no services yet — add one below</td></tr>';
+        table.innerHTML = '<tr><td colspan="9" class="empty">no services yet — add one below</td></tr>';
         list.innerHTML = '<li class="empty">no services yet — add one above</li>';
         updateBulkBar();
         return services;
@@ -197,7 +206,7 @@ export function createServicesController({
     } catch (error) {
       services = [];
       onServicesChanged(services);
-      table.innerHTML = `<tr><td colspan="8" class="empty">${escapeHTML(error.message)}</td></tr>`;
+      table.innerHTML = `<tr><td colspan="9" class="empty">${escapeHTML(error.message)}</td></tr>`;
       list.innerHTML = `<li class="empty">${escapeHTML(error.message)}</li>`;
       updateBulkBar();
       return services;
@@ -292,6 +301,7 @@ export function createServicesController({
     element('f-id-input').disabled = true;
     element('f-name').value = service.name || '';
     element('f-provider').value = service.provider || '';
+    element('f-sort-order').value = service.sort_order || '';
     element('f-protocol').value = service.protocol || 'chat';
     element('f-model').value = service.model || '';
     element('f-base').value = service.base_url || '';
@@ -320,6 +330,7 @@ export function createServicesController({
     element('f-protocol').value = 'chat';
     element('f-interval').value = 60;
     element('f-timeout').value = 15;
+    element('f-sort-order').value = '';
     element('f-enabled').checked = true;
     element('f-stream').checked = true;
     element('f-method').value = 'GET';
@@ -346,6 +357,7 @@ export function createServicesController({
       base_url: element('f-base').value.trim(),
       api_key: element('f-key').value,
       path: protocol === 'http' ? '' : element('f-path').value.trim(),
+      sort_order: Number.parseInt(element('f-sort-order').value, 10) || 0,
       interval_sec: Number.parseInt(element('f-interval').value, 10) || 60,
       timeout_sec: Number.parseInt(element('f-timeout').value, 10) || 15,
       enabled: element('f-enabled').checked,

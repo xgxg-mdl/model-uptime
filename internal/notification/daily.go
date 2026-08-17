@@ -143,6 +143,7 @@ type dailyModel struct {
 	ServiceID string
 	Model     string
 	Provider  string
+	SortOrder int
 	Stats     model.DailyStats
 }
 
@@ -179,7 +180,7 @@ func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, s
 		}
 		item := dailyModel{
 			ServiceID: id, Model: compactDailyLabel(name, 512),
-			Provider: compactDailyLabel(service.Provider, 256), Stats: stats,
+			Provider: compactDailyLabel(service.Provider, 256), SortOrder: service.SortOrder, Stats: stats,
 		}
 		if stats.ObservedSec() == 0 {
 			report.Unobserved++
@@ -202,9 +203,17 @@ func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, s
 		report.Models = append(report.Models, item)
 	}
 	sort.SliceStable(report.Models, func(i, j int) bool {
-		left, right := dailyStatusRank(report.Models[i]), dailyStatusRank(report.Models[j])
-		if left != right {
-			return left < right
+		leftObserved := report.Models[i].Stats.ObservedSec() > 0
+		rightObserved := report.Models[j].Stats.ObservedSec() > 0
+		if leftObserved != rightObserved {
+			return leftObserved
+		}
+		leftUptime, rightUptime := report.Models[i].Stats.UptimePct(), report.Models[j].Stats.UptimePct()
+		if leftUptime != rightUptime {
+			return leftUptime > rightUptime
+		}
+		if report.Models[i].SortOrder != report.Models[j].SortOrder {
+			return report.Models[i].SortOrder < report.Models[j].SortOrder
 		}
 		leftName := strings.ToLower(report.Models[i].Provider + "/" + report.Models[i].Model)
 		rightName := strings.ToLower(report.Models[j].Provider + "/" + report.Models[j].Model)
@@ -222,7 +231,8 @@ func buildDailyDeliveries(subscription compiledSubscription, dayStart time.Time,
 		}
 		return []Delivery{{
 			DedupeKey: dailyDedupeKey(dayStart, subscription.ID, 0), SubscriptionID: subscription.ID,
-			Text: text, CreatedAt: dayStart.AddDate(0, 0, 1), AvailableAt: time.Now(),
+			Text: text, StatusPageURL: strings.TrimSpace(statusPageURL),
+			CreatedAt: dayStart.AddDate(0, 0, 1), AvailableAt: time.Now(),
 		}}, nil
 	}
 	var deliveries []Delivery
@@ -241,7 +251,8 @@ func buildDailyDeliveries(subscription compiledSubscription, dayStart time.Time,
 		}
 		deliveries = append(deliveries, Delivery{
 			DedupeKey: dailyDedupeKey(dayStart, subscription.ID, len(deliveries)), SubscriptionID: subscription.ID,
-			Text: text, CreatedAt: dayStart.AddDate(0, 0, 1), AvailableAt: time.Now(),
+			Text: text, StatusPageURL: strings.TrimSpace(statusPageURL),
+			CreatedAt: dayStart.AddDate(0, 0, 1), AvailableAt: time.Now(),
 		})
 		current = []dailyModel{item}
 	}
@@ -251,7 +262,8 @@ func buildDailyDeliveries(subscription compiledSubscription, dayStart time.Time,
 	}
 	return append(deliveries, Delivery{
 		DedupeKey: dailyDedupeKey(dayStart, subscription.ID, len(deliveries)), SubscriptionID: subscription.ID,
-		Text: text, CreatedAt: dayStart.AddDate(0, 0, 1), AvailableAt: time.Now(),
+		Text: text, StatusPageURL: strings.TrimSpace(statusPageURL),
+		CreatedAt: dayStart.AddDate(0, 0, 1), AvailableAt: time.Now(),
 	}), nil
 }
 
@@ -298,7 +310,10 @@ func renderDailyText(language string, report dailyReport, models []dailyModel, s
 	if utf8.RuneCountInString(text) > TelegramMessageLimit {
 		return "", ErrMessageTooLong
 	}
-	return appendStatusPageLink(text, statusPageURL, language)
+	if _, err := validateStatusPageURL(statusPageURL); err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 func renderDailyModelCN(item dailyModel) string {
@@ -335,19 +350,6 @@ func dailyModelLabel(item dailyModel) string {
 		return modelName
 	}
 	return "<b>" + template.HTMLEscapeString(item.Provider) + "</b> / " + modelName
-}
-
-func dailyStatusRank(item dailyModel) int {
-	if item.Stats.ObservedSec() == 0 {
-		return 3
-	}
-	if !item.Stats.LastOK() {
-		return 0
-	}
-	if item.Stats.DownSec > 0 {
-		return 1
-	}
-	return 2
 }
 
 func compactDailyLabel(value string, maxRunes int) string {

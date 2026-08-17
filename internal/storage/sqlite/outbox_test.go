@@ -232,7 +232,7 @@ func TestOutboxQuarantinePreservesPayloadAndDoesNotBlockFIFO(t *testing.T) {
 		StatusPageURL: "https://status.example.com/",
 	}
 	if err := store.Enqueue(ctx, []notification.Delivery{
-		{DedupeKey: "bad", SubscriptionID: "ops", Text: "bad", RenderPayload: payload, CreatedAt: now, AvailableAt: now},
+		{DedupeKey: "bad", SubscriptionID: "ops", Text: "bad", StatusPageURL: "https://status.example.com/", RenderPayload: payload, CreatedAt: now, AvailableAt: now},
 		{DedupeKey: "next", SubscriptionID: "ops", Text: "next", CreatedAt: now, AvailableAt: now},
 	}); err != nil {
 		t.Fatal(err)
@@ -276,6 +276,7 @@ func TestOutboxQuarantinePreservesPayloadAndDoesNotBlockFIFO(t *testing.T) {
 	}
 	if recovered.Quarantined || recovered.PermanentFails != 0 || recovered.RenderPayload == nil ||
 		len(recovered.RenderPayload.Changes) != 1 || recovered.RenderPayload.Changes[0].Model != "alpha" ||
+		recovered.StatusPageURL != "https://status.example.com/" ||
 		recovered.RenderPayload.StatusPageURL != payload.StatusPageURL ||
 		!recovered.RenderPayload.ChangedAt.Equal(payload.ChangedAt) ||
 		recovered.FailureConfigFingerprint != "" {

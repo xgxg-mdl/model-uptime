@@ -43,6 +43,8 @@ func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T)
 		{ID: "verbose-english", Language: LanguageEnglish, Template: legacyVerboseEnglishTemplate},
 		{ID: "compact-chinese", Language: DefaultLanguage, Template: legacyCompactChineseTemplate},
 		{ID: "compact-english", Language: LanguageEnglish, Template: legacyCompactEnglishTemplate},
+		{ID: "card-chinese", Language: DefaultLanguage, Template: legacyCardChineseTemplate},
+		{ID: "card-english", Language: LanguageEnglish, Template: legacyCardEnglishTemplate},
 	}}
 	NormalizeConfig(&config)
 	for _, index := range []int{0, 1} {
@@ -67,6 +69,9 @@ func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T)
 	}
 	if config.Subscriptions[10].Template != DefaultTemplate || config.Subscriptions[11].Template != EnglishTemplate {
 		t.Fatalf("v0.10 紧凑模板应升级为新版模板: %+v %+v", config.Subscriptions[10], config.Subscriptions[11])
+	}
+	if config.Subscriptions[12].Template != DefaultTemplate || config.Subscriptions[13].Template != EnglishTemplate {
+		t.Fatalf("v0.10.1 卡片模板应升级为分类模板: %+v %+v", config.Subscriptions[12], config.Subscriptions[13])
 	}
 }
 
@@ -163,7 +168,7 @@ func TestUpdateConfigIsUsedByFollowingNotifications(t *testing.T) {
 	closeNotifier(t, n)
 	mu.Lock()
 	defer mu.Unlock()
-	if len(paths) != 1 || paths[0] != "/botnew-token/sendMessage" {
+	if len(paths) != 2 || paths[0] != "/botnew-token/sendMessage" || paths[1] != "/botnew-token/sendMessage" {
 		t.Fatalf("热更新未生效: %v", paths)
 	}
 }

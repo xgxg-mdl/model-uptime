@@ -48,28 +48,38 @@ func buildDeliveries(config runtimeConfig, batch deliveryBatch, dedupeKey delive
 		if len(selected) == 0 {
 			continue
 		}
-		sortChangesForDelivery(selected)
-		shards, err := renderDeliveryShards(subscription, changedAt, selected, batch.StatusPageURL)
+		availableAt := time.Now()
+		statusPageURL, err := validateStatusPageURL(batch.StatusPageURL)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("渲染订阅 %q: %w", subscription.ID, err))
 			continue
 		}
-		availableAt := time.Now()
-		for shardIndex, shard := range shards {
-			payload := &RenderPayload{
-				ChangedAt: changedAt, Changes: append([]model.StatusChange(nil), shard.changes...),
-				StatusPageURL: batch.StatusPageURL,
+		deliveryIndex := 0
+		for _, statusChanges := range splitChangesByStatus(selected) {
+			sortChangesForDelivery(statusChanges)
+			shards, err := renderDeliveryShards(subscription, changedAt, statusChanges, batch.StatusPageURL)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("渲染订阅 %q: %w", subscription.ID, err))
+				continue
 			}
-			deliveries = append(deliveries, Delivery{
-				DedupeKey: dedupeKey(
-					subscription.ID, changedAt, shardIndex, shard.changes,
-				),
-				SubscriptionID: subscription.ID,
-				Text:           shard.text,
-				RenderPayload:  payload,
-				CreatedAt:      changedAt,
-				AvailableAt:    availableAt,
-			})
+			for _, shard := range shards {
+				payload := &RenderPayload{
+					ChangedAt: changedAt, Changes: append([]model.StatusChange(nil), shard.changes...),
+					StatusPageURL: statusPageURL,
+				}
+				deliveries = append(deliveries, Delivery{
+					DedupeKey: dedupeKey(
+						subscription.ID, changedAt, deliveryIndex, shard.changes,
+					),
+					SubscriptionID: subscription.ID,
+					Text:           shard.text,
+					StatusPageURL:  statusPageURL,
+					RenderPayload:  payload,
+					CreatedAt:      changedAt,
+					AvailableAt:    availableAt,
+				})
+				deliveryIndex++
+			}
 		}
 	}
 	return deliveries, errors.Join(errs...)
@@ -131,7 +141,10 @@ func renderDeliveryText(
 	if err != nil {
 		return "", err
 	}
-	return appendStatusPageLink(text, statusPageURL, subscription.Language)
+	if _, err := validateStatusPageURL(statusPageURL); err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 func finalChanges(changes []model.StatusChange) []model.StatusChange {
@@ -186,8 +199,40 @@ func selectChanges(changes []model.StatusChange, serviceIDs []string) []model.St
 	return selected
 }
 
+// splitChangesByStatus 固定先异常、后恢复，确保同一聚合窗口不会把两种状态
+// 混进一张卡片，同时保持每类消息独立分片。
+func splitChangesByStatus(changes []model.StatusChange) [][]model.StatusChange {
+	down := make([]model.StatusChange, 0, len(changes))
+	recovered := make([]model.StatusChange, 0, len(changes))
+	for _, change := range changes {
+		if change.Status == "up" {
+			recovered = append(recovered, change)
+		} else {
+			down = append(down, change)
+		}
+	}
+	groups := make([][]model.StatusChange, 0, 2)
+	if len(down) > 0 {
+		groups = append(groups, down)
+	}
+	if len(recovered) > 0 {
+		groups = append(groups, recovered)
+	}
+	return groups
+}
+
 func sortChangesForDelivery(changes []model.StatusChange) {
 	sort.SliceStable(changes, func(i, j int) bool {
+		leftOrder, rightOrder := changes[i].SortOrder, changes[j].SortOrder
+		if leftOrder <= 0 {
+			leftOrder = int(^uint(0) >> 1)
+		}
+		if rightOrder <= 0 {
+			rightOrder = int(^uint(0) >> 1)
+		}
+		if leftOrder != rightOrder {
+			return leftOrder < rightOrder
+		}
 		left, right := strings.ToLower(changes[i].Model), strings.ToLower(changes[j].Model)
 		if left == right {
 			return changes[i].ServiceID < changes[j].ServiceID
@@ -245,7 +290,8 @@ func (n *Notifier) resolveDelivery(delivery *Delivery) (sendJob, bool, error) {
 		}
 		job := sendJob{
 			botToken: config.botToken, chatID: subscription.ChatID,
-			text: delivery.Text, name: delivery.SubscriptionID,
+			text: delivery.Text, statusPageURL: delivery.StatusPageURL,
+			language: subscription.Language, name: delivery.SubscriptionID,
 			configFingerprint: subscription.fingerprint,
 		}
 		if delivery.RenderPayload != nil {

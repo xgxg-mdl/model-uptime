@@ -68,6 +68,36 @@ Down {{.DownCount}} · Recovered {{.RecoveryCount}}
 {{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · {{durationEN .OutageDurationSec}}{{end}}
 {{end}}{{end}}`
 
+const legacyCardChineseTemplate = `{{if and .DownModels .RecoveredModels}}⚠️ <b>模型状态更新</b>{{else if .DownModels}}🔴 <b>模型异常告警</b>{{else}}🟢 <b>模型恢复通知</b>{{end}}
+
+<blockquote><b>时间</b>　<code>{{.ChangedTime}}</code>（北京时间）
+<b>变化</b>　🔴 {{.DownCount}} 异常 · 🟢 {{.RecoveryCount}} 恢复
+{{range .DownModels}}<b>异常</b>　🔴 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
+{{end}}{{range .RecoveredModels}}<b>恢复</b>　🟢 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}
+<b>用时</b>　<code>{{durationCN .OutageDurationSec}}</code>{{if .LatencyMS}} · 延迟 <code>{{.LatencyMS}} ms</code>{{end}}{{else if .LatencyMS}}
+<b>延迟</b>　<code>{{.LatencyMS}} ms</code>{{end}}
+{{end}}</blockquote>{{if .DownModels}}
+
+<blockquote expandable><b>异常详情</b>
+{{range .DownModels}}<b>模型</b>　{{if .Provider}}{{.Provider}} / {{end}}<code>{{.Model}}</code>
+<b>原因</b>　{{if .Error}}{{.Error}}{{else}}未返回错误详情{{end}}
+{{end}}</blockquote>{{end}}`
+
+const legacyCardEnglishTemplate = `{{if and .DownModels .RecoveredModels}}⚠️ <b>Model status update</b>{{else if .DownModels}}🔴 <b>Model incident alert</b>{{else}}🟢 <b>Model recovery</b>{{end}}
+
+<blockquote><b>Time</b>　<code>{{.ChangedTime}}</code> (UTC+8)
+<b>Changes</b>　🔴 {{.DownCount}} down · 🟢 {{.RecoveryCount}} recovered
+{{range .DownModels}}<b>Down</b>　🔴 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
+{{end}}{{range .RecoveredModels}}<b>Recovered</b>　🟢 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}
+<b>Duration</b>　<code>{{durationEN .OutageDurationSec}}</code>{{if .LatencyMS}} · latency <code>{{.LatencyMS}} ms</code>{{end}}{{else if .LatencyMS}}
+<b>Latency</b>　<code>{{.LatencyMS}} ms</code>{{end}}
+{{end}}</blockquote>{{if .DownModels}}
+
+<blockquote expandable><b>Incident details</b>
+{{range .DownModels}}<b>Model</b>　{{if .Provider}}{{.Provider}} / {{end}}<code>{{.Model}}</code>
+<b>Reason</b>　{{if .Error}}{{.Error}}{{else}}No error details returned{{end}}
+{{end}}</blockquote>{{end}}`
+
 // legacyVerbose*Template 是 v0.6 期间写入配置的默认模板。仅精确匹配时升级，
 // 以免覆盖用户刻意保留每日字段的自定义模板。
 const legacyVerboseChineseTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
@@ -200,6 +230,8 @@ func normalizeSubscription(subscription *Subscription) {
 		templateText == strings.TrimSpace(legacyEnglishTemplate) ||
 		templateText == strings.TrimSpace(legacyCompactChineseTemplate) ||
 		templateText == strings.TrimSpace(legacyCompactEnglishTemplate) ||
+		templateText == strings.TrimSpace(legacyCardChineseTemplate) ||
+		templateText == strings.TrimSpace(legacyCardEnglishTemplate) ||
 		templateText == strings.TrimSpace(legacyVerboseChineseTemplate) ||
 		templateText == strings.TrimSpace(legacyVerboseEnglishTemplate) ||
 		templateText == strings.TrimSpace(legacyStatisticsTemplate(DefaultLanguage)) ||

@@ -172,7 +172,7 @@ func (n *Notifier) UpdateConfig(config Config) error {
 	return nil
 }
 
-// SendTest 同步发送一条包含异常和恢复示例的消息，便于管理 API 返回准确结果。
+// SendTest 同步发送彼此独立的异常与恢复示例，便于管理 API 校验两种卡片。
 func (n *Notifier) SendTest(ctx context.Context, subscriptionID, statusPageURL string) error {
 	if !n.beginOperation() {
 		return ErrClosed
@@ -198,23 +198,25 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID, statusPageURL s
 		if subscription.Language == DefaultLanguage {
 			downModel, recoveredModel, provider, probeError = "示例异常模型", "示例恢复模型", "示例提供商", "探测超时"
 		}
-		templateContext := NewTemplateContext(now, []model.StatusChange{
-			{ServiceID: "example-down", Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix(), TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
-			{ServiceID: "example-recovered", Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix(), OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
-		})
-		text, err := executeTemplate(subscription.template, templateContext)
-		if err != nil {
-			return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
+		testChanges := []model.StatusChange{
+			{ServiceID: "example-down", SortOrder: 1, Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix(), TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
+			{ServiceID: "example-recovered", SortOrder: 2, Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix(), OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
 		}
-		text, err = appendStatusPageLink(text, statusPageURL, subscription.Language)
-		if err != nil {
-			return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
+		for _, changes := range splitChangesByStatus(testChanges) {
+			text, err := renderDeliveryText(subscription, now, changes, statusPageURL)
+			if err != nil {
+				return fmt.Errorf("渲染订阅 %q: %w", subscriptionID, err)
+			}
+			if err := n.sendWithRetry(operationCtx, sendJob{
+				botToken: config.botToken, chatID: subscription.ChatID,
+				text: text, statusPageURL: statusPageURL, language: subscription.Language,
+				name:              subscription.ID,
+				configFingerprint: subscription.fingerprint,
+			}); err != nil {
+				return err
+			}
 		}
-		return n.sendWithRetry(operationCtx, sendJob{
-			botToken: config.botToken, chatID: subscription.ChatID,
-			text: text, name: subscription.ID,
-			configFingerprint: subscription.fingerprint,
-		})
+		return nil
 	}
 	return fmt.Errorf("%w: %s", ErrSubscriptionNotFound, subscriptionID)
 }
@@ -252,7 +254,8 @@ func (n *Notifier) SendDailyTest(ctx context.Context, subscriptionID, statusPage
 			return fmt.Errorf("渲染订阅 %q 日报测试: %w", subscriptionID, err)
 		}
 		return n.sendWithRetry(operationCtx, sendJob{
-			botToken: config.botToken, chatID: subscription.ChatID, text: text, name: subscription.ID,
+			botToken: config.botToken, chatID: subscription.ChatID, text: text,
+			statusPageURL: statusPageURL, language: subscription.Language, name: subscription.ID,
 			configFingerprint: subscription.fingerprint,
 		})
 	}

@@ -100,15 +100,27 @@ func TestDailyReporterSummarizesSelectedModelsAndDoesNotDuplicate(t *testing.T) 
 		t.Fatalf("日报投递数 = %d，期望 1", len(repository.deliveries))
 	}
 	text := repository.deliveries[0].Text
-	for _, want := range []string{"📊 <b>模型运行日报</b>\n\n<blockquote>", "<b>日期</b>　<code>2026-08-16</code>（北京时间）", "<b>范围</b>　4 个模型 · 🟢 1 正常 · 🟡 1 已恢复 · 🔴 1 异常 · ⚪ 1 无数据", "<b>可用率</b>　<code>", "<b>故障</b>　2 次", "<b>模型状态</b>\n<blockquote>", "🟡 <b>A</b> / <code>alpha</code>", "🔴 <b>D</b> / <code>delta</code>", "查看探针页"} {
+	for _, want := range []string{"📊 <b>模型运行日报</b>\n\n<blockquote>", "<b>日期</b>　<code>2026-08-16</code>（北京时间）", "<b>范围</b>　4 个模型 · 🟢 1 正常 · 🟡 1 已恢复 · 🔴 1 异常 · ⚪ 1 无数据", "<b>可用率</b>　<code>", "<b>故障</b>　2 次", "<b>模型状态</b>\n<blockquote>", "🟡 <b>A</b> / <code>alpha</code>", "🔴 <b>D</b> / <code>delta</code>"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("日报缺少 %q:\n%s", want, text)
 		}
+	}
+	if repository.deliveries[0].StatusPageURL != "https://status.example.com/" || strings.Contains(text, "查看探针页") {
+		t.Fatalf("探针页必须作为按钮数据而非正文 footer: delivery=%+v", repository.deliveries[0])
 	}
 	for _, want := range []string{"🟢 <b>B</b> / <code>beta</code>", "⚪ <b>C</b> / <code>gamma</code>"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("日报必须列出所有订阅模型，缺少 %q:\n%s", want, text)
 		}
+	}
+	positions := []int{
+		strings.Index(text, "<code>beta</code>"),
+		strings.Index(text, "<code>alpha</code>"),
+		strings.Index(text, "<code>delta</code>"),
+		strings.Index(text, "<code>gamma</code>"),
+	}
+	if positions[0] < 0 || positions[1] <= positions[0] || positions[2] <= positions[1] || positions[3] <= positions[2] {
+		t.Fatalf("日报未按可用率从高到低排序，且无数据未置底: positions=%v\n%s", positions, text)
 	}
 }
 

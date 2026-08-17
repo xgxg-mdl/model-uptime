@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -17,7 +18,7 @@ func TestSendTestRetriesTransientFailureThreeTimes(t *testing.T) {
 		attempt := attempts.Add(1)
 		status := http.StatusInternalServerError
 		body := `{"ok":false,"description":"temporary"}`
-		if attempt == 4 {
+		if attempt >= 4 {
 			status = http.StatusOK
 			body = `{"ok":true}`
 		}
@@ -31,8 +32,8 @@ func TestSendTestRetriesTransientFailureThreeTimes(t *testing.T) {
 	if err := n.SendTest(context.Background(), "ops", ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := attempts.Load(); got != 4 {
-		t.Fatalf("期望初次发送加 3 次重试，实际 %d 次", got)
+	if got := attempts.Load(); got != 5 {
+		t.Fatalf("期望异常卡片重试 3 次后再发送恢复卡片，实际 %d 次", got)
 	}
 }
 
@@ -85,6 +86,36 @@ func TestTelegramRetryAfterIsClassified(t *testing.T) {
 	deliveryErr := n.send(context.Background(), sendJob{botToken: "token", chatID: "chat", text: "message"})
 	if deliveryErr == nil || !deliveryErr.retryable || deliveryErr.retryAfter != 2*time.Second {
 		t.Fatalf("429 分类错误: %+v", deliveryErr)
+	}
+}
+
+func TestSendUsesInlineStatusPageButton(t *testing.T) {
+	t.Parallel()
+	var replyMarkup string
+	client := httpClientFunc(func(request *http.Request) (*http.Response, error) {
+		if err := request.ParseForm(); err != nil {
+			return nil, err
+		}
+		replyMarkup = request.Form.Get("reply_markup")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Header:     make(http.Header),
+		}, nil
+	})
+	notifier, err := New(Options{Client: client, Repository: NewMemoryOutbox(), Logger: discardLogger()}, validConfig("token", "chat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeNotifier(t, notifier)
+	if deliveryErr := notifier.send(context.Background(), sendJob{
+		botToken: "token", chatID: "chat", text: "message",
+		statusPageURL: "https://status.example.com/", language: DefaultLanguage,
+	}); deliveryErr != nil {
+		t.Fatal(deliveryErr)
+	}
+	if !strings.Contains(replyMarkup, `"text":"查看探针页"`) || !strings.Contains(replyMarkup, `"url":"https://status.example.com/"`) {
+		t.Fatalf("探针页没有使用内联按钮: %q", replyMarkup)
 	}
 }
 

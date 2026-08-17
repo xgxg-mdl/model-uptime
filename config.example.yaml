@@ -44,20 +44,21 @@ telegram:
       # 留空时自动使用以下默认模板。模板采用 Go html/template 语法，消息以
       # Telegram HTML 发送；变量值会自动转义。
       template: |
-        {{if and .DownModels .RecoveredModels}}⚠️ <b>模型状态更新</b>{{else if .DownModels}}🔴 <b>模型异常告警</b>{{else}}🟢 <b>模型恢复通知</b>{{end}}
+        {{if .DownModels}}🔴 <b>模型异常告警 · {{.DownCount}}</b>
 
-        <blockquote><b>时间</b>　<code>{{.ChangedTime}}</code>（北京时间）
-        <b>变化</b>　🔴 {{.DownCount}} 异常 · 🟢 {{.RecoveryCount}} 恢复
-        {{range .DownModels}}<b>异常</b>　🔴 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
-        {{end}}{{range .RecoveredModels}}<b>恢复</b>　🟢 {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}
-        <b>用时</b>　<code>{{durationCN .OutageDurationSec}}</code>{{if .LatencyMS}} · 延迟 <code>{{.LatencyMS}} ms</code>{{end}}{{else if .LatencyMS}}
-        <b>延迟</b>　<code>{{.LatencyMS}} ms</code>{{end}}
-        {{end}}</blockquote>{{if .DownModels}}
+        <blockquote><b>异常模型</b>
+        {{range .DownModels}}• {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>
+        {{end}}
+        <b>检测时间</b>　<code>{{.ChangedTime}}</code>（北京时间）</blockquote>
 
         <blockquote expandable><b>异常详情</b>
-        {{range .DownModels}}<b>模型</b>　{{if .Provider}}{{.Provider}} / {{end}}<code>{{.Model}}</code>
-        <b>原因</b>　{{if .Error}}{{.Error}}{{else}}未返回错误详情{{end}}
-        {{end}}</blockquote>{{end}}
+        {{range .DownModels}}• <code>{{.Model}}</code>　原因：{{if .Error}}{{.Error}}{{else}}未返回错误详情{{end}}
+        {{end}}</blockquote>{{else}}🟢 <b>模型恢复通知 · {{.RecoveryCount}}</b>
+
+        <blockquote><b>恢复模型</b>
+        {{range .RecoveredModels}}• {{if .Provider}}<b>{{.Provider}}</b> / {{end}}<code>{{.Model}}</code>{{if .OutageDurationSec}}　用时 <code>{{durationCN .OutageDurationSec}}</code>{{end}}{{if .LatencyMS}} · 延迟 <code>{{.LatencyMS}} ms</code>{{end}}
+        {{end}}
+        <b>恢复时间</b>　<code>{{.ChangedTime}}</code>（北京时间）</blockquote>{{end}}
 
 # 监控目标。协议支持：
 #   chat     -> POST {base_url}/v1/chat/completions (OpenAI)
@@ -70,6 +71,7 @@ services:
     provider: OpenAI         # 提供商标签（仅展示）
     protocol: chat
     model: gpt-5.4           # 发给 API 的模型 ID
+    sort_order: 1            # 状态变化通知中的模型顺序；数字越小越靠前
     base_url: https://api.openai.com/v1
     api_key: sk-xxxxxxxxxxxx
     interval_sec: 60
@@ -83,6 +85,7 @@ services:
     provider: Anthropic
     protocol: message
     model: claude-sonnet-5
+    sort_order: 2
     base_url: https://api.anthropic.com/v1
     api_key: sk-ant-xxxxxxxxxxxx
     interval_sec: 60
@@ -96,6 +99,7 @@ services:
     provider: xAI
     protocol: response
     model: grok-4
+    sort_order: 3
     base_url: https://api.x.ai/v1
     api_key: xai-xxxxxxxxxxxx
     interval_sec: 60
@@ -108,6 +112,7 @@ services:
   - id: health-page
     name: my-health-endpoint
     provider: Self
+    sort_order: 4
     protocol: http
     base_url: https://example.com/health
     method: GET

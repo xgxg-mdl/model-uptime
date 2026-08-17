@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,6 +23,19 @@ func TestUptimePct(t *testing.T) {
 		if got := uptimePct(tc.history); got != tc.want {
 			t.Errorf("%s: uptimePct = %v，期望 %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestBuildChangeCarriesServiceSortOrder(t *testing.T) {
+	t.Parallel()
+	scheduler := &Scheduler{}
+	result := model.ProbeResult{OK: false, TS: time.Now().Unix()}
+	change := scheduler.buildChange(context.Background(), "svc-a", model.Service{
+		Name: "Model A", SortOrder: 42,
+	}, true, []model.ProbeResult{{OK: true, TS: result.TS - 60}}, result)
+
+	if change.SortOrder != 42 {
+		t.Fatalf("状态变化排序值 = %d，期望 42", change.SortOrder)
 	}
 }
 

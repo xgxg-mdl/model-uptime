@@ -18,7 +18,7 @@ type Store struct {
 	db *sql.DB
 }
 
-const currentSchemaVersion = 7
+const currentSchemaVersion = 8
 
 // Open 打开（必要时创建）数据库并初始化表结构。
 func Open(path string) (*Store, error) {
@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
     subscription_id TEXT NOT NULL,
 	message         TEXT NOT NULL,
 	payload_json    TEXT NOT NULL DEFAULT '',
+	status_page_url TEXT NOT NULL DEFAULT '',
 	created_at_ms   INTEGER NOT NULL,
 	available_at_ms INTEGER NOT NULL,
 	attempts        INTEGER NOT NULL DEFAULT 0,
@@ -194,6 +195,7 @@ func migrateNotificationOutbox(ctx context.Context, tx *sql.Tx) error {
 		sql    string
 	}{
 		{column: "payload_json", sql: `ALTER TABLE notification_outbox ADD COLUMN payload_json TEXT NOT NULL DEFAULT ''`},
+		{column: "status_page_url", sql: `ALTER TABLE notification_outbox ADD COLUMN status_page_url TEXT NOT NULL DEFAULT ''`},
 		{column: "permanent_fails", sql: `ALTER TABLE notification_outbox ADD COLUMN permanent_fails INTEGER NOT NULL DEFAULT 0`},
 		{column: "quarantined", sql: `ALTER TABLE notification_outbox ADD COLUMN quarantined INTEGER NOT NULL DEFAULT 0`},
 		{column: "failure_config_fingerprint", sql: `ALTER TABLE notification_outbox ADD COLUMN failure_config_fingerprint TEXT NOT NULL DEFAULT ''`},

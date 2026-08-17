@@ -144,6 +144,25 @@ func (c *Config) Normalize() {
 	for i := range c.Services {
 		c.Services[i].Normalize()
 	}
+	normalizeServiceSortOrders(c.Services)
+}
+
+// normalizeServiceSortOrders 将旧配置中缺失的排序值依次追加到现有最大值之后，
+// 既保留原列表顺序，也不会覆盖用户显式设置的排序值。
+func normalizeServiceSortOrders(services []model.Service) {
+	maxOrder := 0
+	for _, service := range services {
+		if service.SortOrder > maxOrder {
+			maxOrder = service.SortOrder
+		}
+	}
+	for index := range services {
+		if services[index].SortOrder != 0 {
+			continue
+		}
+		maxOrder++
+		services[index].SortOrder = maxOrder
+	}
 }
 
 // Validate 校验整份配置。

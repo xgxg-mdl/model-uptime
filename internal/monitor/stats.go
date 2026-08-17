@@ -45,7 +45,7 @@ func (s *Scheduler) buildChange(ctx context.Context, id string, service model.Se
 		modelName = service.Name
 	}
 	return &model.StatusChange{
-		ServiceID: id, Model: modelName, Provider: service.Provider, Protocol: service.Protocol,
+		ServiceID: id, SortOrder: service.SortOrder, Model: modelName, Provider: service.Provider, Protocol: service.Protocol,
 		OK: r.OK, LatencyMS: r.LatencyMS, Error: r.Error, UptimePct: uptimePct(history),
 		Samples: len(history), PreviousStatus: previousStatus, Status: status, LastTS: r.TS,
 		OutageDurationSec: outageDuration, TodayUpSec: today.UpSec, TodayDownSec: today.DownSec,

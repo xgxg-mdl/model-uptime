@@ -88,8 +88,8 @@
         </div>
         <div class="service-table-wrap">
           <table class="service-table">
-            <thead><tr><th scope="col" style="width:28px;"></th><th scope="col">name</th><th scope="col">protocol</th><th scope="col">model</th><th scope="col">provider</th><th scope="col">interval</th><th scope="col">enabled</th><th scope="col">actions</th></tr></thead>
-            <tbody id="svc-table"><tr><td colspan="8" class="empty">loading…</td></tr></tbody>
+            <thead><tr><th scope="col" style="width:28px;"></th><th scope="col">name</th><th scope="col">protocol</th><th scope="col">model</th><th scope="col">provider</th><th scope="col">order</th><th scope="col">interval</th><th scope="col">enabled</th><th scope="col">actions</th></tr></thead>
+            <tbody id="svc-table"><tr><td colspan="9" class="empty">loading…</td></tr></tbody>
           </table>
         </div>
         <ul class="service-list" id="svc-list" aria-label="monitor services">
@@ -121,6 +121,11 @@
               <label>Provider</label>
               <input id="f-provider" placeholder="OpenAI / Anthropic / xAI …" autocomplete="off" />
               <span class="hint">仅展示用标签</span>
+            </div>
+            <div class="field">
+              <label>Notification order</label>
+              <input id="f-sort-order" type="number" min="1" step="1" placeholder="auto" />
+              <span class="hint">Lower numbers appear first; new services default to the end.</span>
             </div>
             <div class="field llm">
               <label>Model</label>
@@ -277,7 +282,7 @@
               <div class="template-help">
                 Summary: <code>{{.ChangedAt}}</code> <code>{{.ChangedTime}}</code> <code>{{.DownCount}}</code> <code>{{.RecoveryCount}}</code> <code>{{.TotalChanges}}</code><br />
                 Lists: <code>{{range .DownModels}}…{{end}}</code> <code>{{range .RecoveredModels}}…{{end}}</code> <code>{{range .Changes}}…{{end}}</code><br />
-                Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code> <code>{{.OutageDurationSec}}</code> <code>{{.TodayUpSec}}</code> <code>{{.TodayDownSec}}</code> <code>{{.TodayDownCount}}</code> <code>{{.TodayUptimePct}}</code><br />
+                Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.SortOrder}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code> <code>{{.OutageDurationSec}}</code> <code>{{.TodayUpSec}}</code> <code>{{.TodayDownSec}}</code> <code>{{.TodayDownCount}}</code> <code>{{.TodayUptimePct}}</code><br />
                 Helpers: <code>{{formatBeijing .LastTS}}</code> <code>{{beijingDate .LastTS}}</code> <code>{{durationCN .TodayUpSec}}</code> <code>{{durationEN .TodayUpSec}}</code>
               </div>
             </div>

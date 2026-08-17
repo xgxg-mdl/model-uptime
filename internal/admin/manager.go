@@ -145,6 +145,9 @@ func (m *Manager) CreateService(service model.Service) (model.Service, error) {
 	if _, exists := next.ServiceByID(service.ID); exists {
 		return model.Service{}, conflict("服务 id 已存在: %s", service.ID)
 	}
+	if service.SortOrder == 0 {
+		service.SortOrder = nextServiceSortOrder(next.Services)
+	}
 	next.Services = append(next.Services, service)
 	if err := m.commitLocked(next); err != nil {
 		return model.Service{}, err
@@ -169,6 +172,9 @@ func (m *Manager) UpdateService(id string, service model.Service) (model.Service
 	}
 	if service.ID != id {
 		return model.Service{}, invalid("服务 id 创建后不可修改")
+	}
+	if service.SortOrder == 0 {
+		service.SortOrder = previous.SortOrder
 	}
 	service.Normalize()
 	if err := service.Validate(); err != nil {
@@ -196,6 +202,7 @@ func (m *Manager) DuplicateService(id string) (model.Service, error) {
 		duplicate.ID = fmt.Sprintf("%s%d", base, suffix)
 	}
 	duplicate.Name += " (copy)"
+	duplicate.SortOrder = nextServiceSortOrder(next.Services)
 	next.Services = append(next.Services, duplicate)
 	if err := m.commitLocked(next); err != nil {
 		return model.Service{}, err
@@ -373,6 +380,16 @@ func serviceIndex(services []model.Service, id string) int {
 		}
 	}
 	return -1
+}
+
+func nextServiceSortOrder(services []model.Service) int {
+	maxOrder := 0
+	for _, service := range services {
+		if service.SortOrder > maxOrder {
+			maxOrder = service.SortOrder
+		}
+	}
+	return maxOrder + 1
 }
 
 func copyBool(value *bool) *bool {

@@ -107,6 +107,36 @@ services:
 	}
 }
 
+func TestLoadAssignsMissingServiceSortOrdersAfterExplicitValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `services:
+  - id: first
+    name: first
+    protocol: http
+    base_url: https://first.example.com
+  - id: pinned
+    name: pinned
+    protocol: http
+    base_url: https://pinned.example.com
+    sort_order: 7
+  - id: last
+    name: last
+    protocol: http
+    base_url: https://last.example.com
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := settings.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := []int{config.Services[0].SortOrder, config.Services[1].SortOrder, config.Services[2].SortOrder}
+	if orders[0] != 8 || orders[1] != 7 || orders[2] != 9 {
+		t.Fatalf("缺失排序值没有按原顺序追加到最大值之后: %v", orders)
+	}
+}
+
 func TestValidateRejectsBadConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

@@ -86,8 +86,8 @@ func TestTransitionUsesCurrentCompleteConfig(t *testing.T) {
 	if len(deliveries) != 1 || deliveries[0].SubscriptionID != "current" {
 		t.Fatalf("transition 未使用当前订阅快照: %+v", deliveries)
 	}
-	want := "current|alpha\n\n<a href=\"https://status.example.com/?view=full&amp;model=a\">Open status page</a>"
-	if deliveries[0].Text != want {
+	want := "current|alpha"
+	if deliveries[0].Text != want || deliveries[0].StatusPageURL != "https://status.example.com/?view=full&model=a" {
 		t.Fatalf("transition 未使用当前模板、语言或页面地址: %q", deliveries[0].Text)
 	}
 }
@@ -297,8 +297,8 @@ func TestTransitionCommitRetryKeepsStableMessageShards(t *testing.T) {
 		if runes := utf8.RuneCountInString(delivery.Text); runes > TelegramMessageLimit {
 			t.Fatalf("分片字符数 = %d，超过 Telegram 限制", runes)
 		}
-		if strings.Count(delivery.Text, "Open status page") != 1 {
-			t.Fatalf("分片未包含且仅包含一个状态页链接: %q", delivery.Text)
+		if delivery.StatusPageURL != "https://status.example.com/?view=full" || strings.Contains(delivery.Text, "Open status page") {
+			t.Fatalf("分片未把状态页保存为按钮数据: %+v", delivery)
 		}
 		rendered.WriteString(delivery.Text)
 	}

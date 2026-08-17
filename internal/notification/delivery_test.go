@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,16 +40,37 @@ func TestBuildDeliveriesAggregatesPerSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(deliveries) != 1 {
-		t.Fatalf("投递数 = %d，期望 1: %+v", len(deliveries), deliveries)
+	if len(deliveries) != 2 {
+		t.Fatalf("混合状态必须拆成两条投递，实际 %d: %+v", len(deliveries), deliveries)
 	}
-	delivery := deliveries[0]
-	wantText := "2|D:alpha;R:beta;\n\n<a href=\"https://status.example.com/?model=a&amp;view=full\">查看探针页</a>"
-	if delivery.SubscriptionID != "ops" || delivery.DedupeKey != "ops-0" || delivery.Text != wantText {
-		t.Fatalf("聚合投递错误: %+v", delivery)
+	wantTexts := []string{
+		"1|D:alpha;",
+		"1|R:beta;",
 	}
-	if delivery.RenderPayload == nil || len(delivery.RenderPayload.Changes) != 2 {
-		t.Fatalf("投递缺少重渲染数据: %+v", delivery.RenderPayload)
+	for index, delivery := range deliveries {
+		if delivery.SubscriptionID != "ops" || delivery.DedupeKey != fmt.Sprintf("ops-%d", index) || delivery.Text != wantTexts[index] || delivery.StatusPageURL != "https://status.example.com/?model=a&view=full" {
+			t.Fatalf("第 %d 条分类投递错误: %+v", index, delivery)
+		}
+		if delivery.RenderPayload == nil || len(delivery.RenderPayload.Changes) != 1 {
+			t.Fatalf("第 %d 条投递没有保持单一状态 payload: %+v", index, delivery.RenderPayload)
+		}
+	}
+	if deliveries[0].RenderPayload.Changes[0].Status != "down" || deliveries[1].RenderPayload.Changes[0].Status != "up" {
+		t.Fatalf("状态投递顺序错误: %+v", deliveries)
+	}
+}
+
+func TestSortChangesForDeliveryUsesConfiguredOrder(t *testing.T) {
+	changes := []model.StatusChange{
+		{ServiceID: "a", SortOrder: 20, Model: "alpha"},
+		{ServiceID: "z", SortOrder: 10, Model: "zeta"},
+		{ServiceID: "b", SortOrder: 20, Model: "beta"},
+	}
+	sortChangesForDelivery(changes)
+	got := []string{changes[0].ServiceID, changes[1].ServiceID, changes[2].ServiceID}
+	want := []string{"z", "a", "b"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("状态变化排序 = %v，期望 %v", got, want)
 	}
 }
 

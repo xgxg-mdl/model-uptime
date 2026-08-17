@@ -30,6 +30,7 @@ type Service struct {
 	BaseURL     string `yaml:"base_url" json:"base_url"`
 	APIKey      string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
 	Path        string `yaml:"path,omitempty" json:"path,omitempty"` // 覆盖默认请求路径
+	SortOrder   int    `yaml:"sort_order,omitempty" json:"sort_order"`
 	IntervalSec int    `yaml:"interval_sec,omitempty" json:"interval_sec,omitempty"`
 	TimeoutSec  int    `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
 	// 指针而非 bool：区分“未配置”（nil，默认启用）与“显式禁用”（false）
@@ -111,6 +112,9 @@ func (s *Service) Validate() error {
 	if s.TimeoutSec < 1 || s.TimeoutSec > 300 {
 		return fmt.Errorf("服务 %q: timeout_sec 需在 1~300 之间", s.ID)
 	}
+	if s.SortOrder < 0 {
+		return fmt.Errorf("服务 %q: sort_order 不能为负数", s.ID)
+	}
 	return nil
 }
 
@@ -125,6 +129,7 @@ type ProbeResult struct {
 // StatusChange 描述单个服务一次最终状态变化，不包含任何投递渠道语义。
 type StatusChange struct {
 	ServiceID         string  `json:"service_id"`
+	SortOrder         int     `json:"sort_order,omitempty"`
 	Model             string  `json:"model"`
 	Provider          string  `json:"provider"`
 	Protocol          string  `json:"protocol"`

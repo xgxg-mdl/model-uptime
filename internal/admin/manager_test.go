@@ -106,7 +106,7 @@ func TestManagerServiceLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID != "second-service" || repository.saves != 1 || monitor.reloads != 1 {
+	if created.ID != "second-service" || created.SortOrder != 2 || repository.saves != 1 || monitor.reloads != 1 {
 		t.Fatalf("创建结果异常: service=%+v saves=%d reloads=%d", created, repository.saves, monitor.reloads)
 	}
 
@@ -124,7 +124,7 @@ func TestManagerServiceLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if duplicate.ID != "second-service-copy" || duplicate.Name != "Second Updated (copy)" {
+	if duplicate.ID != "second-service-copy" || duplicate.Name != "Second Updated (copy)" || duplicate.SortOrder != 3 {
 		t.Fatalf("复制结果异常: %+v", duplicate)
 	}
 

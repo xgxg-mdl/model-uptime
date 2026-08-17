@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  compareServiceOrder,
   createEditorSessionState,
 } from '../../internal/httpserver/web/assets/scripts/admin/services.js';
 import { revealPanel } from '../../internal/httpserver/web/assets/scripts/admin/shared.js';
@@ -25,9 +26,19 @@ test('服务编辑器在列表之后原地展开且 ID 唯一', () => {
   assert.match(html, /role="region" aria-labelledby="editor-title"/);
   assert.doesNotMatch(html, /<section class="panel hidden" id="editor">/);
 
-  for (const id of ['editor', 'svc-form', 'f-id-input', 'f-name', 'save-btn']) {
+  for (const id of ['editor', 'svc-form', 'f-id-input', 'f-name', 'f-sort-order', 'save-btn']) {
     assert.equal(html.split(`id="${id}"`).length, 2, `服务编辑器 ID 不是唯一值: ${id}`);
   }
+});
+
+test('服务列表按通知排序字段排列，缺失值放在末尾', () => {
+  const services = [
+    { id: 'missing', name: 'Missing' },
+    { id: 'later', name: 'Later', sort_order: 20 },
+    { id: 'first', name: 'First', sort_order: 10 },
+  ];
+  services.sort(compareServiceOrder);
+  assert.deepEqual(services.map(service => service.id), ['first', 'later', 'missing']);
 });
 
 test('编辑会话拒绝重复保存', () => {
