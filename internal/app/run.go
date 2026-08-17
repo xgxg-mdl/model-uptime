@@ -46,6 +46,7 @@ type application struct {
 	http          *http.Server
 	monitor       *monitor.Scheduler
 	notifications *notification.Notifier
+	dailyReports  *notification.DailyReporter
 	updates       *update.Service
 	store         *sqlite.Store
 	logger        *slog.Logger
@@ -69,6 +70,7 @@ func Run(ctx context.Context, options Options) error {
 	if err := runtime.monitor.Start(context.Background()); err != nil {
 		return errors.Join(fmt.Errorf("启动监控调度器失败: %w", err), runtime.shutdown())
 	}
+	runtime.dailyReports.Start()
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -174,6 +176,15 @@ func build(options Options) (*application, error) {
 	if err != nil {
 		return fail(fmt.Errorf("初始化管理模块失败: %w", err))
 	}
+	runtime.dailyReports, err = notification.NewDailyReporter(runtime.store, func() notification.DailySnapshot {
+		snapshot := manager.Snapshot()
+		return notification.DailySnapshot{
+			Telegram: snapshot.Telegram, Services: snapshot.Services, StatusPageURL: snapshot.Page.PublicURL,
+		}
+	}, options.Logger)
+	if err != nil {
+		return fail(fmt.Errorf("初始化 Telegram 日报模块失败: %w", err))
+	}
 	httpHandler, err := httpserver.New(httpserver.Options{
 		Admin:   manager,
 		Status:  runtime.monitor,
@@ -211,6 +222,11 @@ func (a *application) shutdown() error {
 	if a.monitor != nil {
 		if err := stopAndWait(a.timeout, a.monitor.Stop); err != nil {
 			errs = append(errs, fmt.Errorf("关闭监控模块: %w", err))
+		}
+	}
+	if a.dailyReports != nil {
+		if err := stopAndWait(a.timeout, a.dailyReports.Close); err != nil {
+			errs = append(errs, fmt.Errorf("关闭 Telegram 日报模块: %w", err))
 		}
 	}
 	if a.notifications != nil {

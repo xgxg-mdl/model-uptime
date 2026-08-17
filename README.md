@@ -4,7 +4,7 @@
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
 - **终端风格状态页**：60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
-- **Telegram 聚合通知**：按订阅在持久化聚合窗口内合并多模型变化，仅在异常/恢复切换时发送可自定义 HTML 消息
+- **Telegram 聚合通知与日报**：按订阅聚合模型变化，并在每日北京时间零点发送前一日运行摘要
 - **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载
 - **一键更新**：检查 GitHub 稳定版本，并确认目标版本与 GHCR `latest` digest 一致后更新容器
 - **Docker Compose 一键部署**：Go 单二进制 + SQLite，最终镜像约 15MB
@@ -174,7 +174,9 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 - Telegram `429`、网络错误和服务端故障按 `Retry-After` 与退避策略重试。连续四次确定性 `4xx` 会把该消息持久化隔离，避免阻塞同订阅的后续消息。
 - 修改相关订阅的 Bot Token、Chat ID、模板、语言或服务筛选后，隔离项会恢复并按新配置重新渲染；停机编辑配置后重启同样生效。无关配置或相同 Telegram 配置不会打断临时错误的退避，也不会反复唤醒隔离项。
 
-每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。默认模板使用北京时间，按模型展示异常持续时间、确认时间，以及当天运行时间、异常时间、异常次数和基于已观测时间计算的可用率；同一固定持久化窗口内的多个模型变化会合并发送。
+每个订阅可通过 `language` 独立选择 `zh-CN` 或 `en-US`，未配置时默认使用中文。`template` 留空时使用对应语言的内置模板；已有自定义模板不会被语言设置覆盖。模板采用 Go `html/template`，通知以 Telegram HTML 模式发送，变量值自动转义，最长 4096 个字符。默认实时模板使用北京时间，以“变更数量 + 异常/恢复模型列表”呈现，不再在每个模型下重复当日统计；同一固定持久化窗口内的多个模型变化会合并发送。
+
+每个启用的订阅都会在北京时间 N+1 日 `00:00` 收到 N 日日报，仅统计该订阅已选择的模型。日报包含总模型数、正常/异常/未监测数、按已观测时长加权的整体可用率、累计异常时长与故障次数；只有当天出现异常时长的模型会列出明细。日报入箱记录按“日期 + 订阅”持久化去重，进程若在零点离线，会在下次启动时补发昨天，且不会回填更早历史。
 
 `page.public_url` 可配置探针页的对外访问地址。配置后，所有状态变化通知和测试通知都会在消息末尾自动追加本地化链接；留空时不追加。地址必须是无账号密码的完整 `http://` 或 `https://` URL。
 
@@ -193,7 +195,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 
 - **监控服务**：增删改、测试连接（立即探测一次并显示结果）、启停
 - **页面显示**：标题、副标题、探针注释、历史窗口、轮询间隔、四个统计维度开关
-- **Telegram 订阅**：Bot Token 脱敏编辑、订阅增删改/启停、多模型选择、聚合模板编辑与测试发送
+- **Telegram 订阅**：Bot Token 脱敏编辑、订阅增删改/启停、多模型选择、聚合模板编辑、实时与日报测试发送
 - **系统更新**：显示当前与最新稳定版本，确认 GHCR 镜像可用后触发容器更新并跟踪重启
 - **API Key 脱敏**：列表只显示掩码；编辑时留空即保留原密钥
 
@@ -215,14 +217,14 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 | `/api/admin/services/{id}/test` | POST | Bearer | 立即探测一次 |
 | `/api/admin/page` | GET / PUT | Bearer | 页面显示配置 |
 | `/api/admin/telegram` | GET / PUT | Bearer | 获取（Token 脱敏）/ 更新 Telegram 配置 |
-| `/api/admin/telegram/test` | POST | Bearer | 按 `{"subscription_id": "operations"}` 同步发送聚合测试消息 |
+| `/api/admin/telegram/test` | POST | Bearer | 按 `{"subscription_id": "operations", "kind": "event"\|"daily"}` 同步发送实时或日报测试消息 |
 | `/api/admin/update` | GET / POST | Bearer | 获取版本状态 / 触发一键更新 |
 | `/api/admin/update/check` | POST | Bearer | 强制刷新 GitHub Tag 与 GHCR 镜像状态 |
 
 ## 存储与数据
 
 - `data/config.yaml` — 配置源（配置页在线修改落盘于此）
-- `data/probe.db` — SQLite 探测历史、待处理状态变化与通知 outbox；探测历史保留 30 天
+- `data/probe.db` — SQLite 探测历史、待处理状态变化、通知 outbox 与日报去重账本；探测历史保留 30 天
 
 Docker 部署使用命名卷持久化 `/data`。若改用绑定挂载，需确保宿主目录对容器非 root 用户（uid 65534）可写：
 

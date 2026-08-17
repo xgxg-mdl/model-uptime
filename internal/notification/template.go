@@ -16,54 +16,28 @@ import (
 // TelegramMessageLimit 是 Telegram sendMessage 接受的最大消息字符数。
 const TelegramMessageLimit = 4096
 
-// DefaultTemplate 是默认中文模板，同时展示一轮探测中的异常与恢复模型。
-const DefaultTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
-{{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
-{{end}}
-{{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
-确认时间：{{formatBeijing .LastTS}}
-
-<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
-今日运行时间：{{durationCN .TodayUpSec}}
-今日异常时间：{{durationCN .TodayDownSec}}
-今日异常次数：{{.TodayDownCount}} 次
-今日可用率：{{printf "%.2f" .TodayUptimePct}}%
-
-{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}异常持续时间：{{durationCN .OutageDurationSec}}
-监控模型：<b>{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
-确认时间：{{formatBeijing .LastTS}}
-
-<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
-今日运行时间：{{durationCN .TodayUpSec}}
-今日异常时间：{{durationCN .TodayDownSec}}
-今日异常次数：{{.TodayDownCount}} 次
-今日可用率：{{printf "%.2f" .TodayUptimePct}}%
-
+// DefaultTemplate 是默认中文模板：摘要优先，模型明细只保留处置状态需要的信息。
+const DefaultTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更{{else if .DownModels}}❌ 检测到模型异常{{else}}✅ 模型恢复正常{{end}}</b>
+<code>{{.ChangedAt}}</code>（北京时间）
+异常 {{.DownCount}} · 恢复 {{.RecoveryCount}}
+{{if .DownModels}}
+<b>异常模型</b>
+{{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+{{end}}{{end}}{{if .RecoveredModels}}
+<b>恢复模型</b>
+{{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · 异常 {{durationCN .OutageDurationSec}}{{end}}
 {{end}}{{end}}`
 
 // EnglishTemplate 是英文内置模板，可按订阅选择。
-const EnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update: multiple changes{{else if .DownModels}}❌ Model status update: incident detected{{else}}✅ Model status update: recovered{{end}}</b>
-{{if gt .TotalChanges 1}}Changes: {{.DownCount}} down, {{.RecoveryCount}} recovered
-{{end}}
-{{if .DownModels}}{{range .DownModels}}<b>Down model: {{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
-Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
-
-<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
-Uptime: {{durationEN .TodayUpSec}}
-Downtime: {{durationEN .TodayDownSec}}
-Incidents: {{.TodayDownCount}}
-Availability: {{printf "%.2f" .TodayUptimePct}}%
-
-{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}Incident duration: {{durationEN .OutageDurationSec}}
-Model: <b>{{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
-Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
-
-<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
-Uptime: {{durationEN .TodayUpSec}}
-Downtime: {{durationEN .TodayDownSec}}
-Incidents: {{.TodayDownCount}}
-Availability: {{printf "%.2f" .TodayUptimePct}}%
-
+const EnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update{{else if .DownModels}}❌ Model incident detected{{else}}✅ Model recovered{{end}}</b>
+<code>{{.ChangedAt}}</code> (UTC+8)
+Down {{.DownCount}} · Recovered {{.RecoveryCount}}
+{{if .DownModels}}
+<b>DOWN</b>
+{{range .DownModels}}❌ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}
+{{end}}{{end}}{{if .RecoveredModels}}
+<b>RECOVERED</b>
+{{range .RecoveredModels}}✅ <b>{{.Model}}</b>{{if .Provider}} · {{.Provider}}{{end}}{{if .OutageDurationSec}} · {{durationEN .OutageDurationSec}}{{end}}
 {{end}}{{end}}`
 
 var (

@@ -567,3 +567,30 @@ func TestOutboxBatchEnqueueRollsBackOnFailure(t *testing.T) {
 		t.Fatalf("事务回滚后仍有 %d 条 outbox 记录", count)
 	}
 }
+
+func TestEnqueueDailyReportsKeepsPersistentPerSubscriptionDeduplication(t *testing.T) {
+	t.Parallel()
+	store := openTest(t)
+	now := time.Now()
+	deliveries := []notification.Delivery{{
+		DedupeKey: "daily:2026-08-16:ops:0", SubscriptionID: "ops", Text: "daily",
+		CreatedAt: now, AvailableAt: now,
+	}}
+	if err := store.EnqueueDailyReports(context.Background(), "2026-08-16", deliveries); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.Claim(context.Background(), now.Add(time.Second), now.Add(time.Minute))
+	if err != nil || claimed == nil {
+		t.Fatalf("首次日报未入箱: delivery=%+v err=%v", claimed, err)
+	}
+	if err := store.MarkSent(context.Background(), claimed.ID, claimed.LeaseToken); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.EnqueueDailyReports(context.Background(), "2026-08-16", deliveries); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err = store.Claim(context.Background(), now.Add(2*time.Second), now.Add(time.Minute))
+	if err != nil || claimed != nil {
+		t.Fatalf("已发送日报不应再次入箱: delivery=%+v err=%v", claimed, err)
+	}
+}

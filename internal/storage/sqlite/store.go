@@ -18,7 +18,7 @@ type Store struct {
 	db *sql.DB
 }
 
-const currentSchemaVersion = 6
+const currentSchemaVersion = 7
 
 // Open 打开（必要时创建）数据库并初始化表结构。
 func Open(path string) (*Store, error) {
@@ -153,8 +153,13 @@ CREATE INDEX IF NOT EXISTS idx_status_transitions_assigned_due
     ON status_transitions(available_at_ms, id, delivery_group)
     WHERE delivery_group <> '';
 CREATE INDEX IF NOT EXISTS idx_status_transitions_delivery_group
-    ON status_transitions(delivery_group, id)
-    WHERE delivery_group <> '';`
+	ON status_transitions(delivery_group, id)
+	WHERE delivery_group <> '';
+CREATE TABLE IF NOT EXISTS daily_report_runs (
+    report_date     TEXT NOT NULL,
+    subscription_id TEXT NOT NULL,
+    PRIMARY KEY (report_date, subscription_id)
+);`
 	if _, err := tx.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("初始化数据库表失败: %w", err)
 	}

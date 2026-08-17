@@ -20,7 +20,7 @@ func TestBuiltInTemplateLanguageSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(english, "Model status update: incident detected") || !strings.Contains(english, "Down model: alpha") {
+	if !strings.Contains(english, "Model incident detected") || !strings.Contains(english, "<b>alpha</b>") {
 		t.Fatalf("英文内置模板渲染错误:\n%s", english)
 	}
 	if got := TemplateForLanguage(""); got != DefaultTemplate {
@@ -39,6 +39,8 @@ func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T)
 		{ID: "old-english", Language: LanguageEnglish, Template: legacyEnglishTemplate},
 		{ID: "stats-chinese", Language: DefaultLanguage, Template: legacyStatisticsTemplate(DefaultLanguage)},
 		{ID: "stats-english", Language: LanguageEnglish, Template: legacyStatisticsTemplate(LanguageEnglish)},
+		{ID: "verbose-chinese", Language: DefaultLanguage, Template: legacyVerboseChineseTemplate},
+		{ID: "verbose-english", Language: LanguageEnglish, Template: legacyVerboseEnglishTemplate},
 	}}
 	NormalizeConfig(&config)
 	for _, index := range []int{0, 1} {
@@ -57,6 +59,9 @@ func TestNormalizeConfigDefaultsToChineseAndMigratesLegacyTemplate(t *testing.T)
 	}
 	if config.Subscriptions[6].Template != DefaultTemplate || config.Subscriptions[7].Template != EnglishTemplate {
 		t.Fatalf("带错误详情的默认模板应升级为脱敏模板: %+v %+v", config.Subscriptions[6], config.Subscriptions[7])
+	}
+	if config.Subscriptions[8].Template != DefaultTemplate || config.Subscriptions[9].Template != EnglishTemplate {
+		t.Fatalf("冗长默认模板应升级为紧凑模板: %+v %+v", config.Subscriptions[8], config.Subscriptions[9])
 	}
 }
 

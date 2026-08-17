@@ -35,6 +35,48 @@ func (s *Store) Enqueue(ctx context.Context, deliveries []notification.Delivery)
 	return nil
 }
 
+// EnqueueDailyReports 把一个订阅某日的完整日报与“已入箱”账本原子保存。
+// 账本不随 outbox 成功发送而删除，因此进程重启或多个实例不能重复日报。
+func (s *Store) EnqueueDailyReports(ctx context.Context, reportDate string, deliveries []notification.Delivery) error {
+	if len(deliveries) == 0 {
+		return nil
+	}
+	subscriptionID := deliveries[0].SubscriptionID
+	if subscriptionID == "" {
+		return fmt.Errorf("日报缺少订阅 ID")
+	}
+	for _, delivery := range deliveries {
+		if delivery.SubscriptionID != subscriptionID {
+			return fmt.Errorf("日报投递不能跨订阅")
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("开始日报事务失败: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO daily_report_runs(report_date, subscription_id) VALUES (?, ?)
+		ON CONFLICT(report_date, subscription_id) DO NOTHING`, reportDate, subscriptionID)
+	if err != nil {
+		return fmt.Errorf("记录日报账本失败: %w", err)
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("读取日报账本写入结果失败: %w", err)
+	}
+	if inserted == 0 {
+		return tx.Commit()
+	}
+	if err := enqueueDeliveries(ctx, tx, deliveries); err != nil {
+		return fmt.Errorf("保存日报通知投递: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交日报事务失败: %w", err)
+	}
+	return nil
+}
+
 func enqueueDeliveries(ctx context.Context, tx *sql.Tx, deliveries []notification.Delivery) error {
 	if len(deliveries) == 0 {
 		return nil

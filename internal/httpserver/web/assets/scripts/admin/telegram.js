@@ -24,7 +24,7 @@ export function normalizeTelegramSubscription(subscription, templates = {}) {
   };
 }
 
-export async function sendTelegramTest({ subscription, results, save, api, toast }) {
+export async function sendTelegramTest({ subscription, results, save, api, toast, kind = 'event' }) {
   const setResult = (state, text) => results.forEach(result => {
     const base = result.id === 'tg-test-result'
       ? 'test-result feedback-in'
@@ -35,13 +35,15 @@ export async function sendTelegramTest({ subscription, results, save, api, toast
   setResult('', 'saving config…');
   try {
     await save({ quiet: true });
-    setResult('', 'sending test message…');
+    setResult('', kind === 'daily' ? 'sending daily test…' : 'sending test message…');
     await api('/api/admin/telegram/test', {
       method: 'POST',
-      body: JSON.stringify({ subscription_id: subscription.id }),
+      body: JSON.stringify(kind === 'daily'
+        ? { subscription_id: subscription.id, kind }
+        : { subscription_id: subscription.id }),
     });
     setResult('ok', 'test message sent');
-    toast(`Test message sent for ${subscription.name || subscription.id}`);
+    toast(`${kind === 'daily' ? 'Daily test' : 'Test message'} sent for ${subscription.name || subscription.id}`);
     return true;
   } catch (error) {
     setResult('bad', error.message);
@@ -229,13 +231,13 @@ export function createTelegramController({
     if (!options.quiet) toast('Telegram config saved');
   }
 
-  async function testSubscription(index) {
+  async function testSubscription(index, kind = 'event') {
     const subscription = config.subscriptions[index];
     if (!subscription) return;
     const rowResult = documentRef.querySelector(`[data-tg-test-status="${index}"]`);
     const editorResult = editingIndex === index ? element('tg-test-result') : null;
     const results = [rowResult, editorResult].filter(Boolean);
-    await sendTelegramTest({ subscription, results, save, api, toast });
+    await sendTelegramTest({ subscription, results, save, api, toast, kind });
   }
 
   function deleteSubscription(index) {
@@ -273,6 +275,15 @@ export function createTelegramController({
       const index = editingIndex === null ? config.subscriptions.length : editingIndex;
       applyEditor({ close: false });
       await testSubscription(index);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  element('tg-daily-test-btn').addEventListener('click', async () => {
+    try {
+      const index = editingIndex === null ? config.subscriptions.length : editingIndex;
+      applyEditor({ close: false });
+      await testSubscription(index, 'daily');
     } catch (error) {
       toast(error.message);
     }

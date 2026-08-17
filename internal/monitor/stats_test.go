@@ -26,18 +26,18 @@ func TestUptimePct(t *testing.T) {
 }
 
 func TestCalculateDailyStatsAndBeijingBoundary(t *testing.T) {
-	stats := calculateDailyStats([]model.ProbeResult{
+	stats := model.CalculateDailyStats([]model.ProbeResult{
 		{OK: true, TS: 50},
 		{OK: false, TS: 200},
 		{OK: true, TS: 500},
 		{OK: false, TS: 800},
 		{OK: true, TS: 1000},
 	}, 100, 1000)
-	if stats.upSec != 400 || stats.downSec != 500 || stats.downCount != 2 {
+	if stats.UpSec != 400 || stats.DownSec != 500 || stats.DownCount != 2 {
 		t.Fatalf("今日时间统计错误: %+v", stats)
 	}
-	if stats.uptimePct < 44.44 || stats.uptimePct > 44.45 {
-		t.Fatalf("今日可用率错误: %.4f", stats.uptimePct)
+	if stats.UptimePct() < 44.44 || stats.UptimePct() > 44.45 {
+		t.Fatalf("今日可用率错误: %.4f", stats.UptimePct())
 	}
 	if got := failureStartFromResults([]model.ProbeResult{{OK: true, TS: 100}, {OK: false, TS: 200}, {OK: false, TS: 300}, {OK: true, TS: 400}}, 400); got != 200 {
 		t.Fatalf("异常起点 = %d，期望 200", got)

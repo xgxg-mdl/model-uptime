@@ -46,6 +46,56 @@ const legacyEnglishTemplate = `<b>MODEL STATUS UPDATE</b>
   Latency <code>{{.LatencyMS}} ms</code> · Uptime <code>{{printf "%.2f" .UptimePct}}%</code>
 {{end}}{{end}}`
 
+// legacyVerbose*Template 是 v0.6 期间写入配置的默认模板。仅精确匹配时升级，
+// 以免覆盖用户刻意保留每日字段的自定义模板。
+const legacyVerboseChineseTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ 模型状态变更：多项状态变化{{else if .DownModels}}❌ 模型状态变更：检测到异常{{else}}✅ 模型状态变更：恢复正常{{end}}</b>
+{{if gt .TotalChanges 1}}本次变更：异常 {{.DownCount}}，恢复 {{.RecoveryCount}}
+{{end}}
+{{if .DownModels}}{{range .DownModels}}<b>异常模型：{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+确认时间：{{formatBeijing .LastTS}}
+
+<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+今日运行时间：{{durationCN .TodayUpSec}}
+今日异常时间：{{durationCN .TodayDownSec}}
+今日异常次数：{{.TodayDownCount}} 次
+今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}异常持续时间：{{durationCN .OutageDurationSec}}
+监控模型：<b>{{.Model}}</b>{{if .Provider}}（{{.Provider}}）{{end}}
+确认时间：{{formatBeijing .LastTS}}
+
+<b>今日统计（{{beijingDate .LastTS}}，北京时间）</b>
+今日运行时间：{{durationCN .TodayUpSec}}
+今日异常时间：{{durationCN .TodayDownSec}}
+今日异常次数：{{.TodayDownCount}} 次
+今日可用率：{{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}`
+
+const legacyVerboseEnglishTemplate = `<b>{{if and .DownModels .RecoveredModels}}⚠️ Model status update: multiple changes{{else if .DownModels}}❌ Model status update: incident detected{{else}}✅ Model status update: recovered{{end}}</b>
+{{if gt .TotalChanges 1}}Changes: {{.DownCount}} down, {{.RecoveryCount}} recovered
+{{end}}
+{{if .DownModels}}{{range .DownModels}}<b>Down model: {{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
+Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
+
+<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
+Uptime: {{durationEN .TodayUpSec}}
+Downtime: {{durationEN .TodayDownSec}}
+Incidents: {{.TodayDownCount}}
+Availability: {{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}{{if .RecoveredModels}}{{range .RecoveredModels}}Incident duration: {{durationEN .OutageDurationSec}}
+Model: <b>{{.Model}}</b>{{if .Provider}} ({{.Provider}}){{end}}
+Confirmed at: {{formatBeijing .LastTS}} (UTC+8)
+
+<b>Today ({{beijingDate .LastTS}}, UTC+8)</b>
+Uptime: {{durationEN .TodayUpSec}}
+Downtime: {{durationEN .TodayDownSec}}
+Incidents: {{.TodayDownCount}}
+Availability: {{printf "%.2f" .TodayUptimePct}}%
+
+{{end}}{{end}}`
+
 // Config 是通知器运行时配置的独立快照。
 type Config struct {
 	BotToken      string         `yaml:"bot_token" json:"bot_token"`
@@ -126,6 +176,8 @@ func normalizeSubscription(subscription *Subscription) {
 	// 识别历史版本写入配置的内置模板并升级；用户修改过的自定义模板保持不变。
 	legacyBuiltIn := templateText == strings.TrimSpace(legacyChineseTemplate) ||
 		templateText == strings.TrimSpace(legacyEnglishTemplate) ||
+		templateText == strings.TrimSpace(legacyVerboseChineseTemplate) ||
+		templateText == strings.TrimSpace(legacyVerboseEnglishTemplate) ||
 		templateText == strings.TrimSpace(legacyStatisticsTemplate(DefaultLanguage)) ||
 		templateText == strings.TrimSpace(legacyStatisticsTemplate(LanguageEnglish))
 	if templateText == "" || legacyBuiltIn || (originalLanguage == "" && templateText == strings.TrimSpace(EnglishTemplate)) {
@@ -139,9 +191,9 @@ func normalizeSubscription(subscription *Subscription) {
 // legacyStatisticsTemplate 还原 v0.6.0 带错误详情的内置模板，用于无损识别并迁移。
 func legacyStatisticsTemplate(language string) string {
 	if normalizeLanguage(language) == LanguageEnglish {
-		return strings.Replace(EnglishTemplate, "Confirmed at:", "Error: {{if .Error}}{{.Error}}{{else}}Probe failed{{end}}\nConfirmed at:", 1)
+		return strings.Replace(legacyVerboseEnglishTemplate, "Confirmed at:", "Error: {{if .Error}}{{.Error}}{{else}}Probe failed{{end}}\nConfirmed at:", 1)
 	}
-	return strings.Replace(DefaultTemplate, "确认时间：", "异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}\n确认时间：", 1)
+	return strings.Replace(legacyVerboseChineseTemplate, "确认时间：", "异常原因：{{if .Error}}{{.Error}}{{else}}探测失败{{end}}\n确认时间：", 1)
 }
 
 func normalizeLanguage(language string) string {

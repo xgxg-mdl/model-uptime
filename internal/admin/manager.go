@@ -26,6 +26,21 @@ type Notifications interface {
 	SendTest(context.Context, string, string) error
 }
 
+// SendDailyTestNotification 发送日报格式的测试通知。
+func (m *Manager) SendDailyTestNotification(ctx context.Context, subscriptionID string) error {
+	if m.notifications == nil {
+		return internal("通知模块未初始化", nil)
+	}
+	snapshot := m.Snapshot()
+	daily, ok := m.notifications.(interface {
+		SendDailyTest(context.Context, string, string) error
+	})
+	if !ok {
+		return internal("通知模块不支持日报测试", nil)
+	}
+	return daily.SendDailyTest(ctx, subscriptionID, snapshot.Page.PublicURL)
+}
+
 // ConfigRepository 是管理模块持久化配置事务所需的最小接口。
 // 接口由消费方定义，settings.FileRepository 作为文件存储适配器实现它。
 type ConfigRepository interface {

@@ -219,6 +219,46 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID, statusPageURL s
 	return fmt.Errorf("%w: %s", ErrSubscriptionNotFound, subscriptionID)
 }
 
+// SendDailyTest 同步发送一条日报示例，方便在不等待零点的情况下校验接收端效果。
+func (n *Notifier) SendDailyTest(ctx context.Context, subscriptionID, statusPageURL string) error {
+	if !n.beginOperation() {
+		return ErrClosed
+	}
+	defer n.operations.Done()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	operationCtx, cancel := context.WithCancel(ctx)
+	stopNotifierCancel := context.AfterFunc(n.ctx, cancel)
+	defer func() {
+		stopNotifierCancel()
+		cancel()
+	}()
+	config := n.configSnapshot()
+	for _, subscription := range config.subscriptions {
+		if subscription.ID != subscriptionID {
+			continue
+		}
+		now := time.Now()
+		report := dailyReport{
+			Date: now.AddDate(0, 0, -1), Total: 12, Healthy: 10, Unavailable: 1, Unobserved: 1,
+			UpSec: 1_031_400, DownSec: 3_600, DownCount: 2,
+			Incidents: []dailyModel{{
+				Model: "example-model", Provider: "example", Stats: model.DailyStats{UpSec: 82_800, DownSec: 3_600, DownCount: 2},
+			}},
+		}
+		text, err := renderDailyText(subscription.Language, report, report.Incidents, statusPageURL)
+		if err != nil {
+			return fmt.Errorf("渲染订阅 %q 日报测试: %w", subscriptionID, err)
+		}
+		return n.sendWithRetry(operationCtx, sendJob{
+			botToken: config.botToken, chatID: subscription.ChatID, text: text, name: subscription.ID,
+			configFingerprint: subscription.fingerprint,
+		})
+	}
+	return fmt.Errorf("%w: %s", ErrSubscriptionNotFound, subscriptionID)
+}
+
 // Close 停止接收新通知，并处理当前已经到期的状态变化与消息。
 // 超时或父上下文取消时，中断在途请求；未确认消息仍留在 outbox。
 func (n *Notifier) Close(ctx context.Context) error {

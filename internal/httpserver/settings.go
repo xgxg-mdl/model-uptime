@@ -47,6 +47,7 @@ func (s *Server) handleUpdateTelegram(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		SubscriptionID string `json:"subscription_id"`
+		Kind           string `json:"kind"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeDecodeError(w, err)
@@ -56,7 +57,16 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "subscription_id 不能为空")
 		return
 	}
-	if err := s.admin.SendTestNotification(r.Context(), request.SubscriptionID); err != nil {
+	var err error
+	if request.Kind == "daily" {
+		err = s.admin.SendDailyTestNotification(r.Context(), request.SubscriptionID)
+	} else if request.Kind != "" && request.Kind != "event" {
+		writeError(w, http.StatusBadRequest, "kind 仅支持 event 或 daily")
+		return
+	} else {
+		err = s.admin.SendTestNotification(r.Context(), request.SubscriptionID)
+	}
+	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
