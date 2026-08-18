@@ -26,11 +26,10 @@ export function normalizeRefreshSeconds(value, fallback = DEFAULT_REFRESH_SECOND
 
 export function timeBucketAxisLabels(buckets = []) {
   if (!buckets.length) return ['', '', '', '', ''];
+  const windowStart = buckets[0].from;
+  const windowEnd = buckets.at(-1).to;
   return [0, 1, 2, 3, 4].map(index => {
-    const boundaryIndex = Math.round(buckets.length * index / 4);
-    const timestamp = boundaryIndex === buckets.length
-      ? buckets.at(-1).to
-      : buckets[boundaryIndex].from;
+    const timestamp = Math.round(windowStart + (windowEnd - windowStart) * index / 4);
     return formatTimeShort(timestamp).slice(0, 5);
   });
 }
@@ -361,7 +360,7 @@ export function createStatusRenderer({
       if (page.show_samples) {
         const observedBuckets = buckets.filter(bucket =>
           ['ok', 'warning', 'bad', 'probing'].includes(bucket.kind)).length;
-        metadata.append(metric(documentRef, 'samples', `${observedBuckets}/${historyLength}`));
+        metadata.append(metric(documentRef, 'coverage', `${observedBuckets}/${historyLength}`));
       }
       if (page.show_latency && last) {
         const latencyStatus = resultStatus(last, service.warning_sec);

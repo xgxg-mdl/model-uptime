@@ -3,7 +3,7 @@
 大模型 API 探针 + 终端风格状态页。复刻终端风格大模型探针状态页的核心体验，并在此基础上提供：
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
-- **终端风格状态页**：首次加载命令输入动效、60s 自动探测、最近 60 个滚动时间桶、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
+- **终端风格状态页**：首次加载命令输入动效、60s 自动探测、最近 60 个完整时间桶、uptime% / coverage / latency、悬停 tooltip 错误详情、5s 轮询
 - **健康状态热力图**：按模型展示最近 1/7/30 个自然日的二维热力图（96/168/720 格），聚合正常、慢响应、失败和数据不足状态
 - **Telegram 聚合通知与日报**：按订阅聚合模型变化，并在每日北京时间零点发送前一日运行摘要
 - **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载
@@ -129,7 +129,7 @@ page:                    # 公开页面显示配置
   subtitle: "model-uptime"
   probe_comment: "model-uptime · service health and performance" # 两页共用顶部注释
   public_url: "https://status.example.com/" # 留空则通知不显示链接
-  history_len: 60        # 每个服务显示的滚动时间桶数量
+  history_len: 60        # 每个服务显示的完整时间桶数量
   refresh_sec: 5         # 状态页轮询间隔
   show_uptime: true      # ↓ 统计维度开关
   show_samples: true
@@ -205,7 +205,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 
 所有修改原子写回配置文件并即时热重载，无需重启。
 
-状态页按每个服务自己的 `interval_sec` 展示当前 interval 之前最近 `history_len` 个完整等宽时间桶。桶边界与 interval 固定对齐，只在进入下一个 interval 时推进；每次已完成探测覆盖从请求开始到请求完成或正常调度周期结束的观测区间，因此页面刷新、不同服务的启动相位和模型请求耗时不会制造空桶。`samples` 表示已有探测结果或正在探测的观测桶数量。跨过完整桶仍在等待模型响应时显示 `probing`，启动前显示 `not started`，当前进程记录到的明确禁用期间显示 `paused`，完整 interval 内没有任何观测覆盖才显示 `no data`；这些非结果状态都不计为探测失败。
+状态页按每个服务自己的 `interval_sec` 展示当前 interval 之前最近 `history_len` 个完整等宽时间桶。桶边界与 interval 固定对齐，只在进入下一个 interval 时推进；每次已完成探测覆盖从请求开始到请求完成或正常调度周期结束的观测区间，因此页面刷新、不同服务的启动相位和模型请求耗时不会制造空桶。`coverage` 表示已有探测结果或正在探测的观测桶数量；配置字段仍为 `show_samples`，以兼容已有配置。跨过完整桶仍在等待模型响应时显示 `probing`，启动前显示 `not started`，当前进程记录到的明确禁用期间显示 `paused`，完整 interval 内没有任何观测覆盖才显示 `no data`；这些非结果状态都不计为探测失败。
 
 热力图先要求时间格达到 50% 探测覆盖率，再按聚合结果判定状态：失败率达到 20% 为 `failing`；失败或慢响应合计达到 5%，或成功请求的 p95 延迟超过服务的 `warning_sec`，为 `warning`；其余为 `healthy`。低覆盖率显示 `insufficient`，没有观测显示 `unobserved`。
 

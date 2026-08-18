@@ -326,15 +326,15 @@ func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]mod
 	return out, nil
 }
 
-// LoadResultsStartedBetween 返回 (since, until] 内的结果，并携带起点前最后一次结果用于延续观测周期。
+// LoadResultsStartedBetween 返回 [since, until] 内的结果，并携带起点前最后一次结果用于延续观测周期。
 func (s *Store) LoadResultsStartedBetween(ctx context.Context, svcID string, since, until int64) ([]model.ProbeResult, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT ts, started_at, ok, latency_ms, error
 		 FROM probe_results
 		 WHERE service_id=? AND started_at<=? AND (
-			started_at>? OR id=(
+			started_at>=? OR id=(
 				SELECT id FROM probe_results
-				WHERE service_id=? AND started_at<=?
+				WHERE service_id=? AND started_at<?
 				ORDER BY started_at DESC, id DESC LIMIT 1
 			)
 		 )

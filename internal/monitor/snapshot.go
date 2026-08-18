@@ -50,7 +50,7 @@ func completedWindowHistory(history []model.ProbeResult, now int64, historyLengt
 	windowEnd := completedWindowEnd(now, intervalSec)
 	cutoff := windowEnd - int64(historyLength)*int64(intervalSec)
 	first := 0
-	for first < len(history) && probeStartedAt(history[first]) <= cutoff {
+	for first < len(history) && probeStartedAt(history[first]) < cutoff {
 		first++
 	}
 	last := first

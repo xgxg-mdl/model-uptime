@@ -134,9 +134,9 @@ test('完整 interval 没有观测覆盖时仍保留真正的 no data', () => {
   ]);
 });
 
-test('底部刻度使用固定时间桶的真实边界时间', () => {
-  const buckets = buildTimeBuckets(service({ history: [] }), 4, 420);
-  const boundaries = [180, 240, 300, 360, 420];
+test('底部刻度按固定窗口的真实时间跨度均匀分布', () => {
+  const buckets = buildTimeBuckets(service({ history: [] }), 5, 420);
+  const boundaries = [120, 195, 270, 345, 420];
   assert.deepEqual(
     timeBucketAxisLabels(buckets),
     boundaries.map(timestamp => formatTimeShort(timestamp).slice(0, 5)),
@@ -173,7 +173,7 @@ test('慢响应在服务状态、历史条、耗时和总览中显示 warning', 
   assert.match(document.getElementById('tip').textContent, /WARNING/);
 });
 
-test('状态页严格渲染完整时间桶并按观测覆盖统计 samples', () => {
+test('状态页严格渲染完整时间桶并按观测覆盖统计 coverage', () => {
   const partial = service({
     observed_since: 170,
     history: [
@@ -188,10 +188,21 @@ test('状态页严格渲染完整时间桶并按观测覆盖统计 samples', () 
   assert.deepEqual(bars.map(bar => bar.className), [
     'bar not-started', 'bar ok', 'bar bad', 'bar paused', 'bar unobserved',
   ]);
-  assert.match(document.getElementById('svc-out').textContent, /samples 2\/5/);
+  assert.match(document.getElementById('svc-out').textContent, /coverage 2\/5/);
 
   bars[4].dispatchEvent({ type: 'focus' });
   assert.match(document.getElementById('tip').textContent, /NO DATA/);
+});
+
+test('慢请求跨越多个完整桶时 coverage 统计被覆盖桶而非请求数', () => {
+  const slow = service({
+    observed_since: 120,
+    history: [{ ts: 245, started_at: 120, ok: true, latency_ms: 125_000 }],
+    last: { ts: 245, started_at: 120, ok: true, latency_ms: 125_000 },
+  });
+  const { document } = render(statusData(slow));
+
+  assert.match(document.getElementById('svc-out').textContent, /coverage 3\/5/);
 });
 
 test('状态页把服务字段和错误详情作为纯文本渲染', () => {
