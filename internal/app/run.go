@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/admin"
+	"github.com/xgxg-mdl/model-uptime/internal/heatmap"
 	"github.com/xgxg-mdl/model-uptime/internal/httpserver"
 	"github.com/xgxg-mdl/model-uptime/internal/monitor"
 	"github.com/xgxg-mdl/model-uptime/internal/notification"
@@ -185,9 +186,14 @@ func build(options Options) (*application, error) {
 	if err != nil {
 		return fail(fmt.Errorf("初始化 Telegram 日报模块失败: %w", err))
 	}
+	heatmapService, err := heatmap.New(runtime.store, runtime.monitor)
+	if err != nil {
+		return fail(fmt.Errorf("初始化热力图模块失败: %w", err))
+	}
 	httpHandler, err := httpserver.New(httpserver.Options{
 		Admin:   manager,
 		Status:  runtime.monitor,
+		Heatmap: heatmapService,
 		Updater: runtime.updates,
 		Logger:  options.Logger,
 	})

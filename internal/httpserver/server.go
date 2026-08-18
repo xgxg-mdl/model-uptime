@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/admin"
+	"github.com/xgxg-mdl/model-uptime/internal/heatmap"
 	"github.com/xgxg-mdl/model-uptime/internal/model"
 	"github.com/xgxg-mdl/model-uptime/internal/update"
 )
@@ -25,6 +26,10 @@ type StatusProvider interface {
 	Snapshot() model.StatusResponse
 }
 
+type HeatmapProvider interface {
+	Build(context.Context, string) (heatmap.Response, error)
+}
+
 type UpdateProvider interface {
 	Check(context.Context, bool) (update.Status, error)
 	Start(string) error
@@ -33,6 +38,7 @@ type UpdateProvider interface {
 type Options struct {
 	Admin   *admin.Manager
 	Status  StatusProvider
+	Heatmap HeatmapProvider
 	Updater UpdateProvider
 	Assets  fs.FS
 	Logger  *slog.Logger
@@ -41,6 +47,7 @@ type Options struct {
 type Server struct {
 	admin   *admin.Manager
 	status  StatusProvider
+	heatmap HeatmapProvider
 	updater UpdateProvider
 	assets  fs.FS
 	logger  *slog.Logger
@@ -53,6 +60,9 @@ func New(options Options) (*Server, error) {
 	if options.Status == nil {
 		return nil, errors.New("status provider is required")
 	}
+	if options.Heatmap == nil {
+		return nil, errors.New("heatmap provider is required")
+	}
 	if options.Assets == nil {
 		options.Assets = webAssets()
 	}
@@ -60,7 +70,7 @@ func New(options Options) (*Server, error) {
 		options.Logger = slog.Default()
 	}
 	return &Server{
-		admin: options.Admin, status: options.Status, updater: options.Updater,
+		admin: options.Admin, status: options.Status, heatmap: options.Heatmap, updater: options.Updater,
 		assets: options.Assets, logger: options.Logger,
 	}, nil
 }
@@ -69,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/heatmap", s.handleHeatmap)
 	mux.HandleFunc("POST /api/admin/login", s.handleLogin)
 	mux.HandleFunc("GET /api/admin/setup-status", s.handleSetupStatus)
 	mux.HandleFunc("POST /api/admin/setup", s.handleSetup)
@@ -88,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/admin/update/check", s.requireAuth(s.handleCheckUpdate))
 	mux.Handle("POST /api/admin/update", s.requireAuth(s.handleStartUpdate))
 	mux.HandleFunc("GET /admin", s.handleAdminPage)
+	mux.HandleFunc("GET /heatmap", s.handleHeatmapPage)
 	mux.Handle("GET /", s.staticHandler())
 	return s.securityHeaders(s.logRequests(mux))
 }
@@ -101,8 +113,30 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.status.Snapshot())
 }
 
+func (s *Server) handleHeatmap(w http.ResponseWriter, r *http.Request) {
+	rangeName := r.URL.Query().Get("range")
+	if rangeName == "" {
+		rangeName = heatmap.RangeWeek
+	}
+	response, err := s.heatmap.Build(r.Context(), rangeName)
+	if errors.Is(err, heatmap.ErrInvalidRange) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		s.logger.Error("构建公开热力图失败", "range", rangeName, "err", err)
+		writeError(w, http.StatusInternalServerError, "热力图暂时不可用")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	s.serveFile(w, r, "admin/index.html")
+}
+
+func (s *Server) handleHeatmapPage(w http.ResponseWriter, r *http.Request) {
+	s.serveFile(w, r, "heatmap/index.html")
 }
 
 func (s *Server) staticHandler() http.Handler {
@@ -125,7 +159,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 
 func setAssetCache(header http.Header, path string) {
 	switch {
-	case path == "/" || path == "/index.html" || path == "/admin" || path == "/admin/" || strings.HasSuffix(path, ".html"):
+	case path == "/" || path == "/index.html" || path == "/admin" || path == "/admin/" || path == "/heatmap" || path == "/heatmap/" || strings.HasSuffix(path, ".html"):
 		header.Set("Cache-Control", "no-store")
 	case strings.HasPrefix(path, "/fonts/"):
 		header.Set("Cache-Control", "public, max-age=31536000, immutable")

@@ -79,6 +79,23 @@ func TestLoadHistoryLimit(t *testing.T) {
 	}
 }
 
+func TestLoadResultsBetweenUsesHalfOpenRange(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	for _, timestamp := range []int64{99, 100, 150, 200} {
+		if err := s.AppendResult(ctx, "svc-a", model.ProbeResult{OK: true, TS: timestamp}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	results, err := s.LoadResultsBetween(ctx, "svc-a", 100, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].TS != 100 || results[1].TS != 150 {
+		t.Fatalf("半开时间范围结果错误: %+v", results)
+	}
+}
+
 func TestLoadResultsSinceWithPreviousAndFailureStart(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

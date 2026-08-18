@@ -14,6 +14,7 @@ import (
 	"testing/fstest"
 
 	"github.com/xgxg-mdl/model-uptime/internal/admin"
+	"github.com/xgxg-mdl/model-uptime/internal/heatmap"
 	"github.com/xgxg-mdl/model-uptime/internal/model"
 	"github.com/xgxg-mdl/model-uptime/internal/notification"
 	"github.com/xgxg-mdl/model-uptime/internal/settings"
@@ -55,6 +56,17 @@ func (testStatusProvider) Snapshot() model.StatusResponse {
 	return model.StatusResponse{GeneratedAt: 123, AllOK: true, Services: []model.ServiceView{}}
 }
 
+type testHeatmapProvider struct {
+	response heatmap.Response
+	err      error
+	ranges   []string
+}
+
+func (p *testHeatmapProvider) Build(_ context.Context, rangeName string) (heatmap.Response, error) {
+	p.ranges = append(p.ranges, rangeName)
+	return p.response, p.err
+}
+
 type testUpdateProvider struct {
 	status update.Status
 	forces []bool
@@ -73,9 +85,10 @@ func (u *testUpdateProvider) Start(version string) error {
 }
 
 type testServer struct {
-	handler http.Handler
-	repo    *testRepository
-	monitor *testMonitor
+	handler  http.Handler
+	repo     *testRepository
+	monitor  *testMonitor
+	heatmaps *testHeatmapProvider
 }
 
 func newTestServer(t *testing.T, updateProvider UpdateProvider) testServer {
@@ -94,19 +107,21 @@ func newTestServer(t *testing.T, updateProvider UpdateProvider) testServer {
 		t.Fatal(err)
 	}
 	assets := fstest.MapFS{
-		"index.html":       &fstest.MapFile{Data: []byte("<!doctype html><title>Status</title>")},
-		"admin/index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>Admin</title>")},
-		"assets/app.js":    &fstest.MapFile{Data: []byte("console.log('ok')")},
-		"fonts/test.woff2": &fstest.MapFile{Data: []byte("font")},
+		"index.html":         &fstest.MapFile{Data: []byte("<!doctype html><title>Status</title>")},
+		"admin/index.html":   &fstest.MapFile{Data: []byte("<!doctype html><title>Admin</title>")},
+		"heatmap/index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>Heatmap</title>")},
+		"assets/app.js":      &fstest.MapFile{Data: []byte("console.log('ok')")},
+		"fonts/test.woff2":   &fstest.MapFile{Data: []byte("font")},
 	}
+	heatmaps := &testHeatmapProvider{}
 	server, err := New(Options{
-		Admin: manager, Status: testStatusProvider{}, Updater: updateProvider,
+		Admin: manager, Status: testStatusProvider{}, Heatmap: heatmaps, Updater: updateProvider,
 		Assets: assets, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return testServer{handler: server.Handler(), repo: repository, monitor: monitor}
+	return testServer{handler: server.Handler(), repo: repository, monitor: monitor, heatmaps: heatmaps}
 }
 
 func request(t *testing.T, handler http.Handler, method, path, body string, authenticated bool) *httptest.ResponseRecorder {
@@ -131,6 +146,13 @@ func TestStaticFilesHaveSecurityAndCacheHeaders(t *testing.T) {
 	if page.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("HTML Cache-Control = %q", page.Header().Get("Cache-Control"))
 	}
+	heatmapPage := request(t, server.handler, http.MethodGet, "/heatmap", "", false)
+	if heatmapPage.Code != http.StatusOK || !strings.Contains(heatmapPage.Body.String(), "<title>Heatmap</title>") {
+		t.Fatalf("热力图页面响应 = %d %q", heatmapPage.Code, heatmapPage.Body.String())
+	}
+	if heatmapPage.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("热力图 HTML Cache-Control = %q", heatmapPage.Header().Get("Cache-Control"))
+	}
 	for _, header := range []string{"Content-Security-Policy", "Permissions-Policy", "X-Content-Type-Options", "X-Frame-Options"} {
 		if page.Header().Get(header) == "" {
 			t.Errorf("缺少安全响应头 %s", header)
@@ -151,9 +173,29 @@ func TestStaticFilesHaveSecurityAndCacheHeaders(t *testing.T) {
 	}
 }
 
+func TestPublicHeatmapEndpointDefaultsToWeek(t *testing.T) {
+	t.Parallel()
+	server := newTestServer(t, nil)
+	server.heatmaps.response = heatmap.Response{Range: heatmap.RangeWeek, Timezone: "Asia/Shanghai"}
+
+	response := request(t, server.handler, http.MethodGet, "/api/heatmap", "", false)
+	if response.Code != http.StatusOK {
+		t.Fatalf("热力图 API = %d: %s", response.Code, response.Body.String())
+	}
+	if len(server.heatmaps.ranges) != 1 || server.heatmaps.ranges[0] != heatmap.RangeWeek {
+		t.Fatalf("默认范围 = %v", server.heatmaps.ranges)
+	}
+
+	server.heatmaps.err = heatmap.ErrInvalidRange
+	invalid := request(t, server.handler, http.MethodGet, "/api/heatmap?range=year", "", false)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("非法热力图范围 = %d", invalid.Code)
+	}
+}
+
 func TestWebAssetsContainsEntryPages(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"index.html", "admin/index.html"} {
+	for _, name := range []string{"index.html", "admin/index.html", "heatmap/index.html"} {
 		contents, err := fs.ReadFile(webAssets(), name)
 		if err != nil {
 			t.Fatalf("读取嵌入资源 %s: %v", name, err)

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>model-uptime // heatmap</title>
+<link rel="stylesheet" href="/assets/styles/foundation.css" />
+<link rel="stylesheet" href="/assets/styles/status.css" />
+<link rel="stylesheet" href="/assets/styles/heatmap.css" />
+</head>
+<body>
+  <div class="term heatmap-term" role="region" aria-label="model-uptime health heatmap">
+    <div class="titlebar">
+      <div class="lights" aria-hidden="true">
+        <span class="light close"></span>
+        <span class="light min"></span>
+        <span class="light max"></span>
+      </div>
+      <div class="title-text">
+        <span class="mute">—</span> <span id="term-subtitle">model-uptime</span> <span class="mute">—</span>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="body">
+      <div class="block">
+        <div class="line"><span class="comment"># health heatmap · Asia/Shanghai</span></div>
+        <div class="line"><span class="comment"># Last login: <span id="login-time">—</span></span></div>
+      </div>
+
+      <div class="block heatmap-command">
+        <div class="line"><span class="prompt">~ $</span> <span class="cmd">heatmap</span> <span class="flag">--range</span> <span class="str" id="active-range">week</span></div>
+        <div class="heatmap-toolbar">
+          <div class="range-switch" aria-label="Heatmap range">
+            <button type="button" data-range="day">day</button>
+            <button type="button" data-range="week">week</button>
+            <button type="button" data-range="month">month</button>
+          </div>
+          <div class="heatmap-legend" aria-label="Health states">
+            <span><i class="legend-swatch healthy"></i>healthy</span>
+            <span><i class="legend-swatch warning"></i>warning</span>
+            <span><i class="legend-swatch failing"></i>failing</span>
+            <span><i class="legend-swatch unobserved"></i>no data</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="heatmap-panels" id="heatmap-out"><span class="dim">loading heatmaps…</span></div>
+      </div>
+
+      <div class="block">
+        <div class="line"><span class="prompt">~ $</span><span class="cursor"></span></div>
+      </div>
+
+      <div class="foot">
+        <span>updated <span id="updated">—</span></span>
+        <span>built with go · <a href="/">status</a> · <a href="/admin/">manage</a></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" id="tip" role="tooltip"></div>
+  <script type="module" src="/assets/scripts/heatmap-page.js"></script>
+</body>
+</html>

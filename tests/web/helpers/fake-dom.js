@@ -143,7 +143,16 @@ export class FakeElement extends FakeNode {
 
   blur() {
     this.blurred = true;
+    if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = null;
     this.dispatchEvent({ type: 'blur' });
+  }
+
+  focus() {
+    if (this.ownerDocument.activeElement && this.ownerDocument.activeElement !== this) {
+      this.ownerDocument.activeElement.blur();
+    }
+    this.ownerDocument.activeElement = this;
+    this.dispatchEvent({ type: 'focus' });
   }
 
   scrollIntoView(options) {
@@ -174,6 +183,7 @@ export class FakeDocument {
     this.elementsByID = new Map();
     this.documentElement = { clientWidth: 1024 };
     this.title = '';
+    this.activeElement = null;
   }
 
   createElement(tagName) {

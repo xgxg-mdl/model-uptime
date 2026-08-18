@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/admin"
+	"github.com/xgxg-mdl/model-uptime/internal/heatmap"
 	"github.com/xgxg-mdl/model-uptime/internal/httpserver"
 	"github.com/xgxg-mdl/model-uptime/internal/model"
 	"github.com/xgxg-mdl/model-uptime/internal/monitor"
@@ -65,7 +66,12 @@ func startIntegrationServer(
 		_ = st.Close()
 		t.Fatalf("加载监控配置: %v", err)
 	}
-	srv, err := httpserver.New(httpserver.Options{Admin: manager, Status: sch, Updater: updates})
+	heatmapService, err := heatmap.New(st, sch)
+	if err != nil {
+		_ = st.Close()
+		t.Fatalf("创建热力图模块: %v", err)
+	}
+	srv, err := httpserver.New(httpserver.Options{Admin: manager, Status: sch, Heatmap: heatmapService, Updater: updates})
 	if err != nil {
 		_ = st.Close()
 		t.Fatalf("创建 HTTP server: %v", err)

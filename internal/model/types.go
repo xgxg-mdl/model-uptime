@@ -243,6 +243,7 @@ type ServiceView struct {
 	ID          string        `json:"id"`
 	Model       string        `json:"model"`
 	Provider    string        `json:"provider,omitempty"`
+	SortOrder   int           `json:"-"`
 	IntervalSec int           `json:"interval_sec"`
 	WarningSec  int           `json:"warning_sec"`
 	UptimePct   float64       `json:"uptime_pct"`

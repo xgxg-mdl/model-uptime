@@ -1,0 +1,162 @@
+.heatmap-term { max-width: 1120px; }
+
+.heatmap-command { display: grid; gap: 10px; }
+
+.heatmap-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-switch {
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.range-switch button {
+  min-width: 58px;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 10px;
+  background: #15151a;
+  color: var(--fg-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.range-switch button:last-child { border-right: 0; }
+.range-switch button:hover { color: var(--fg); }
+.range-switch button.active { background: rgba(122, 252, 255, 0.12); color: var(--info); }
+.range-switch button:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+
+.heatmap-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
+.heatmap-legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+.legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--fg-mute);
+}
+
+.legend-swatch.healthy { background: var(--ok); }
+.legend-swatch.warning { background: var(--warn); }
+.legend-swatch.failing { background: var(--bad); }
+.legend-swatch.unobserved { background: #3a3a42; }
+
+.heatmap-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.heatmap-panel {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.heatmap-panel-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.heatmap-model {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--cmd);
+  font-size: 12px;
+}
+
+.heatmap-provider { color: var(--fg-dim); font-size: 10px; }
+.heatmap-current { flex: 0 0 auto; font-size: 10px; }
+.heatmap-current.healthy { color: var(--ok); }
+.heatmap-current.warning { color: var(--warn); }
+.heatmap-current.failing { color: var(--bad); }
+.heatmap-current.pending { color: var(--fg-dim); }
+
+.heatmap-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 9px;
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
+.heatmap-summary b { color: var(--fg); font-weight: 500; }
+
+.heat-axis,
+.heat-row {
+  display: grid;
+  grid-template-columns: 34px repeat(24, 9px);
+  gap: 2px;
+  align-items: center;
+}
+
+.heat-axis { margin-bottom: 3px; color: var(--fg-mute); font-size: 8px; text-align: center; }
+.heat-axis span:first-child { text-align: left; }
+.heat-row + .heat-row { margin-top: 2px; }
+.heat-row-label { overflow: hidden; color: var(--fg-mute); font-size: 8px; white-space: nowrap; }
+
+.heat-cell {
+  appearance: none;
+  width: 9px;
+  height: 9px;
+  min-width: 0;
+  border: 0;
+  border-radius: 1px;
+  padding: 0;
+  background: #3a3a42;
+  cursor: pointer;
+}
+
+.heat-cell.healthy { background: var(--ok); }
+.heat-cell.warning { background: var(--warn); }
+.heat-cell.failing { background: var(--bad); }
+.heat-cell.unobserved { opacity: 0.28; }
+.heat-cell.insufficient { opacity: 0.55; }
+.heat-cell.intensity-1 { opacity: 0.42; }
+.heat-cell.intensity-2 { opacity: 0.55; }
+.heat-cell.intensity-3 { opacity: 0.7; }
+.heat-cell.intensity-4 { opacity: 0.85; }
+.heat-cell.intensity-5 { opacity: 1; }
+.heat-cell:hover { filter: brightness(1.35); }
+.heat-cell:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; filter: brightness(1.35); }
+
+.heatmap-empty { grid-column: 1 / -1; color: var(--fg-dim); }
+.heatmap-error { grid-column: 1 / -1; color: var(--bad); }
+
+@media (max-width: 760px) {
+  .heatmap-panels { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 400px) {
+  .heatmap-panel { padding: 9px; }
+  .heat-axis,
+  .heat-row { grid-template-columns: 30px repeat(24, 8px); gap: 1px; }
+  .heat-cell { width: 8px; height: 8px; }
+  .heat-row + .heat-row { margin-top: 1px; }
+  .heat-axis { font-size: 7px; }
+  .heat-row-label { font-size: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .range-switch button,
+  .heat-cell { transition: none; }
+}

@@ -44,7 +44,7 @@ deployment-test:
 	$(NODE) --test tests/deployment/*.test.js
 
 js-check:
-	@for file in internal/httpserver/web/assets/scripts/status-page.js internal/httpserver/web/assets/scripts/admin/*.js; do \
+	@for file in internal/httpserver/web/assets/scripts/status-page.js internal/httpserver/web/assets/scripts/heatmap-page.js internal/httpserver/web/assets/scripts/admin/*.js; do \
 		$(NODE) --check "$$file"; \
 	done
 

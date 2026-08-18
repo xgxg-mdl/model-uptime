@@ -281,6 +281,35 @@ func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]mod
 	return out, nil
 }
 
+// LoadResultsBetween 按时间升序返回服务在 [since, until) 内的探测结果。
+func (s *Store) LoadResultsBetween(ctx context.Context, svcID string, since, until int64) ([]model.ProbeResult, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT ts, ok, latency_ms
+		 FROM probe_results
+		 WHERE service_id=? AND ts>=? AND ts<?
+		 ORDER BY ts, id`,
+		svcID, since, until,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询时间范围历史失败: %w", err)
+	}
+	defer rows.Close()
+	out := make([]model.ProbeResult, 0)
+	for rows.Next() {
+		var result model.ProbeResult
+		var ok int
+		if err := rows.Scan(&result.TS, &ok, &result.LatencyMS); err != nil {
+			return nil, fmt.Errorf("扫描时间范围历史失败: %w", err)
+		}
+		result.OK = ok != 0
+		out = append(out, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("读取时间范围历史失败: %w", err)
+	}
+	return out, nil
+}
+
 // LoadResultsSinceWithPrevious 返回时间范围内的结果，并额外携带范围起点前最后一条状态。
 // 额外状态用于从北京时间零点开始积分，避免把当天首次探测前的已知状态丢失。
 func (s *Store) LoadResultsSinceWithPrevious(ctx context.Context, svcID string, since, until int64) ([]model.ProbeResult, error) {
