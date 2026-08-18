@@ -5,6 +5,7 @@ import {
   buildBarEvents,
   createStatusPoller,
   createStatusRenderer,
+  resultStatus,
 } from '../../internal/httpserver/web/assets/scripts/status-page.js';
 import { createStatusDocument, findAll } from './helpers/fake-dom.js';
 
@@ -35,6 +36,7 @@ function service(overrides = {}) {
     provider: 'OpenAI',
     model: 'gpt-5',
     interval_sec: 60,
+    warning_sec: 30,
     uptime_pct: 99.9,
     history: [{ ts: 100, ok: true, latency_ms: 12 }],
     pauses: [],
@@ -61,6 +63,36 @@ test('buildBarEvents 按时间合并样本和暂停区间', () => {
     [250, 'paused'],
     [300, 'bad'],
   ]);
+});
+
+test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
+  assert.equal(resultStatus({ ok: true, latency_ms: 30_000 }, 30), 'ok');
+  assert.equal(resultStatus({ ok: true, latency_ms: 30_001 }, 30), 'warning');
+  assert.equal(resultStatus({ ok: false, latency_ms: 31_000 }, 30), 'bad');
+
+  const events = buildBarEvents([
+    { ts: 100, ok: true, latency_ms: 30_000 },
+    { ts: 200, ok: true, latency_ms: 30_001 },
+  ], [], 30);
+  assert.deepEqual(events.map(event => event.kind), ['ok', 'warning']);
+});
+
+test('慢响应在服务状态、历史条、耗时和总览中显示 warning', () => {
+  const slow = service({
+    history: [{ ts: 100, ok: true, latency_ms: 30_001 }],
+    last: { ts: 100, ok: true, latency_ms: 30_001 },
+  });
+  const { document } = render(statusData(slow));
+  const output = document.getElementById('svc-out');
+  const warningBar = findAll(output, element => element.classList.contains('warning'))[0];
+
+  assert.ok(warningBar);
+  assert.match(output.textContent, /slow/);
+  assert.match(document.getElementById('banner-out').textContent, /warning/);
+  assert.ok(findAll(output, element => element.classList.contains('warn') && element.textContent === '30001ms').length > 0);
+
+  warningBar.dispatchEvent({ type: 'focus' });
+  assert.match(document.getElementById('tip').textContent, /WARNING/);
 });
 
 test('历史格左侧补透明占位并只保留最近事件', () => {

@@ -169,7 +169,12 @@
             </div>
             <div class="field">
               <label>Timeout (s)</label>
-              <input id="f-timeout" type="number" min="1" max="300" step="1" value="15" />
+              <input id="f-timeout" type="number" min="1" max="300" step="1" value="60" />
+            </div>
+            <div class="field">
+              <label>Warning after (s)</label>
+              <input id="f-warning" type="number" min="1" max="300" step="1" value="30" />
+              <span class="hint">Successful probes slower than this appear as warning.</span>
             </div>
             <div class="field llm check-row">
               <input type="checkbox" id="f-stream" checked />
@@ -222,6 +227,11 @@
             <label>Timeout (s)</label>
             <input id="b-timeout" type="number" min="1" max="300" step="1" placeholder="不改" />
             <span class="hint">单次探测超时，1~300</span>
+          </div>
+          <div class="field">
+            <label>Warning after (s)</label>
+            <input id="b-warning" type="number" min="1" max="300" step="1" placeholder="不改" />
+            <span class="hint">成功探测超过该耗时显示 warning，1~300</span>
           </div>
           <div class="field">
             <label>Streaming</label>

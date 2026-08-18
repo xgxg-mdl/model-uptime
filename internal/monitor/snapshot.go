@@ -18,7 +18,8 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 			continue
 		}
 		view := model.ServiceView{
-			ID: st.svc.ID, Model: st.svc.Name, Provider: st.svc.Provider, IntervalSec: st.svc.IntervalSec,
+			ID: st.svc.ID, Model: st.svc.Name, Provider: st.svc.Provider,
+			IntervalSec: st.svc.IntervalSec, WarningSec: st.svc.WarningSec,
 			UptimePct: uptimePct(st.history), Last: st.last,
 			History: append([]model.ProbeResult(nil), st.history...),
 		}

@@ -163,6 +163,7 @@ body {
 }
 
 .bar.ok { background: var(--ok); }
+.bar.warning { background: var(--warn); }
 .bar.bad { background: var(--bad); }
 .bar.paused { background: #3a3a42; }
 .bar.paused:hover,

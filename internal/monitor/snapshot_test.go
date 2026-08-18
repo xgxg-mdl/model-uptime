@@ -40,11 +40,16 @@ func TestSnapshotPageCopy(t *testing.T) {
 
 func TestSnapshotIncludesStableServiceID(t *testing.T) {
 	s := New(nil, nil)
-	if err := s.Reload([]model.Service{testSvc("stable-id", true)}, defaultPage()); err != nil {
+	service := testSvc("stable-id", true)
+	service.WarningSec = 12
+	if err := s.Reload([]model.Service{service}, defaultPage()); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := s.Snapshot()
 	if len(snapshot.Services) != 1 || snapshot.Services[0].ID != "stable-id" {
 		t.Fatalf("状态快照缺少服务 ID: %+v", snapshot.Services)
+	}
+	if snapshot.Services[0].WarningSec != 12 {
+		t.Fatalf("状态快照 warning_sec = %d，期望 12", snapshot.Services[0].WarningSec)
 	}
 }

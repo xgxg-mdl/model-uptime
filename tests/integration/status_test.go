@@ -31,6 +31,9 @@ func TestStatusEndpoint(t *testing.T) {
 	if got, ok := svc["interval_sec"].(float64); !ok || got != 60 {
 		t.Errorf("interval_sec = %v，期望 60", svc["interval_sec"])
 	}
+	if got, ok := svc["warning_sec"].(float64); !ok || got != 30 {
+		t.Errorf("warning_sec = %v，期望 30", svc["warning_sec"])
+	}
 	page, ok := out["page"].(map[string]any)
 	if !ok || page["history_len"] == nil {
 		t.Errorf("缺少 page 配置: %v", out["page"])

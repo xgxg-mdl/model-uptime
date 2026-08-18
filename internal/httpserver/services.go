@@ -74,6 +74,7 @@ type servicePatchRequest struct {
 	Enabled     *bool `json:"enabled,omitempty"`
 	IntervalSec *int  `json:"interval_sec,omitempty"`
 	TimeoutSec  *int  `json:"timeout_sec,omitempty"`
+	WarningSec  *int  `json:"warning_sec,omitempty"`
 	Stream      *bool `json:"stream,omitempty"`
 }
 
@@ -88,7 +89,8 @@ func (s *Server) handleBulkUpdateServices(w http.ResponseWriter, r *http.Request
 	}
 	services, err := s.admin.UpdateServices(request.IDs, admin.ServicePatch{
 		Enabled: request.Patch.Enabled, IntervalSec: request.Patch.IntervalSec,
-		TimeoutSec: request.Patch.TimeoutSec, Stream: request.Patch.Stream,
+		TimeoutSec: request.Patch.TimeoutSec, WarningSec: request.Patch.WarningSec,
+		Stream: request.Patch.Stream,
 	})
 	if err != nil {
 		writeAdminError(w, err)

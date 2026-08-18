@@ -75,7 +75,8 @@ services:
     base_url: https://api.openai.com/v1
     api_key: sk-xxxxxxxxxxxx
     interval_sec: 60
-    timeout_sec: 15
+    warning_sec: 30       # 成功但耗时超过该值时，状态页显示 warning
+    timeout_sec: 60
     enabled: true
     # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
     stream: true
@@ -89,7 +90,8 @@ services:
     base_url: https://api.anthropic.com/v1
     api_key: sk-ant-xxxxxxxxxxxx
     interval_sec: 60
-    timeout_sec: 15
+    warning_sec: 30
+    timeout_sec: 60
     enabled: true
     # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
     stream: true
@@ -103,7 +105,8 @@ services:
     base_url: https://api.x.ai/v1
     api_key: xai-xxxxxxxxxxxx
     interval_sec: 60
-    timeout_sec: 15
+    warning_sec: 30
+    timeout_sec: 60
     enabled: true
     # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
     stream: true
@@ -118,5 +121,6 @@ services:
     method: GET
     expect_status: 200
     interval_sec: 60
-    timeout_sec: 15
+    warning_sec: 30
+    timeout_sec: 60
     enabled: true

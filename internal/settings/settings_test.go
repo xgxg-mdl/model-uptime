@@ -96,8 +96,8 @@ services:
 		t.Error("全部统计维度关闭时应回退全开")
 	}
 	svc := c.Services[0]
-	if svc.IntervalSec != 60 || svc.TimeoutSec != 15 {
-		t.Errorf("服务默认 interval/timeout = %d/%d", svc.IntervalSec, svc.TimeoutSec)
+	if svc.IntervalSec != 60 || svc.TimeoutSec != 60 || svc.WarningSec != 30 {
+		t.Errorf("服务默认 interval/timeout/warning = %d/%d/%d", svc.IntervalSec, svc.TimeoutSec, svc.WarningSec)
 	}
 	if !svc.IsStreaming() {
 		t.Error("LLM 服务未配置 stream 时应默认流式")

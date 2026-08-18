@@ -236,6 +236,7 @@ type ServicePatch struct {
 	Enabled     *bool
 	IntervalSec *int
 	TimeoutSec  *int
+	WarningSec  *int
 	Stream      *bool
 }
 
@@ -273,6 +274,9 @@ func (m *Manager) UpdateServices(ids []string, patch ServicePatch) ([]model.Serv
 		}
 		if patch.TimeoutSec != nil {
 			service.TimeoutSec = *patch.TimeoutSec
+		}
+		if patch.WarningSec != nil {
+			service.WarningSec = *patch.WarningSec
 		}
 		if patch.Stream != nil {
 			service.Stream = copyBool(patch.Stream)

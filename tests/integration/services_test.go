@@ -223,16 +223,16 @@ func TestBulkUpdateServices(t *testing.T) {
 		t.Errorf("批量禁用结果异常: a=%v b=%v c=%v", rows["a"]["enabled"], rows["b"]["enabled"], rows["c"]["enabled"])
 	}
 
-	// 批量设 interval + timeout，a 未在 ids 中应保持不变
+	// 批量设 interval + timeout + warning，a 未在 ids 中应保持不变
 	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
-		"ids": []string{"b", "c"}, "patch": map[string]any{"interval_sec": 30, "timeout_sec": 8},
+		"ids": []string{"b", "c"}, "patch": map[string]any{"interval_sec": 30, "timeout_sec": 8, "warning_sec": 6},
 	})
 	if code != http.StatusOK {
 		t.Fatal("批量设置字段失败")
 	}
 	rows = list()
-	if int(rows["b"]["interval_sec"].(float64)) != 30 || int(rows["c"]["timeout_sec"].(float64)) != 8 {
-		t.Errorf("字段未生效: b.interval=%v c.timeout=%v", rows["b"]["interval_sec"], rows["c"]["timeout_sec"])
+	if int(rows["b"]["interval_sec"].(float64)) != 30 || int(rows["c"]["timeout_sec"].(float64)) != 8 || int(rows["b"]["warning_sec"].(float64)) != 6 {
+		t.Errorf("字段未生效: b.interval=%v c.timeout=%v b.warning=%v", rows["b"]["interval_sec"], rows["c"]["timeout_sec"], rows["b"]["warning_sec"])
 	}
 	if int(rows["a"]["interval_sec"].(float64)) == 30 {
 		t.Error("未选中的 a 不应被修改")
@@ -287,6 +287,14 @@ func TestBulkUpdateServices(t *testing.T) {
 	})
 	if code != http.StatusBadRequest {
 		t.Errorf("非法 interval 应 400，got %d", code)
+	}
+
+	// 非法 warning → 400（updateConfig 校验）
+	code, _ = doJSON(t, ts, http.MethodPatch, "/api/admin/services", testToken, map[string]any{
+		"ids": []string{"b"}, "patch": map[string]any{"warning_sec": 301},
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("非法 warning 应 400，got %d", code)
 	}
 
 	// 未认证 → 401

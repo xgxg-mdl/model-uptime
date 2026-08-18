@@ -241,6 +241,8 @@ export function createServicesController({
     if (interval) patch.interval_sec = Number.parseInt(interval, 10);
     const timeout = element('b-timeout').value.trim();
     if (timeout) patch.timeout_sec = Number.parseInt(timeout, 10);
+    const warning = element('b-warning').value.trim();
+    if (warning) patch.warning_sec = Number.parseInt(warning, 10);
     const stream = element('b-stream').value;
     if (stream === 'true') patch.stream = true;
     else if (stream === 'false') patch.stream = false;
@@ -308,7 +310,8 @@ export function createServicesController({
     element('f-key').value = '';
     element('f-path').value = service.path || '';
     element('f-interval').value = service.interval_sec || 60;
-    element('f-timeout').value = service.timeout_sec || 15;
+    element('f-timeout').value = service.timeout_sec || 60;
+    element('f-warning').value = service.warning_sec || 30;
     element('f-enabled').checked = service.enabled;
     element('f-stream').checked = service.stream !== false;
     element('f-method').value = (service.method || 'GET').toUpperCase();
@@ -329,7 +332,8 @@ export function createServicesController({
       .forEach(id => { element(id).value = ''; });
     element('f-protocol').value = 'chat';
     element('f-interval').value = 60;
-    element('f-timeout').value = 15;
+    element('f-timeout').value = 60;
+    element('f-warning').value = 30;
     element('f-sort-order').value = '';
     element('f-enabled').checked = true;
     element('f-stream').checked = true;
@@ -359,7 +363,8 @@ export function createServicesController({
       path: protocol === 'http' ? '' : element('f-path').value.trim(),
       sort_order: Number.parseInt(element('f-sort-order').value, 10) || 0,
       interval_sec: Number.parseInt(element('f-interval').value, 10) || 60,
-      timeout_sec: Number.parseInt(element('f-timeout').value, 10) || 15,
+      timeout_sec: Number.parseInt(element('f-timeout').value, 10) || 60,
+      warning_sec: Number.parseInt(element('f-warning').value, 10) || 30,
       enabled: element('f-enabled').checked,
       stream: protocol === 'http' ? undefined : element('f-stream').checked,
       method: protocol === 'http' ? element('f-method').value : '',
@@ -405,7 +410,7 @@ export function createServicesController({
   element('bulk-enable').addEventListener('click', () => { void bulkSetEnabled(true); });
   element('bulk-disable').addEventListener('click', () => { void bulkSetEnabled(false); });
   element('bulk-settings').addEventListener('click', () => {
-    ['b-interval', 'b-timeout'].forEach(id => { element(id).value = ''; });
+    ['b-interval', 'b-timeout', 'b-warning'].forEach(id => { element(id).value = ''; });
     element('b-stream').value = '';
     element('bulk-editor-count').textContent = selectedIDs().length;
     revealPanel(element('bulk-editor'), windowRef, 'start');

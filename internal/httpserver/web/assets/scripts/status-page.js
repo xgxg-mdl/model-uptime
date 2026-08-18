@@ -34,10 +34,15 @@ export function axisLabels(historyLength, intervalSeconds) {
 }
 
 /** Samples and pause spans share one chronological rendering sequence. */
-export function buildBarEvents(history = [], pauses = []) {
+export function resultStatus(result, warningSeconds = 30) {
+  if (!result?.ok) return 'bad';
+  return Number(result.latency_ms) > Number(warningSeconds) * 1000 ? 'warning' : 'ok';
+}
+
+export function buildBarEvents(history = [], pauses = [], warningSeconds = 30) {
   const events = [];
   for (const result of history || []) {
-    events.push({ ts: result.ts, kind: result.ok ? 'ok' : 'bad', result });
+    events.push({ ts: result.ts, kind: resultStatus(result, warningSeconds), result });
   }
   for (const pause of pauses || []) {
     events.push({ ts: pause.to, kind: 'paused', pause });
@@ -94,8 +99,8 @@ function tooltipModel(event) {
   ];
   if (result.error) fields.push(['err', String(result.error).slice(0, 80)]);
   return {
-    status: result.ok ? 'OK' : 'FAIL',
-    statusClass: result.ok ? 'ok' : 'bad',
+    status: event.kind === 'warning' ? 'WARNING' : (result.ok ? 'OK' : 'FAIL'),
+    statusClass: event.kind === 'warning' ? 'warn' : (result.ok ? 'ok' : 'bad'),
     fields,
   };
 }
@@ -154,7 +159,9 @@ export function createStatusRenderer({
     const output = documentRef.getElementById('banner-out');
     const services = data.services || [];
     const count = services.length;
-    const overallStatus = data.all_ok ? 'ok' : 'bad';
+    const down = services.filter(service => service.last && !service.last.ok).length;
+    const warning = services.filter(service => resultStatus(service.last, service.warning_sec) === 'warning').length;
+    const overallStatus = down > 0 ? 'bad' : (warning > 0 ? 'warning' : 'ok');
     const statusChanged = previousOverallStatus !== null && previousOverallStatus !== overallStatus;
     const averageUptime = count > 0
       ? (services.reduce((sum, service) => sum + Number(service.uptime_pct || 0), 0) / count).toFixed(2)
@@ -163,12 +170,15 @@ export function createStatusRenderer({
     const summary = createElement(documentRef, 'div', 'line');
     appendSpan(documentRef, summary, formatTimeShort(data.generated_at), 'dim');
     appendText(documentRef, summary, ' ');
-    if (data.all_ok) {
+    if (overallStatus === 'ok') {
       appendSpan(documentRef, summary, 'up,', 'ok');
       appendText(documentRef, summary, ' ');
       appendSpan(documentRef, summary, `${count} services`, 'cmd');
+    } else if (overallStatus === 'warning') {
+      appendSpan(documentRef, summary, 'warning,', 'warn');
+      appendText(documentRef, summary, ' ');
+      appendSpan(documentRef, summary, `${warning}/${count} services slow`, 'cmd');
     } else {
-      const down = services.filter(service => service.last && !service.last.ok).length;
       appendSpan(documentRef, summary, 'degraded,', 'bad');
       appendText(documentRef, summary, ' ');
       appendSpan(documentRef, summary, `${count - down}/${count} services up`, 'cmd');
@@ -177,14 +187,16 @@ export function createStatusRenderer({
       appendText(documentRef, summary, ', ');
       const load = createElement(documentRef, 'span', 'cmd');
       appendText(documentRef, load, 'avg load ');
-      appendSpan(documentRef, load, `${averageUptime}%`, data.all_ok ? 'ok' : 'warn');
+      appendSpan(documentRef, load, `${averageUptime}%`, overallStatus === 'ok' ? 'ok' : 'warn');
       summary.append(load);
     }
 
-    const detailClass = `line ${data.all_ok ? 'ok' : 'bad'} bold banner-status${statusChanged ? ' status-change' : ''}`;
+    const detailStatusClass = overallStatus === 'warning' ? 'warn' : overallStatus;
+    const detailClass = `line ${detailStatusClass} bold banner-status${statusChanged ? ' status-change' : ''}`;
     let detailText = '● all systems operational';
-    if (!data.all_ok) {
-      const down = services.filter(service => service.last && !service.last.ok).length;
+    if (overallStatus === 'warning') {
+      detailText = `● ${warning} service${warning === 1 ? '' : 's'} responding slowly`;
+    } else if (overallStatus === 'bad') {
       detailText = `● ${down} service${down === 1 ? '' : 's'} failing — check logs below`;
     }
     output.replaceChildren(summary, createElement(documentRef, 'div', detailClass, detailText));
@@ -217,7 +229,7 @@ export function createStatusRenderer({
 
   function createBars(service, historyLength) {
     const bars = createElement(documentRef, 'div', 'bars');
-    const recent = buildBarEvents(service.history, service.pauses).slice(-historyLength);
+    const recent = buildBarEvents(service.history, service.pauses, service.warning_sec).slice(-historyLength);
     const padCount = historyLength - recent.length;
     for (let index = 0; index < padCount; index++) {
       bars.append(createElement(documentRef, 'span', 'bar none'));
@@ -238,7 +250,8 @@ export function createStatusRenderer({
       for (const service of services) {
         appendText(documentRef, commandModels, ' ');
         const last = service.last;
-        const statusClass = last ? (last.ok ? 'ok' : 'bad') : 'warn';
+        const status = last ? resultStatus(last, service.warning_sec) : 'pending';
+        const statusClass = status === 'warning' || status === 'pending' ? 'warn' : status;
         appendSpan(documentRef, commandModels, service.model, statusClass);
       }
     }
@@ -251,10 +264,11 @@ export function createStatusRenderer({
       let statusClass = 'warn';
       let statusText = 'pending';
       if (last) {
-        statusClass = last.ok ? 'ok' : 'bad';
-        statusText = last.ok ? 'online' : 'failing';
+        const status = resultStatus(last, service.warning_sec);
+        statusClass = status === 'warning' ? 'warn' : status;
+        statusText = status === 'warning' ? 'slow' : (status === 'ok' ? 'online' : 'failing');
       }
-      const serviceStatus = last ? (last.ok ? 'ok' : 'bad') : 'pending';
+      const serviceStatus = last ? resultStatus(last, service.warning_sec) : 'pending';
       const key = serviceIdentity(service, index);
       const statusChanged = previousServiceStates.has(key) && previousServiceStates.get(key) !== serviceStatus;
       nextServiceStates.set(key, serviceStatus);
@@ -271,7 +285,10 @@ export function createStatusRenderer({
       const uptimeClass = uptime >= 99 ? 'ok' : (uptime >= 95 ? 'warn' : 'bad');
       if (page.show_uptime) metadata.append(metric(documentRef, 'uptime', `${uptime.toFixed(2)}%`, uptimeClass));
       if (page.show_samples) metadata.append(metric(documentRef, 'samples', `${(service.history || []).length}/${historyLength}`));
-      if (page.show_latency && last) metadata.append(metric(documentRef, 'latency', `${last.latency_ms}ms`, last.ok ? 'ok' : 'bad'));
+      if (page.show_latency && last) {
+        const latencyStatus = resultStatus(last, service.warning_sec);
+        metadata.append(metric(documentRef, 'latency', `${last.latency_ms}ms`, latencyStatus === 'warning' ? 'warn' : latencyStatus));
+      }
 
       const barsWrapper = createElement(documentRef, 'div', 'service-indent service-bars');
       barsWrapper.append(createBars(service, historyLength));

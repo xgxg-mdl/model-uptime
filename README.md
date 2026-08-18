@@ -155,7 +155,8 @@ services:                # 监控目标
     base_url: https://api.openai.com/v1
     api_key: sk-xxx      # 留空则探测时不带鉴权头
     interval_sec: 60
-    timeout_sec: 15
+    warning_sec: 30       # 成功但耗时超过该值时显示 warning
+    timeout_sec: 60
     enabled: true
 ```
 

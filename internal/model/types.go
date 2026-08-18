@@ -33,6 +33,7 @@ type Service struct {
 	SortOrder   int    `yaml:"sort_order,omitempty" json:"sort_order"`
 	IntervalSec int    `yaml:"interval_sec,omitempty" json:"interval_sec,omitempty"`
 	TimeoutSec  int    `yaml:"timeout_sec,omitempty" json:"timeout_sec,omitempty"`
+	WarningSec  int    `yaml:"warning_sec,omitempty" json:"warning_sec,omitempty"`
 	// 指针而非 bool：区分“未配置”（nil，默认启用）与“显式禁用”（false）
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	// LLM 协议默认走流式 SSE；显式 false 保持同步 JSON 兼容模式。
@@ -65,7 +66,10 @@ func (s *Service) Normalize() {
 		s.IntervalSec = 60
 	}
 	if s.TimeoutSec <= 0 {
-		s.TimeoutSec = 15
+		s.TimeoutSec = 60
+	}
+	if s.WarningSec <= 0 {
+		s.WarningSec = 30
 	}
 	if s.Protocol == ProtocolHTTP {
 		s.Stream = nil
@@ -111,6 +115,9 @@ func (s *Service) Validate() error {
 	}
 	if s.TimeoutSec < 1 || s.TimeoutSec > 300 {
 		return fmt.Errorf("服务 %q: timeout_sec 需在 1~300 之间", s.ID)
+	}
+	if s.WarningSec < 1 || s.WarningSec > 300 {
+		return fmt.Errorf("服务 %q: warning_sec 需在 1~300 之间", s.ID)
 	}
 	if s.SortOrder < 0 {
 		return fmt.Errorf("服务 %q: sort_order 不能为负数", s.ID)
@@ -237,6 +244,7 @@ type ServiceView struct {
 	Model       string        `json:"model"`
 	Provider    string        `json:"provider,omitempty"`
 	IntervalSec int           `json:"interval_sec"`
+	WarningSec  int           `json:"warning_sec"`
 	UptimePct   float64       `json:"uptime_pct"`
 	Last        *ProbeResult  `json:"last"`
 	History     []ProbeResult `json:"history"`
