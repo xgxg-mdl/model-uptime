@@ -242,6 +242,19 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 }
 
 .login-card input:focus { outline: none; border-color: var(--accent); }
+.login-card input:autofill {
+  background: #15151a;
+  color: var(--fg);
+  box-shadow: 0 0 0 1000px #15151a inset;
+  caret-color: var(--fg);
+}
+.login-card input:-webkit-autofill,
+.login-card input:-webkit-autofill:hover,
+.login-card input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--fg);
+  -webkit-box-shadow: 0 0 0 1000px #15151a inset;
+  caret-color: var(--fg);
+}
 .auth-command { margin: 0 0 14px; color: var(--fg); font-size: 12px; }
 .auth-hint { margin: 12px 0 0; color: var(--dim); font-size: 11px; }
 .toast {

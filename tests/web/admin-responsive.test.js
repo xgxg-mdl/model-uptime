@@ -65,6 +65,12 @@ test('管理页使用外置资源并保留响应式结构', () => {
   assert.doesNotMatch(adminCSS, /@media \(max-width: 960px\)|content:\s*attr\(data-label\)/);
 });
 
+test('登录密码自动填充保持暗色主题', () => {
+  assert.match(adminCSS, /\.login-card input:-webkit-autofill/);
+  assert.match(adminCSS, /-webkit-text-fill-color:\s*var\(--fg\)/);
+  assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px #15151a inset/);
+});
+
 test('桌面和移动服务渲染器保持相同操作能力并转义字段', () => {
   const service = {
     id: 'openai-main',
