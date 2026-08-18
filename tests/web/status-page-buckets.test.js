@@ -135,9 +135,9 @@ test('完整 interval 没有观测覆盖时仍保留真正的 no data', () => {
   ]);
 });
 
-test('底部刻度按固定窗口的真实时间跨度均匀分布', () => {
-  const buckets = buildTimeBuckets(service({ history: [] }), 5, 420);
-  const boundaries = [120, 195, 270, 345, 420];
+test('底部刻度取固定 60 个时间桶的真实边界', () => {
+  const buckets = buildTimeBuckets(service({ history: [] }), 60, 3720);
+  const boundaries = [120, 1020, 1920, 2820, 3720];
   assert.deepEqual(
     timeBucketAxisLabels(buckets),
     boundaries.map(timestamp => formatTimeShort(timestamp).slice(0, 5)),

@@ -26,10 +26,11 @@ export function normalizeRefreshSeconds(value, fallback = DEFAULT_REFRESH_SECOND
 
 export function timeBucketAxisLabels(buckets = []) {
   if (!buckets.length) return ['', '', '', '', ''];
-  const windowStart = buckets[0].from;
-  const windowEnd = buckets.at(-1).to;
   return [0, 1, 2, 3, 4].map(index => {
-    const timestamp = Math.round(windowStart + (windowEnd - windowStart) * index / 4);
+    const boundaryIndex = Math.round(buckets.length * index / 4);
+    const timestamp = boundaryIndex === buckets.length
+      ? buckets.at(-1).to
+      : buckets[boundaryIndex].from;
     return formatTimeShort(timestamp).slice(0, 5);
   });
 }
