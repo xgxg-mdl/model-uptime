@@ -3,6 +3,7 @@ const REFRESH_MS = 60_000;
 const VALID_RANGES = new Set(['1d', '7d', '30d']);
 const RANGE_LABELS = { '1d': '1d', '7d': '7d', '30d': '30d' };
 const HOUR_AXIS_LABELS = ['00:00', '06:00', '12:00', '18:00', '24:00'];
+const CELLS_PER_FRAME = 96;
 
 export function normalizeRange(value) {
   return VALID_RANGES.has(value) ? value : DEFAULT_RANGE;
@@ -88,10 +89,6 @@ function percentage(count, total) {
   return `${(Number(count || 0) / Number(total || 1) * 100).toFixed(1)}%`;
 }
 
-function accessibleCellName(cell) {
-  return `${statusLabel(cell.status)}, ${formatBeijingTime(cell.start_ts)} – ${formatBeijingTime(cell.end_ts)}`;
-}
-
 function currentStatusLabel(status) {
   return { healthy: 'online', warning: 'slow', failing: 'failing', pending: 'pending' }[status] || status;
 }
@@ -142,6 +139,7 @@ export function createHeatmapRenderer({
   const tip = documentRef.getElementById('tip');
   const cellModels = new WeakMap();
   const cellSignatures = new WeakMap();
+  const cellPeriodLabels = new Map();
   const schedule = scheduleFrame || (typeof windowRef?.requestAnimationFrame === 'function'
     ? callback => windowRef.requestAnimationFrame(callback)
     : callback => { callback(); return null; });
@@ -192,6 +190,16 @@ export function createHeatmapRenderer({
     ].join('|');
   }
 
+  function cachedAccessibleCellName(cell) {
+    const key = `${cell.start_ts}|${cell.end_ts}`;
+    let period = cellPeriodLabels.get(key);
+    if (!period) {
+      period = `${formatBeijingTime(cell.start_ts)} – ${formatBeijingTime(cell.end_ts)}`;
+      cellPeriodLabels.set(key, period);
+    }
+    return `${statusLabel(cell.status)}, ${period}`;
+  }
+
   function updateCell(button, cell) {
     cellModels.set(button, cell);
     const signature = cellSignature(cell);
@@ -199,7 +207,7 @@ export function createHeatmapRenderer({
     const intensity = Math.min(5, Math.max(0, Number(cell.intensity) || 0));
     const intensityClass = intensity > 0 ? ` intensity-${intensity}` : '';
     button.className = `heat-cell ${cell.status}${intensityClass}`;
-    button.setAttribute('aria-label', accessibleCellName(cell));
+    button.setAttribute('aria-label', cachedAccessibleCellName(cell));
     cellSignatures.set(button, signature);
   }
 
@@ -334,8 +342,21 @@ export function createHeatmapRenderer({
     grid.setAttribute('role', 'grid');
     grid.setAttribute('aria-label', `${service.model} ${rangeLabel(data.range)} health history`);
     const layout = gridLayout(data.range, data.rows, data.columns, service.cells);
-    const gridCells = [];
-    for (const [rowIndex, layoutRow] of layout.rows.entries()) {
+    configureGrid(grid, [], layout.rows.length, layout.columnCount);
+    const axis = createElement(documentRef, 'div', 'axis service-indent heatmap-axis');
+    axis.setAttribute('aria-hidden', 'true');
+    for (const label of axisLabels(data.range, data.rows)) {
+      axis.append(createElement(documentRef, 'span', '', label));
+    }
+    panel.append(heading, summary, grid, axis);
+    return { panel, grid, layout };
+  }
+
+  function appendPanelRows(panelState, service, startRow, endRow) {
+    const { grid, layout } = panelState;
+    const fragment = documentRef.createDocumentFragment();
+    for (let rowIndex = startRow; rowIndex < endRow; rowIndex++) {
+      const layoutRow = layout.rows[rowIndex];
       const row = createElement(documentRef, 'div', 'heat-row');
       row.setAttribute('role', 'row');
       row.setAttribute('aria-rowindex', String(rowIndex + 1));
@@ -344,19 +365,32 @@ export function createHeatmapRenderer({
         const button = createCell(item.cell, service.id, item.sourceIndex);
         button.setAttribute('role', 'gridcell');
         button.setAttribute('aria-colindex', String(columnIndex + 1));
+        // 行分批到达时仍只保留一个键盘入口，避免后续再扫描全部格子。
+        button.setAttribute('tabindex', rowIndex === 0 && columnIndex === 0 ? '0' : '-1');
         row.append(button);
-        gridCells.push(button);
       }
-      grid.append(row);
+      fragment.append(row);
     }
-    configureGrid(grid, gridCells, layout.rows.length, layout.columnCount);
-    const axis = createElement(documentRef, 'div', 'axis service-indent heatmap-axis');
-    axis.setAttribute('aria-hidden', 'true');
-    for (const label of axisLabels(data.range, data.rows)) {
-      axis.append(createElement(documentRef, 'span', '', label));
+    grid.append(fragment);
+  }
+
+  function renderCommandModels(services) {
+    const commandModels = documentRef.getElementById('cmd-models');
+    commandModels.replaceChildren();
+    if (!services.length) {
+      commandModels.textContent = ' (no services)';
+      return;
     }
-    panel.append(heading, summary, grid, axis);
-    return panel;
+    for (const service of services) {
+      appendText(documentRef, commandModels, ' ');
+      const statusClass = {
+        healthy: 'ok',
+        warning: 'warn',
+        failing: 'bad',
+        pending: 'warn',
+      }[service.status] || 'dim';
+      commandModels.append(createElement(documentRef, 'span', statusClass, service.model));
+    }
   }
 
   function updatePanel(panel, service, data) {
@@ -415,6 +449,7 @@ export function createHeatmapRenderer({
       button.setAttribute('aria-pressed', String(active));
     }
     const services = data.services || [];
+    renderCommandModels(services);
     const layoutKey = `${data.range}|${(data.rows || []).length}|${(data.columns || []).length}`;
     const serviceKey = JSON.stringify(services.map(service => service.id));
     const panels = [...output.querySelectorAll('.heatmap-panel')];
@@ -435,19 +470,31 @@ export function createHeatmapRenderer({
     }
 
     let serviceIndex = 0;
-    // 首个模型立即提交，避免其余模型的 DOM 构建阻塞首屏绘制。
+    let panelState = null;
+    let rowIndex = 0;
+    let rowsPerFrame = 1;
+    // 固定每帧的格子预算，使模型数量增加时 1d/7d 也不会形成长任务。
     const appendNextPanel = () => {
       pendingFrame = null;
       if (version !== renderVersion) return;
-      const panel = createPanel(services[serviceIndex], data);
-      output.append(panel);
-      restoreFocusedCell(panel, focusedCell);
-      serviceIndex++;
-      if (serviceIndex < services.length) {
-        pendingFrame = schedule(appendNextPanel);
-      } else {
-        renderedComplete = true;
+      if (!panelState) {
+        panelState = createPanel(services[serviceIndex], data);
+        output.append(panelState.panel);
+        rowIndex = 0;
+        rowsPerFrame = Math.max(1, Math.floor(CELLS_PER_FRAME / panelState.layout.columnCount));
       }
+      const endRow = Math.min(panelState.layout.rows.length, rowIndex + rowsPerFrame);
+      appendPanelRows(panelState, services[serviceIndex], rowIndex, endRow);
+      rowIndex = endRow;
+      if (rowIndex < panelState.layout.rows.length) {
+        pendingFrame = schedule(appendNextPanel);
+        return;
+      }
+      restoreFocusedCell(panelState.panel, focusedCell);
+      panelState = null;
+      serviceIndex++;
+      if (serviceIndex < services.length) pendingFrame = schedule(appendNextPanel);
+      else renderedComplete = true;
     };
     appendNextPanel();
   }

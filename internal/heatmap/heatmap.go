@@ -26,7 +26,8 @@ const (
 	StatusInsufficient = "insufficient"
 
 	minimumCoverage = 0.5
-	severityRatio   = 0.2
+	degradedRatio   = 0.05
+	outageRatio     = 0.2
 )
 
 var beijingLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -56,6 +57,8 @@ type cacheEntry struct {
 }
 
 const cacheTTL = 30 * time.Second
+
+const buildConcurrency = 4
 
 func New(repository Repository, status StatusProvider) (*Service, error) {
 	if repository == nil {
@@ -141,13 +144,38 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 		BucketSec: int64(spec.bucket / time.Second), Rows: spec.rows, Columns: spec.columns,
 		Page: snapshot.Page, Services: make([]ServiceView, 0, len(services)),
 	}
-	for _, service := range services {
-		results, err := s.repository.LoadResultsBetween(ctx, service.ID, spec.queryFrom.Unix(), spec.queryTo.Unix())
-		if err != nil {
-			return Response{}, fmt.Errorf("构建服务 %q 热力图失败: %w", service.ID, err)
-		}
-		response.Services = append(response.Services, buildServiceView(service, results, spec))
+	views := make([]ServiceView, len(services))
+	errs := make([]error, len(services))
+	jobs := make(chan int)
+	// 各模型查询互不依赖；限制并行度，缩短多模型等待且避免压满 SQLite 连接池。
+	workerCount := min(buildConcurrency, len(services))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				service := services[index]
+				results, err := s.repository.LoadResultsBetween(ctx, service.ID, spec.queryFrom.Unix(), spec.queryTo.Unix())
+				if err != nil {
+					errs[index] = fmt.Errorf("构建服务 %q 热力图失败: %w", service.ID, err)
+					continue
+				}
+				views[index] = buildServiceView(service, results, spec)
+			}
+		}()
 	}
+	for index := range services {
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return Response{}, err
+		}
+	}
+	response.Services = append(response.Services, views...)
 	s.cache[rangeName] = cacheEntry{key: key, createdAt: now, response: response}
 	return response, nil
 }
@@ -331,18 +359,17 @@ func aggregateCell(slot timeSlot, results []model.ProbeResult, intervalSec, warn
 		return cell
 	}
 	failureRatio := float64(cell.FailedSamples) / float64(cell.ActualSamples)
-	warningRatio := float64(cell.WarningSamples) / float64(cell.ActualSamples)
-	healthyRatio := float64(cell.HealthySamples) / float64(cell.ActualSamples)
+	impactRatio := float64(cell.FailedSamples+cell.WarningSamples) / float64(cell.ActualSamples)
 	switch {
-	case failureRatio >= severityRatio:
+	case failureRatio >= outageRatio:
 		cell.Status = StatusFailing
 		cell.Intensity = intensityLevel(failureRatio)
-	case cell.FailedSamples > 0 || warningRatio >= severityRatio:
+	case impactRatio >= degradedRatio || cell.P95LatencyMS > int64(warningSec)*1000:
 		cell.Status = StatusWarning
-		cell.Intensity = intensityLevel(math.Max(failureRatio, warningRatio))
+		cell.Intensity = intensityLevel(impactRatio)
 	default:
 		cell.Status = StatusHealthy
-		cell.Intensity = intensityLevel(healthyRatio)
+		cell.Intensity = intensityLevel(1 - failureRatio)
 	}
 	return cell
 }

@@ -3,6 +3,8 @@ package heatmap
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,11 +29,25 @@ func (s statusStub) Snapshot() model.StatusResponse { return s.response }
 
 type countingRepository struct {
 	results map[string][]model.ProbeResult
+	mu      sync.Mutex
 	calls   int
 }
 
+type blockingRepository struct {
+	started chan string
+	release chan struct{}
+}
+
+func (r blockingRepository) LoadResultsBetween(_ context.Context, id string, _, _ int64) ([]model.ProbeResult, error) {
+	r.started <- id
+	<-r.release
+	return nil, nil
+}
+
 func (r *countingRepository) LoadResultsBetween(_ context.Context, id string, _, _ int64) ([]model.ProbeResult, error) {
+	r.mu.Lock()
 	r.calls++
+	r.mu.Unlock()
 	return append([]model.ProbeResult(nil), r.results[id]...), nil
 }
 
@@ -117,6 +133,44 @@ func TestGridUsesCompleteBeijingCalendarDays(t *testing.T) {
 	}
 }
 
+func TestBuildAggregatesServicesConcurrentlyAndKeepsSortOrder(t *testing.T) {
+	repository := blockingRepository{started: make(chan string, buildConcurrency), release: make(chan struct{})}
+	services := make([]model.ServiceView, buildConcurrency)
+	for index := range services {
+		services[index] = model.ServiceView{ID: fmt.Sprintf("svc-%d", index), SortOrder: buildConcurrency - index, IntervalSec: 60, WarningSec: 30}
+	}
+	builder, err := New(repository, statusStub{response: model.StatusResponse{Services: services}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	builder.now = func() time.Time { return time.Date(2026, 8, 18, 10, 0, 0, 0, beijingLocation) }
+	done := make(chan struct{})
+	var response Response
+	var buildErr error
+	go func() {
+		response, buildErr = builder.Build(context.Background(), Range1D)
+		close(done)
+	}()
+
+	for range buildConcurrency {
+		select {
+		case <-repository.started:
+		case <-time.After(time.Second):
+			t.Fatal("模型查询未并行启动")
+		}
+	}
+	close(repository.release)
+	<-done
+	if buildErr != nil {
+		t.Fatal(buildErr)
+	}
+	for index, service := range response.Services {
+		if service.ID != fmt.Sprintf("svc-%d", buildConcurrency-1-index) {
+			t.Fatalf("并行聚合打乱 sort_order: %+v", response.Services)
+		}
+	}
+}
+
 func TestFutureCellsRemainUnobserved(t *testing.T) {
 	now := time.Date(2026, 8, 18, 17, 7, 0, 0, beijingLocation)
 	for _, rangeName := range []string{Range1D, Range7D, Range30D} {
@@ -145,10 +199,15 @@ func TestAggregateCellCoverageAndSeverity(t *testing.T) {
 	}{
 		{name: "unobserved", status: StatusUnobserved},
 		{name: "insufficient", results: []model.ProbeResult{result(true, 10)}, status: StatusInsufficient},
-		{name: "healthy tolerates slow samples", results: append(repeat(result(true, 10), 9), result(true, 31_000)), status: StatusHealthy},
-		{name: "warning on twenty percent slow", results: append(repeat(result(true, 10), 8), repeat(result(true, 31_000), 2)...), status: StatusWarning},
-		{name: "warning on isolated failure", results: append(repeat(result(true, 10), 9), result(false, 5)), status: StatusWarning},
-		{name: "failing on twenty percent failures", results: append(repeat(result(true, 10), 8), repeat(result(false, 5), 2)...), status: StatusFailing},
+		{name: "insufficient overrides failure", results: []model.ProbeResult{result(false, 10)}, status: StatusInsufficient},
+		{name: "healthy at latency threshold", results: repeat(result(true, 30_000), 10), status: StatusHealthy},
+		{name: "healthy tolerates isolated fluctuation", results: append(repeat(result(true, 10), 59), result(false, 5)), status: StatusHealthy},
+		{name: "healthy below five percent impact", results: append(repeat(result(true, 10), 96), repeat(result(false, 5), 4)...), status: StatusHealthy},
+		{name: "warning when p95 exceeds latency threshold", results: append(repeat(result(true, 10), 9), result(true, 31_000)), status: StatusWarning},
+		{name: "warning at five percent impacted samples", results: append(repeat(result(true, 10), 95), repeat(result(false, 5), 5)...), status: StatusWarning},
+		{name: "warning combines failures and slow responses", results: append(append(repeat(result(true, 10), 95), repeat(result(true, 31_000), 2)...), repeat(result(false, 5), 3)...), status: StatusWarning},
+		{name: "warning below twenty percent failures", results: append(repeat(result(true, 10), 81), repeat(result(false, 5), 19)...), status: StatusWarning},
+		{name: "failing at twenty percent failures", results: append(repeat(result(true, 10), 80), repeat(result(false, 5), 20)...), status: StatusFailing},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

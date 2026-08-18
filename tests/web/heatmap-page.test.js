@@ -18,7 +18,7 @@ const css = readFileSync(new URL('../../internal/httpserver/web/assets/styles/he
 
 function heatmapDocument() {
   const document = createElementDocument([
-    'heatmap-out', 'tip', 'term-subtitle', 'active-range', 'updated', 'login-time',
+    'heatmap-out', 'tip', 'term-subtitle', 'active-range', 'cmd-models', 'updated', 'login-time',
   ]);
   document.getElementById('tip').className = 'tip';
   return document;
@@ -73,6 +73,7 @@ test('热力图页面保留公开导航和响应式终端结构', () => {
   assert.match(html, /data-range="1d">1d<\/button>/);
   assert.match(html, /data-range="7d">7d<\/button>/);
   assert.match(html, /data-range="30d">30d<\/button>/);
+  assert.match(html, /id="cmd-models"/);
   assert.doesNotMatch(html, /data-range="(?:day|week|month)"/);
   assert.match(html, /href="\/"[^>]*>status<\/a>/);
   assert.match(html, /href="\/admin\/"[^>]*>manage<\/a>/);
@@ -141,6 +142,9 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.ok(cells[0].classList.contains('warning'));
   assert.match(output.textContent, /gpt-5/);
   assert.match(output.textContent, /99\.50%/);
+  const commandModels = document.getElementById('cmd-models');
+  assert.equal(commandModels.textContent, ' gpt-5');
+  assert.ok(commandModels.children[0].classList.contains('warn'));
 
   cells[0].focus();
   const tip = document.getElementById('tip');
@@ -300,6 +304,64 @@ test('首次渲染先提交一个模型并逐帧追加其余模型', () => {
   assert.equal(panelCount(), 2);
   scheduled.shift()();
   assert.equal(panelCount(), 3);
+});
+
+test('30d 单模型按固定格子预算渐进渲染，避免一次创建全部格子', () => {
+  const document = heatmapDocument();
+  const scheduled = [];
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1280 },
+    scheduleFrame(callback) {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    cancelFrame() {},
+  });
+  const service = data().services[0];
+  renderer.render(data({
+    range: '30d',
+    rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+    services: [{ ...service, cells: Array.from({ length: 720 }, () => cell()) }],
+  }));
+
+  const output = document.getElementById('heatmap-out');
+  const cellCount = () => findAll(output, element => element.classList.contains('heat-cell')).length;
+  assert.equal(cellCount(), 90);
+  assert.equal(scheduled.length, 1);
+  scheduled.shift()();
+  assert.equal(cellCount(), 180);
+  while (scheduled.length) scheduled.shift()();
+  assert.equal(cellCount(), 720);
+  const grid = findAll(output, element => element.getAttribute('role') === 'grid')[0];
+  assert.equal(grid.getAttribute('aria-rowcount'), '24');
+  assert.equal(grid.getAttribute('aria-colcount'), '30');
+});
+
+test('7d 单模型拆成两帧渲染，避免多模型时连续长任务', () => {
+  const document = heatmapDocument();
+  const scheduled = [];
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1280 },
+    scheduleFrame(callback) {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    cancelFrame() {},
+  });
+  const service = data().services[0];
+  renderer.render(data({
+    rows: Array.from({ length: 7 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+    services: [{ ...service, cells: Array.from({ length: 168 }, () => cell()) }],
+  }));
+
+  const output = document.getElementById('heatmap-out');
+  const cellCount = () => findAll(output, element => element.classList.contains('heat-cell')).length;
+  assert.equal(cellCount(), 96);
+  assert.equal(scheduled.length, 1);
+  scheduled.shift()();
+  assert.equal(cellCount(), 168);
 });
 
 test('结构变化取消尚未提交的旧模型', () => {
