@@ -39,6 +39,10 @@ test('管理页使用外置资源并保留响应式结构', () => {
     'class="service-list" id="svc-list"',
     'class="telegram-token-row"',
     'class="metric-options"',
+    'class="wrap admin-window"',
+    'class="titlebar"',
+    'class="lights" aria-hidden="true"',
+    'id="login-title">authentication required',
   ]) {
     assert.ok(html.includes(marker), `missing responsive service marker: ${marker}`);
   }
@@ -52,6 +56,9 @@ test('管理页使用外置资源并保留响应式结构', () => {
     '@media (max-width: 559px)',
     '.update-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
     '.metric-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));',
+    '.admin-window {',
+    '.light.close { background: var(--btn-close); }',
+    '.admin-surface::before {',
   ]) {
     assert.ok(adminCSS.includes(marker), `missing responsive admin style: ${marker}`);
   }
@@ -136,7 +143,7 @@ test('管理页颜色只来自已审核的共享色板', () => {
   const allowedColors = new Set([
     '#000', '#0d0d10', '#141418', '#15151a', '#1a1a1e', '#222228', '#24242a',
     '#26262d', '#2a2a30', '#3a3a42', '#55555e', '#5eff9c', '#7afcff', '#8a8a94',
-    '#d4d4d4', '#ff5e7a', '#ffc857',
+    '#d4d4d4', '#febc2e', '#ff5e7a', '#ff5f57', '#ffc857', '#28c840',
   ]);
   const source = `${foundationCSS}\n${adminCSS}`;
   const unexpected = [...new Set(source.match(/#[0-9a-fA-F]{3,8}\b/g) || [])]

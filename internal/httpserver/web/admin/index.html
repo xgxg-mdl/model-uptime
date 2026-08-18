@@ -8,42 +8,60 @@
 <link rel="stylesheet" href="/assets/styles/admin.css" />
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1>model-uptime <span class="sub">manage</span></h1>
+<div class="wrap admin-window">
+  <div class="titlebar">
+    <div class="lights" aria-hidden="true">
+      <span class="light close"></span>
+      <span class="light min"></span>
+      <span class="light max"></span>
     </div>
-    <div class="actions">
-      <a class="btn" href="/">← status</a>
-      <button class="btn bad" id="logout-btn" hidden>logout</button>
+    <div class="title-text">
+      <span class="mute">—</span> model-uptime · manage <span class="mute">—</span>
     </div>
-  </header>
-
-  <!-- 登录视图 -->
-  <div class="panel login-card page-reveal" id="login-view" hidden>
-    <div class="panel-body">
-      <form id="login-form">
-        <input type="password" id="login-token" placeholder="admin password" autocomplete="current-password" />
-        <button class="btn primary" type="submit">enter</button>
-      </form>
-      <p class="hint" style="color:var(--dim);margin-top:10px;font-size:11px;">令牌在会话中生效（关闭标签页后失效）。</p>
-    </div>
+    <div></div>
   </div>
 
-  <!-- 首次设置密码视图（仅当服务未配置管理密码时显示） -->
-  <div class="panel login-card page-reveal" id="setup-view" hidden>
-    <div class="panel-body">
-      <form class="vertical" id="setup-form">
-        <input type="password" id="setup-token" placeholder="new admin password（至少 8 位）" autocomplete="new-password" />
-        <input type="password" id="setup-confirm" placeholder="confirm password" autocomplete="new-password" />
-        <button class="btn primary" type="submit">set password</button>
-      </form>
-      <p class="hint" style="color:var(--dim);margin-top:10px;font-size:11px;">首次部署：设置后将写入配置文件持久化，之后用该密码登录。</p>
-    </div>
-  </div>
+  <div class="admin-surface">
+    <header>
+      <div>
+        <h1><span class="prompt">~ $</span> model-uptime <span class="sub">manage</span></h1>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/">← status</a>
+        <button class="btn bad" id="logout-btn" hidden>logout</button>
+      </div>
+    </header>
 
-  <!-- 主视图 -->
-  <main class="page-reveal" id="app-view" hidden>
+    <div class="admin-content">
+      <!-- 登录视图 -->
+      <section class="panel login-card page-reveal" id="login-view" hidden aria-labelledby="login-title">
+        <h2 id="login-title">authentication required</h2>
+        <div class="panel-body">
+          <p class="auth-command"><span class="prompt">~ $</span> admin login <span class="flag">--session</span></p>
+          <form id="login-form">
+            <input type="password" id="login-token" aria-label="Admin password" placeholder="admin password" autocomplete="current-password" />
+            <button class="btn primary" type="submit">enter</button>
+          </form>
+          <p class="hint auth-hint">令牌在会话中生效（关闭标签页后失效）。</p>
+        </div>
+      </section>
+
+      <!-- 首次设置密码视图（仅当服务未配置管理密码时显示） -->
+      <section class="panel login-card page-reveal" id="setup-view" hidden aria-labelledby="setup-title">
+        <h2 id="setup-title">initialize administrator</h2>
+        <div class="panel-body">
+          <p class="auth-command"><span class="prompt">~ $</span> admin setup <span class="flag">--persist</span></p>
+          <form class="vertical" id="setup-form">
+            <input type="password" id="setup-token" aria-label="New admin password" placeholder="new admin password（至少 8 位）" autocomplete="new-password" />
+            <input type="password" id="setup-confirm" aria-label="Confirm admin password" placeholder="confirm password" autocomplete="new-password" />
+            <button class="btn primary" type="submit">set password</button>
+          </form>
+          <p class="hint auth-hint">首次部署：设置后将写入配置文件持久化，之后用该密码登录。</p>
+        </div>
+      </section>
+
+      <!-- 主视图 -->
+      <main class="page-reveal" id="app-view" hidden>
     <!-- 版本检查与容器更新 -->
     <section class="panel">
       <h2>system update</h2>
@@ -352,7 +370,9 @@
         </form>
       </div>
     </section>
-  </main>
+      </main>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
