@@ -35,6 +35,34 @@ func TestRecordChangeUsesPersistedDailyStats(t *testing.T) {
 	}
 }
 
+func TestRecordChangeKeepsNotificationSampleLimitAtAlignedBoundary(t *testing.T) {
+	s := New(nil, nil)
+	page := defaultPage()
+	page.HistoryLen = 2
+	service := testSvc("s1", true)
+	service.IntervalSec = 60
+	if err := s.Reload([]model.Service{service}, page); err != nil {
+		t.Fatal(err)
+	}
+	generation := s.states["s1"].generation
+	results := []model.ProbeResult{
+		{OK: true, TS: 60, StartedAt: 60},
+		{OK: false, TS: 120, StartedAt: 120},
+		{OK: true, TS: 180, StartedAt: 180},
+	}
+	var change *model.StatusChange
+	for _, result := range results {
+		change = s.recordGeneration("s1", generation, result)
+	}
+
+	if change == nil || change.Status != "up" {
+		t.Fatalf("恢复探测应产生状态变化: %+v", change)
+	}
+	if change.Samples != 2 || change.UptimePct != 50 {
+		t.Fatalf("通知统计应保持最近 2 个样本，got samples=%d uptime=%v", change.Samples, change.UptimePct)
+	}
+}
+
 func claimTransitionBatch(t *testing.T, store *sqlite.Store) *model.TransitionBatch {
 	t.Helper()
 	now := time.Now().Add(transitionAggregationDelay + time.Second)

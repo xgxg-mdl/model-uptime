@@ -96,14 +96,15 @@ test('完整时间桶区分启动前、暂停、缺失并聚合同桶最严重�
   assert.equal(buckets[2].result.ok, false);
 });
 
-test('跨过完整桶的在途请求显示 probing 而不是 no data', () => {
+test('跨过完整桶的在途请求覆盖上一结果的尾部并显示 probing', () => {
   const buckets = buildTimeBuckets(service({
-    history: [{ ts: 315, started_at: 300, ok: true, latency_ms: 15_000 }],
-    current_probe_started_at: 400,
+    history: [{ ts: 421, started_at: 359, ok: true, latency_ms: 62_000 }],
+    current_probe_started_at: 421,
   }), 5, 480);
 
+  assert.equal(buckets.at(-1).results.length, 1);
   assert.equal(buckets.at(-1).kind, 'probing');
-  assert.equal(buckets.at(-1).probeStartedAt, 400);
+  assert.equal(buckets.at(-1).probeStartedAt, 421);
 });
 
 test('已完成探测覆盖请求耗时和正常调度间隔，不制造空桶', () => {

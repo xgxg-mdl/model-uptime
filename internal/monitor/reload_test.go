@@ -67,18 +67,18 @@ func TestHistoryWindowTruncatesByTimeInsteadOfSampleCount(t *testing.T) {
 		s.record("s1", model.ProbeResult{OK: true, TS: timestamp, LatencyMS: i})
 	}
 	snap := s.Snapshot()
-	if len(snap.Services[0].History) != 5 {
-		t.Errorf("时间窗应保留 3 条完整桶结果、起点前 1 条及当前未完成桶结果，got %d", len(snap.Services[0].History))
+	if len(snap.Services[0].History) != 4 {
+		t.Errorf("时间窗应保留 3 条完整桶结果及当前未完成桶结果，got %d", len(snap.Services[0].History))
 	}
-	if snap.Services[0].History[0].TS != 360 {
-		t.Errorf("应从窗口起点前最后一次结果开始保留: %+v", snap.Services[0].History)
+	if snap.Services[0].History[0].TS != 420 {
+		t.Errorf("应从完整窗口起点开始保留: %+v", snap.Services[0].History)
 	}
 
 	// 同一时间桶内的额外手动探测不能挤掉窗口内的其他桶。
 	for i := int64(0); i < 5; i++ {
 		s.record("s1", model.ProbeResult{OK: true, TS: 601 + i, StartedAt: 601, LatencyMS: i})
 	}
-	if got := len(s.Snapshot().Services[0].History); got != 10 {
+	if got := len(s.Snapshot().Services[0].History); got != 9 {
 		t.Fatalf("时间窗应保留同桶额外样本，got %d", got)
 	}
 }

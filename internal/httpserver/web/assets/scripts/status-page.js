@@ -94,7 +94,7 @@ export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) 
   const probeStartedAt = Number(service.current_probe_started_at);
   if (probeStartedAt > 0 && probeStartedAt < windowEnd) {
     for (const bucket of buckets) {
-      if (bucket.kind || probeStartedAt >= bucket.to || observationEnd <= bucket.from) continue;
+      if (bucket.kind === 'paused' || probeStartedAt >= bucket.to || observationEnd <= bucket.from) continue;
       bucket.kind = 'probing';
       bucket.probeStartedAt = probeStartedAt;
     }
