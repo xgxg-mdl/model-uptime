@@ -28,11 +28,12 @@ type serviceState struct {
 }
 
 type probeFlight struct {
-	done    chan struct{}
-	result  *model.ProbeResult
-	err     error
-	waiters int
-	cancel  context.CancelFunc
+	done      chan struct{}
+	result    *model.ProbeResult
+	err       error
+	waiters   int
+	startedAt int64
+	cancel    context.CancelFunc
 }
 
 type probeJob struct {

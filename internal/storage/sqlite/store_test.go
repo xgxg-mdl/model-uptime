@@ -112,7 +112,7 @@ func TestLoadResultsStartedBetweenUsesRollingWindowBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 3 || results[0].StartedAt != 160 || results[2].StartedAt != 280 {
+	if len(results) != 4 || results[0].StartedAt != 100 || results[3].StartedAt != 280 {
 		t.Fatalf("滚动时间窗边界错误: %+v", results)
 	}
 	observedSince, err := s.LoadObservationStart(ctx, "svc-a")

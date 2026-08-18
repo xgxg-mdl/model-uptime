@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/model"
 )
@@ -54,5 +55,27 @@ func TestSnapshotIncludesStableServiceID(t *testing.T) {
 	}
 	if snapshot.Services[0].WarningSec != 12 {
 		t.Fatalf("状态快照 warning_sec = %d，期望 12", snapshot.Services[0].WarningSec)
+	}
+}
+
+func TestSnapshotUptimeExcludesHistoryBeforeCurrentWindow(t *testing.T) {
+	s := New(nil, nil)
+	page := defaultPage()
+	page.HistoryLen = 2
+	service := testSvc("s1", true)
+	service.IntervalSec = 60
+	if err := s.Reload([]model.Service{service}, page); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	s.mu.Lock()
+	s.states["s1"].history = []model.ProbeResult{
+		{OK: false, TS: now - 180, StartedAt: now - 180},
+		{OK: true, TS: now - 60, StartedAt: now - 60},
+	}
+	s.mu.Unlock()
+
+	if got := s.Snapshot().Services[0].UptimePct; got != 100 {
+		t.Fatalf("窗口起点前的延续记录不应进入 uptime，got %v", got)
 	}
 }

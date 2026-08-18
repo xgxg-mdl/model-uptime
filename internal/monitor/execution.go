@@ -85,6 +85,9 @@ func (s *Scheduler) executeProbe(job probeJob) {
 	}
 
 	startedAt := time.Now().Unix()
+	s.mu.Lock()
+	job.flight.startedAt = startedAt
+	s.mu.Unlock()
 	probed := s.probeFn(ctx, &job.svc)
 	result := &model.ProbeResult{
 		OK: probed.OK, TS: time.Now().Unix(), StartedAt: startedAt,

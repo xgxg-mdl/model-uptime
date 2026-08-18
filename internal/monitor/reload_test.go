@@ -14,8 +14,9 @@ func TestReloadPreservesHistory(t *testing.T) {
 	s := New(nil, nil)
 	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
 
-	s.record("s1", model.ProbeResult{OK: true, TS: 1, LatencyMS: 10})
-	s.record("s1", model.ProbeResult{OK: false, TS: 2, Error: "boom"})
+	now := time.Now().Unix()
+	s.record("s1", model.ProbeResult{OK: true, TS: now - 1, LatencyMS: 10})
+	s.record("s1", model.ProbeResult{OK: false, TS: now, Error: "boom"})
 
 	// 同 id 再次 Reload：历史保留、配置更新
 	updated := testSvc("s1", true)
@@ -65,18 +66,18 @@ func TestHistoryWindowTruncatesByTimeInsteadOfSampleCount(t *testing.T) {
 		s.record("s1", model.ProbeResult{OK: true, TS: timestamp, LatencyMS: i})
 	}
 	snap := s.Snapshot()
-	if len(snap.Services[0].History) != 3 {
-		t.Errorf("历史应截断到 3 条，got %d", len(snap.Services[0].History))
+	if len(snap.Services[0].History) != 4 {
+		t.Errorf("时间窗应保留 3 条结果及起点前 1 条，got %d", len(snap.Services[0].History))
 	}
-	if snap.Services[0].History[0].TS != 480 {
-		t.Errorf("应保留最新 3 条: %+v", snap.Services[0].History)
+	if snap.Services[0].History[0].TS != 420 {
+		t.Errorf("应从窗口起点前最后一次结果开始保留: %+v", snap.Services[0].History)
 	}
 
 	// 同一时间桶内的额外手动探测不能挤掉窗口内的其他桶。
 	for i := int64(0); i < 5; i++ {
 		s.record("s1", model.ProbeResult{OK: true, TS: 601 + i, StartedAt: 601, LatencyMS: i})
 	}
-	if got := len(s.Snapshot().Services[0].History); got != 8 {
+	if got := len(s.Snapshot().Services[0].History); got != 9 {
 		t.Fatalf("时间窗应保留同桶额外样本，got %d", got)
 	}
 }

@@ -241,17 +241,18 @@ type PauseSpan struct {
 
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
-	ID            string        `json:"id"`
-	Model         string        `json:"model"`
-	Provider      string        `json:"provider,omitempty"`
-	SortOrder     int           `json:"-"`
-	IntervalSec   int           `json:"interval_sec"`
-	WarningSec    int           `json:"warning_sec"`
-	ObservedSince int64         `json:"observed_since,omitempty"`
-	UptimePct     float64       `json:"uptime_pct"`
-	Last          *ProbeResult  `json:"last"`
-	History       []ProbeResult `json:"history"`
-	Pauses        []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
+	ID             string        `json:"id"`
+	Model          string        `json:"model"`
+	Provider       string        `json:"provider,omitempty"`
+	SortOrder      int           `json:"-"`
+	IntervalSec    int           `json:"interval_sec"`
+	WarningSec     int           `json:"warning_sec"`
+	ObservedSince  int64         `json:"observed_since,omitempty"`
+	ProbeStartedAt int64         `json:"current_probe_started_at,omitempty"`
+	UptimePct      float64       `json:"uptime_pct"`
+	Last           *ProbeResult  `json:"last"`
+	History        []ProbeResult `json:"history"`
+	Pauses         []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
 }
 
 // StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，

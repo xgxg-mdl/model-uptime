@@ -81,7 +81,7 @@ test('时间桶区分启动前、暂停、缺失并聚合同桶最严重结果',
   assert.deepEqual(buckets.map(bucket => bucket.kind), [
     'not-started', 'ok', 'bad', 'paused', 'unobserved',
   ]);
-  assert.equal(buckets[2].results.length, 2);
+  assert.equal(buckets[2].results.length, 3);
   assert.equal(buckets[2].result.ok, false);
 
   const longPause = buildTimeBuckets(service({
@@ -93,18 +93,49 @@ test('时间桶区分启动前、暂停、缺失并聚合同桶最严重结果',
   ]);
 });
 
+test('请求执行期间以 probing 填充在途时间桶而不是显示 no data', () => {
+  const buckets = buildTimeBuckets(service({
+    history: [{ ts: 315, started_at: 300, ok: true, latency_ms: 15_000 }],
+    current_probe_started_at: 400,
+  }), 5, 420);
+
+  assert.equal(buckets.at(-1).kind, 'probing');
+  assert.equal(buckets.at(-1).probeStartedAt, 400);
+});
+
+test('已完成探测覆盖请求耗时和正常调度间隔，不制造空桶', () => {
+  const buckets = buildTimeBuckets(service({
+    observed_since: 120,
+    history: [
+      { ts: 190, started_at: 120, ok: true, latency_ms: 70_000 },
+      { ts: 260, started_at: 191, ok: true, latency_ms: 69_000 },
+      { ts: 330, started_at: 261, ok: true, latency_ms: 69_000 },
+      { ts: 400, started_at: 331, ok: true, latency_ms: 69_000 },
+    ],
+  }), 5, 420);
+
+  assert.ok(buckets.every(bucket => bucket.kind !== 'unobserved'));
+});
+
+test('超过观测周期且没有请求运行时仍保留真正的 no data', () => {
+  const buckets = buildTimeBuckets(service({
+    observed_since: 120,
+    history: [
+      { ts: 130, started_at: 120, ok: true, latency_ms: 10_000 },
+      { ts: 310, started_at: 300, ok: true, latency_ms: 10_000 },
+    ],
+  }), 5, 420);
+
+  assert.deepEqual(buckets.map(bucket => bucket.kind), [
+    'ok', 'unobserved', 'unobserved', 'ok', 'unobserved',
+  ]);
+});
+
 test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
   assert.equal(resultStatus({ ok: true, latency_ms: 30_000 }, 30), 'ok');
   assert.equal(resultStatus({ ok: true, latency_ms: 30_001 }, 30), 'warning');
   assert.equal(resultStatus({ ok: false, latency_ms: 31_000 }, 30), 'bad');
 
-  const buckets = buildTimeBuckets(service({
-    history: [
-      { ts: 120, started_at: 110, ok: true, latency_ms: 30_000 },
-      { ts: 180, started_at: 170, ok: true, latency_ms: 30_001 },
-    ],
-  }), 5, 400);
-  assert.deepEqual(buckets.filter(bucket => bucket.result).map(bucket => bucket.kind), ['ok', 'warning']);
 });
 
 test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
@@ -130,7 +161,7 @@ test('慢响应在服务状态、历史条、耗时和总览中显示 warning', 
   assert.match(document.getElementById('tip').textContent, /WARNING/);
 });
 
-test('状态页严格渲染时间桶并按已观测桶统计 samples', () => {
+test('状态页严格渲染时间桶并按窗口内实际结果统计 samples', () => {
   const partial = service({
     observed_since: 170,
     history: [

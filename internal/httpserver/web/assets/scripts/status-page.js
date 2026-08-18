@@ -57,26 +57,46 @@ export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) 
     results: [],
   }));
   const severity = { ok: 1, warning: 2, bad: 3 };
+  const pauses = service.pauses || [];
 
-  for (const result of service.history || []) {
-    const timestamp = resultTime(result);
-    if (timestamp <= windowStart || timestamp > windowEnd) continue;
-    const index = Math.ceil((timestamp - windowStart) / intervalSeconds) - 1;
-    const bucket = buckets[index];
-    const kind = resultStatus(result, service.warning_sec);
-    bucket.results.push(result);
-    if (!bucket.result || severity[kind] > severity[bucket.kind] ||
-        (severity[kind] === severity[bucket.kind] && Number(result.ts) >= Number(bucket.result.ts))) {
-      bucket.kind = kind;
-      bucket.result = result;
+  for (const pause of pauses) {
+    for (const bucket of buckets) {
+      if (Number(pause.from) >= bucket.to || Number(pause.to) <= bucket.from) continue;
+      bucket.kind = 'paused';
+      bucket.pause = pause;
     }
   }
 
-  for (const pause of service.pauses || []) {
+  const history = [...(service.history || [])].sort((left, right) =>
+    resultTime(left) - resultTime(right) || Number(left.ts) - Number(right.ts));
+  for (const [resultIndex, result] of history.entries()) {
+    const coverageStart = resultTime(result);
+    let coverageEnd = Math.max(coverageStart + intervalSeconds, Number(result.ts) || coverageStart);
+    const nextStartedAt = resultTime(history[resultIndex + 1]);
+    if (nextStartedAt > coverageStart) coverageEnd = Math.min(coverageEnd, nextStartedAt);
+    for (const pause of pauses) {
+      const pauseStart = Number(pause.from);
+      if (pauseStart > coverageStart && pauseStart < coverageEnd) coverageEnd = pauseStart;
+    }
+    if (coverageEnd <= windowStart || coverageStart >= windowEnd) continue;
+    const kind = resultStatus(result, service.warning_sec);
     for (const bucket of buckets) {
-      if (bucket.result || Number(pause.from) >= bucket.to || Number(pause.to) <= bucket.from) continue;
-      bucket.kind = 'paused';
-      bucket.pause = pause;
+      if (bucket.kind === 'paused' || coverageStart >= bucket.to || coverageEnd <= bucket.from) continue;
+      bucket.results.push(result);
+      if (!bucket.result || severity[kind] > severity[bucket.kind] ||
+          (severity[kind] === severity[bucket.kind] && Number(result.ts) >= Number(bucket.result.ts))) {
+        bucket.kind = kind;
+        bucket.result = result;
+      }
+    }
+  }
+
+  const probeStartedAt = Number(service.current_probe_started_at);
+  if (probeStartedAt > 0 && probeStartedAt <= windowEnd) {
+    for (const bucket of buckets) {
+      if (bucket.kind || probeStartedAt >= bucket.to || windowEnd <= bucket.from) continue;
+      bucket.kind = 'probing';
+      bucket.probeStartedAt = probeStartedAt;
     }
   }
 
@@ -118,6 +138,16 @@ function metric(documentRef, label, value, className = '') {
 }
 
 function tooltipModel(event) {
+  if (event.kind === 'probing') {
+    return {
+      status: 'PROBING',
+      statusClass: 'dim',
+      fields: [
+        ['since', formatTime(event.probeStartedAt)],
+        ['slot', `${formatTime(event.from)} — ${formatTime(event.to)}`],
+      ],
+    };
+  }
   if (event.kind === 'paused') {
     return {
       status: 'PAUSED',
@@ -329,8 +359,13 @@ export function createStatusRenderer({
       const uptimeClass = uptime >= 99 ? 'ok' : (uptime >= 95 ? 'warn' : 'bad');
       if (page.show_uptime) metadata.append(metric(documentRef, 'uptime', `${uptime.toFixed(2)}%`, uptimeClass));
       if (page.show_samples) {
-        const observedBuckets = buckets.filter(bucket => ['ok', 'warning', 'bad'].includes(bucket.kind)).length;
-        metadata.append(metric(documentRef, 'samples', `${observedBuckets}/${historyLength}`));
+        const intervalSeconds = Number(service.interval_sec) || 60;
+        const windowStart = Number(generatedAt) - historyLength * intervalSeconds;
+        const samples = (service.history || []).filter(result => {
+          const timestamp = resultTime(result);
+          return timestamp > windowStart && timestamp <= Number(generatedAt);
+        }).length;
+        metadata.append(metric(documentRef, 'samples', `${samples}/${historyLength}`));
       }
       if (page.show_latency && last) {
         const latencyStatus = resultStatus(last, service.warning_sec);

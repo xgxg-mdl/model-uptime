@@ -261,6 +261,7 @@ body {
 .bar.ok { background: var(--ok); }
 .bar.warning { background: var(--warn); }
 .bar.bad { background: var(--bad); }
+.bar.probing { background: #7d8597; }
 .bar.paused { background: #3a3a42; }
 .bar.unobserved { background: #292930; }
 .bar.not-started {

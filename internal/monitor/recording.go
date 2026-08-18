@@ -61,19 +61,22 @@ func (s *Scheduler) recordGenerationContext(ctx context.Context, id string, gene
 	s.mu.RUnlock()
 
 	history = append(history, r)
+	statsHistory := history
 	if historyLimit > 0 {
 		cutoff := r.StartedAt - int64(historyLimit)*int64(service.IntervalSec)
 		first := 0
 		for first < len(history) && probeStartedAt(history[first]) <= cutoff {
 			first++
 		}
-		if first > 0 {
-			history = append([]model.ProbeResult(nil), history[first:]...)
+		statsHistory = history[first:]
+		// 保留窗口起点前最后一次结果，前端需要它判断上一观测周期是否覆盖左边界。
+		if first > 1 {
+			history = append([]model.ProbeResult(nil), history[first-1:]...)
 		}
 	}
 	var change *model.StatusChange
 	if previous != nil && previous.OK != r.OK {
-		change = s.buildChange(ctx, id, service, previous.OK, history, r)
+		change = s.buildChange(ctx, id, service, previous.OK, statsHistory, r)
 	}
 	if s.store != nil {
 		var transition *model.StatusTransition

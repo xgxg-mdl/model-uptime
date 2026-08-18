@@ -120,6 +120,9 @@ func TestScheduledAndManualProbeShareOneInFlightRequest(t *testing.T) {
 	}
 	s.checkDue()
 	<-started
+	if probing := s.Snapshot().Services[0].ProbeStartedAt; probing == 0 {
+		t.Fatal("在途探测应在状态快照中携带开始时间")
+	}
 
 	result := make(chan *model.ProbeResult, 1)
 	errs := make(chan error, 1)
@@ -140,8 +143,12 @@ func TestScheduledAndManualProbeShareOneInFlightRequest(t *testing.T) {
 		t.Fatalf("手动调用应共享定时探测结果: %+v", probeResult)
 	}
 	s.wg.Wait()
-	if history := s.Snapshot().Services[0].History; len(history) != 1 {
+	snapshot := s.Snapshot().Services[0]
+	if history := snapshot.History; len(history) != 1 {
 		t.Fatalf("共享探测只能记录一次: %+v", history)
+	}
+	if snapshot.ProbeStartedAt != 0 {
+		t.Fatalf("探测完成后不应继续暴露在途状态: %+v", snapshot)
 	}
 }
 
