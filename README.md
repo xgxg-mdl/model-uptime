@@ -3,7 +3,7 @@
 大模型 API 探针 + 终端风格状态页。复刻终端风格大模型探针状态页的核心体验，并在此基础上提供：
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
-- **终端风格状态页**：60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
+- **终端风格状态页**：首次加载命令输入动效、60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
 - **健康状态热力图**：按模型展示最近 1/7/30 个自然日的二维热力图（96/168/720 格），聚合正常、慢响应、失败和数据不足状态
 - **Telegram 聚合通知与日报**：按订阅聚合模型变化，并在每日北京时间零点发送前一日运行摘要
 - **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载

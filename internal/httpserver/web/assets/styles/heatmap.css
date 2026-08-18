@@ -135,6 +135,12 @@
 
 .heatmap-empty { color: var(--fg-dim); }
 .heatmap-error { color: var(--bad); }
+.range-change { display: inline-block; animation: range-change var(--motion-base) var(--motion-ease-out); }
+
+@keyframes range-change {
+  0% { opacity: 0.65; transform: scale(0.96); filter: brightness(1.5); }
+  100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
 
 @media (max-width: 400px) {
   .heatmap-toolbar { align-items: flex-start; }
@@ -150,4 +156,5 @@
 @media (prefers-reduced-motion: reduce) {
   .range-switch button,
   .heat-cell { transition: none; }
+  .range-change { animation: none; }
 }

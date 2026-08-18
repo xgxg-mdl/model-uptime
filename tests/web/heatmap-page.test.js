@@ -9,6 +9,7 @@ import {
   createHeatmapRenderer,
   formatBeijingTime,
   gridLayout,
+  heatmapCommandMetrics,
   normalizeRange,
 } from '../../internal/httpserver/web/assets/scripts/heatmap-page.js';
 import { createElementDocument, findAll } from './helpers/fake-dom.js';
@@ -74,6 +75,9 @@ test('热力图页面保留公开导航和响应式终端结构', () => {
   assert.match(html, /data-range="7d">7d<\/button>/);
   assert.match(html, /data-range="30d">30d<\/button>/);
   assert.match(html, /id="cmd-models"/);
+  assert.match(html, /id="command-heatmap-monitor"[^>]*>[\s\S]*?<span class="cmd">monitor<\/span>[\s\S]*?<span class="flag">--watch<\/span>[\s\S]*?id="cmd-models"/);
+  assert.match(html, /id="command-heatmap"[^>]*>[\s\S]*?<span class="cmd">heatmap<\/span>[\s\S]*?id="active-range"/);
+  assert.ok(html.indexOf('id="command-heatmap"') < html.indexOf('id="command-heatmap-monitor"'));
   assert.match(html, /id="probe-comment"># …<\/span>/);
   assert.doesNotMatch(html, /Asia\/Shanghai/);
   assert.doesNotMatch(html, /data-range="(?:day|week|month)"/);
@@ -99,6 +103,8 @@ test('范围和北京时间格式采用稳定默认值', () => {
   assert.equal(normalizeRange('month'), '7d');
   assert.equal(normalizeRange('year'), '7d');
   assert.equal(formatBeijingTime(0), '1970-01-01 08:00');
+  assert.deepEqual(heatmapCommandMetrics('7d'), { characters: 18, duration: 576 });
+  assert.deepEqual(heatmapCommandMetrics('30d'), { characters: 19, duration: 608 });
 });
 
 test('热力图缺少顶部注释配置时使用两页共享默认值', () => {
@@ -106,6 +112,22 @@ test('热力图缺少顶部注释配置时使用两页共享默认值', () => {
   const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
   renderer.render(data({ page: {} }));
   assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
+});
+
+test('范围切换只强调命令参数且首次渲染不播放', () => {
+  const document = heatmapDocument();
+  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const activeRange = document.getElementById('active-range');
+
+  renderer.render(data());
+  assert.equal(activeRange.classList.contains('range-change'), false);
+
+  renderer.render(data({ range: '1d' }));
+  assert.equal(activeRange.textContent, '1d');
+  assert.ok(activeRange.classList.contains('range-change'));
+
+  activeRange.dispatchEvent({ type: 'animationend' });
+  assert.equal(activeRange.classList.contains('range-change'), false);
 });
 
 test('每种范围只显示五个均匀分布的底部刻度', () => {

@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/web/*.test.js tests/deployment/*.test.js",
-    "check:js": "for file in internal/httpserver/web/assets/scripts/status-page.js internal/httpserver/web/assets/scripts/heatmap-page.js internal/httpserver/web/assets/scripts/admin/*.js; do node --check \"$file\"; done"
+    "check:js": "for file in internal/httpserver/web/assets/scripts/terminal-intro.js internal/httpserver/web/assets/scripts/status-page.js internal/httpserver/web/assets/scripts/heatmap-page.js internal/httpserver/web/assets/scripts/admin/*.js; do node --check \"$file\"; done"
   }
 }

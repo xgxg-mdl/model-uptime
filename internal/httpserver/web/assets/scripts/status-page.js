@@ -1,3 +1,5 @@
+import { createTerminalIntro, terminalMotionDisabled } from './terminal-intro.js';
+
 const DEFAULT_REFRESH_SECONDS = 5;
 const MIN_REFRESH_SECONDS = 1;
 const MAX_REFRESH_SECONDS = 60;
@@ -389,17 +391,45 @@ export function startStatusPage({
 } = {}) {
   documentRef.getElementById('login-time').textContent = formatTime(Math.floor(now() / 1000));
   const renderer = createStatusRenderer({ document: documentRef, window: windowRef, schedule, cancel });
+  const intro = createTerminalIntro({
+    root: documentRef.getElementById('terminal'),
+    schedule,
+    disabled: terminalMotionDisabled({ document: documentRef, window: windowRef }),
+    stages: [
+      {
+        command: documentRef.getElementById('command-uptime'),
+        duration: 192,
+        pause: 80,
+        reveal: [documentRef.getElementById('banner-out')],
+      },
+      {
+        command: documentRef.getElementById('command-monitor'),
+        duration: 480,
+        reveal: [
+          documentRef.getElementById('cmd-models'),
+          documentRef.getElementById('svc-out'),
+        ],
+      },
+    ],
+  });
   const poller = createStatusPoller({
     async fetchStatus() {
       const response = await fetchImpl('/api/status', { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
     },
-    render: renderer.render,
-    renderError: renderer.renderError,
+    render(data) {
+      renderer.render(data);
+      intro.setDataReady();
+    },
+    renderError(error) {
+      renderer.renderError(error);
+      intro.setDataReady();
+    },
     schedule,
     cancel,
   });
+  intro.start();
   void poller.start();
   return poller;
 }

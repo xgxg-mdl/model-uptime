@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/assets/styles/heatmap.css" />
 </head>
 <body>
-  <div class="term heatmap-term" role="region" aria-label="model-uptime health heatmap">
+  <div class="term heatmap-term terminal-intro" id="terminal" role="region" aria-label="model-uptime health heatmap">
     <div class="titlebar">
       <div class="lights" aria-hidden="true">
         <span class="light close"></span>
@@ -29,8 +29,10 @@
       </div>
 
       <div class="block heatmap-command">
-        <div class="line"><span class="prompt">~ $</span> <span class="cmd">heatmap</span> <span class="flag">--range</span> <span class="str" id="active-range">7d</span><span id="cmd-models"></span></div>
-        <div class="heatmap-toolbar">
+        <div class="line terminal-command terminal-command-heatmap" id="command-heatmap">
+          <span class="prompt">~ $</span> <span class="terminal-command-text"><span class="cmd">heatmap</span> <span class="flag">--range</span> <span class="str" id="active-range">7d</span></span><span class="terminal-typing-cursor" aria-hidden="true"></span>
+        </div>
+        <div class="heatmap-toolbar terminal-reveal" id="heatmap-toolbar">
           <div class="range-switch" aria-label="Heatmap range">
             <button type="button" data-range="1d">1d</button>
             <button type="button" data-range="7d">7d</button>
@@ -46,11 +48,14 @@
       </div>
 
       <div class="block">
-        <div class="heatmap-panels" id="heatmap-out"><span class="dim">loading heatmaps…</span></div>
+        <div class="line terminal-command terminal-command-monitor" id="command-heatmap-monitor">
+          <span class="prompt">~ $</span> <span class="terminal-command-text"><span class="cmd">monitor</span> <span class="flag">--watch</span></span><span class="terminal-typing-cursor" aria-hidden="true"></span><span class="terminal-command-args" id="cmd-models"></span>
+        </div>
+        <div class="heatmap-panels terminal-reveal" id="heatmap-out"><span class="dim">loading heatmaps…</span></div>
       </div>
 
       <div class="block">
-        <div class="line"><span class="prompt">~ $</span><span class="cursor"></span></div>
+        <div class="line terminal-idle"><span class="prompt">~ $</span><span class="cursor"></span></div>
       </div>
 
       <div class="foot">

@@ -11,6 +11,9 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 const foundationCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/foundation.css'), 'utf8');
 const adminCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/admin.css'), 'utf8');
 const statusCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/status.css'), 'utf8');
+const heatmapCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/heatmap.css'), 'utf8');
+const statusHTML = fs.readFileSync(path.join(root, 'internal/httpserver/web/index.html'), 'utf8');
+const heatmapHTML = fs.readFileSync(path.join(root, 'internal/httpserver/web/heatmap/index.html'), 'utf8');
 
 function service(id, ok) {
   const result = { ts: 100, ok, latency_ms: 10 };
@@ -60,6 +63,16 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   for (const marker of ['.status-change', '@keyframes status-change']) {
     assert.ok(statusCSS.includes(marker), `状态页缺少状态变化动效: ${marker}`);
   }
+  for (const marker of ['.terminal-command-active', '@keyframes terminal-type', '@keyframes terminal-output-in']) {
+    assert.ok(statusCSS.includes(marker), `公开页面缺少终端输入动效: ${marker}`);
+  }
+  assert.match(heatmapCSS, /\.range-change\s*{[^}]*animation:/);
+  assert.match(statusHTML, /class="term terminal-intro"/);
+  assert.match(statusHTML, /id="command-uptime"/);
+  assert.match(statusHTML, /id="command-monitor"/);
+  assert.match(heatmapHTML, /class="term heatmap-term terminal-intro"/);
+  assert.match(heatmapHTML, /id="command-heatmap-monitor"/);
+  assert.match(heatmapHTML, /id="command-heatmap"/);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 

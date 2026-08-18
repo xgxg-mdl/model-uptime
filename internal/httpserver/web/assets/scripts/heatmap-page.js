@@ -1,3 +1,5 @@
+import { createTerminalIntro, terminalMotionDisabled } from './terminal-intro.js';
+
 const DEFAULT_RANGE = '7d';
 const REFRESH_MS = 60_000;
 const VALID_RANGES = new Set(['1d', '7d', '30d']);
@@ -11,6 +13,11 @@ export function normalizeRange(value) {
 
 export function rangeLabel(value) {
   return RANGE_LABELS[normalizeRange(value)];
+}
+
+export function heatmapCommandMetrics(value) {
+  const characters = `heatmap --range ${rangeLabel(value)}`.length;
+  return { characters, duration: characters * 32 };
 }
 
 function pad(value) {
@@ -151,6 +158,10 @@ export function createHeatmapRenderer({
   let renderedLayoutKey = '';
   let renderedServiceKey = '';
   let renderedComplete = false;
+  let previousRange = null;
+
+  const activeRange = documentRef.getElementById('active-range');
+  activeRange.addEventListener('animationend', () => activeRange.classList.remove('range-change'));
 
   function cancelPendingRender() {
     if (pendingFrame !== null) cancel(pendingFrame);
@@ -442,7 +453,14 @@ export function createHeatmapRenderer({
     documentRef.title = `${data.page?.title || 'model-uptime'} // heatmap`;
     documentRef.getElementById('term-subtitle').textContent = data.page?.subtitle || 'model-uptime';
     documentRef.getElementById('probe-comment').textContent = `# ${data.page?.probe_comment || 'model-uptime · service health and performance'}`;
-    documentRef.getElementById('active-range').textContent = rangeLabel(data.range);
+    const rangeChanged = previousRange !== null && previousRange !== data.range;
+    activeRange.textContent = rangeLabel(data.range);
+    if (rangeChanged) {
+      activeRange.classList.remove('range-change');
+      void activeRange.offsetWidth;
+      activeRange.classList.add('range-change');
+    }
+    previousRange = data.range;
     documentRef.getElementById('updated').textContent = formatBeijingTime(data.generated_at).slice(11);
     for (const button of documentRef.querySelectorAll?.('[data-range]') || []) {
       const active = button.dataset.range === data.range;
@@ -595,7 +613,32 @@ export function startHeatmapPage({
   const url = new URL(windowRef.location.href);
   const initialRange = normalizeRange(url.searchParams.get('range'));
   documentRef.getElementById('login-time').textContent = formatBeijingTime(Math.floor(now() / 1000));
+  documentRef.getElementById('active-range').textContent = rangeLabel(initialRange);
+  const heatmapCommand = documentRef.getElementById('command-heatmap');
+  const commandMetrics = heatmapCommandMetrics(initialRange);
+  heatmapCommand.classList.toggle('terminal-command-heatmap-long', commandMetrics.characters === 19);
   const renderer = createHeatmapRenderer({ document: documentRef, window: windowRef });
+  const intro = createTerminalIntro({
+    root: documentRef.getElementById('terminal'),
+    schedule,
+    disabled: terminalMotionDisabled({ document: documentRef, window: windowRef }),
+    stages: [
+      {
+        command: heatmapCommand,
+        duration: commandMetrics.duration,
+        pause: 80,
+        reveal: [documentRef.getElementById('heatmap-toolbar')],
+      },
+      {
+        command: documentRef.getElementById('command-heatmap-monitor'),
+        duration: 480,
+        reveal: [
+          documentRef.getElementById('cmd-models'),
+          documentRef.getElementById('heatmap-out'),
+        ],
+      },
+    ],
+  });
   const poller = createHeatmapPoller({
     initialRange,
     schedule,
@@ -605,8 +648,14 @@ export function startHeatmapPage({
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
     },
-    render: renderer.render,
-    renderError: renderer.renderError,
+    render(data) {
+      renderer.render(data);
+      intro.setDataReady();
+    },
+    renderError(error) {
+      renderer.renderError(error);
+      intro.setDataReady();
+    },
   });
   for (const button of documentRef.querySelectorAll('[data-range]')) {
     button.addEventListener('click', () => {
@@ -619,6 +668,7 @@ export function startHeatmapPage({
   documentRef.addEventListener('visibilitychange', () => {
     void poller.setVisible(documentRef.visibilityState !== 'hidden');
   });
+  intro.start();
   void poller.start();
   return poller;
 }
