@@ -32,10 +32,10 @@ function appendText(documentRef, parent, text) {
   parent.append(documentRef.createTextNode(String(text)));
 }
 
-function appendMetric(documentRef, parent, label, value) {
+function appendMetric(documentRef, parent, label, value, valueClass = '') {
   const metric = createElement(documentRef, 'span');
   appendText(documentRef, metric, `${label} `);
-  metric.append(createElement(documentRef, 'b', '', value));
+  metric.append(createElement(documentRef, 'b', valueClass, value));
   parent.append(metric);
 }
 
@@ -94,10 +94,33 @@ function isDescendant(root, node) {
   return false;
 }
 
-export function createHeatmapRenderer({ document: documentRef, window: windowRef } = {}) {
+export function createHeatmapRenderer({
+  document: documentRef,
+  window: windowRef,
+  scheduleFrame,
+  cancelFrame,
+} = {}) {
   if (!documentRef) throw new Error('document is required');
   const output = documentRef.getElementById('heatmap-out');
   const tip = documentRef.getElementById('tip');
+  const cellModels = new WeakMap();
+  const cellSignatures = new WeakMap();
+  const schedule = scheduleFrame || (typeof windowRef?.requestAnimationFrame === 'function'
+    ? callback => windowRef.requestAnimationFrame(callback)
+    : callback => { callback(); return null; });
+  const cancel = cancelFrame || (typeof windowRef?.cancelAnimationFrame === 'function'
+    ? handle => windowRef.cancelAnimationFrame(handle)
+    : () => {});
+  let pendingFrame = null;
+  let renderVersion = 0;
+  let renderedLayoutKey = '';
+  let renderedServiceKey = '';
+  let renderedComplete = false;
+
+  function cancelPendingRender() {
+    if (pendingFrame !== null) cancel(pendingFrame);
+    pendingFrame = null;
+  }
 
   function hideTooltip() {
     tip.classList.remove('show');
@@ -123,91 +146,152 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
     tip.style.top = `${targetRect.top - 8}px`;
   }
 
-  function createCell(cell, serviceID, cellIndex) {
-    const intensity = Math.min(5, Math.max(0, Number(cell.intensity) || 0));
-    const intensityClass = intensity > 0 ? ` intensity-${intensity}` : '';
-    const button = createElement(documentRef, 'button', `heat-cell ${cell.status}${intensityClass}`);
-    button.type = 'button';
-    button.setAttribute('aria-label', accessibleCellName(cell));
-    button.setAttribute('aria-describedby', 'tip');
+  function cellSignature(cell) {
+    return [
+      cell.start_ts, cell.end_ts, cell.status, cell.intensity, cell.coverage_pct,
+      cell.actual_samples, cell.expected_samples, cell.healthy_samples,
+      cell.warning_samples, cell.failed_samples, cell.uptime_pct,
+      cell.avg_latency_ms, cell.p95_latency_ms,
+    ].join('|');
+  }
+
+  function updateCell(button, cell, serviceID, cellIndex) {
     button.setAttribute('data-service-id', serviceID);
     button.setAttribute('data-cell-index', String(cellIndex));
-    const show = () => showTooltip(button, cellTooltipModel(cell));
-    button.addEventListener('mouseenter', show);
-    button.addEventListener('mouseleave', hideTooltip);
-    button.addEventListener('focus', show);
-    button.addEventListener('blur', hideTooltip);
-    button.addEventListener('click', show);
+    cellModels.set(button, cell);
+    const signature = cellSignature(cell);
+    if (cellSignatures.get(button) === signature) return;
+    const intensity = Math.min(5, Math.max(0, Number(cell.intensity) || 0));
+    const intensityClass = intensity > 0 ? ` intensity-${intensity}` : '';
+    button.className = `heat-cell ${cell.status}${intensityClass}`;
+    button.setAttribute('aria-label', accessibleCellName(cell));
+    cellSignatures.set(button, signature);
+  }
+
+  function createCell(cell, serviceID, cellIndex) {
+    const button = createElement(documentRef, 'button');
+    button.type = 'button';
+    button.setAttribute('aria-describedby', 'tip');
+    updateCell(button, cell, serviceID, cellIndex);
     return button;
   }
 
-  function enableGridKeyboardNavigation(grid, cells, rowCount, columnCount) {
-    if (!cells.length) return;
-    const focusCell = index => {
-      const nextIndex = Math.min(cells.length - 1, Math.max(0, index));
-      for (let cellIndex = 0; cellIndex < cells.length; cellIndex++) {
-        cells[cellIndex].setAttribute('tabindex', cellIndex === nextIndex ? '0' : '-1');
-      }
-      cells[nextIndex].focus();
-    };
+  function findCell(target) {
+    for (let current = target; current && current !== output; current = current.parentNode) {
+      if (current.classList?.contains('heat-cell')) return current;
+    }
+    return null;
+  }
+
+  function findGrid(cell) {
+    for (let current = cell?.parentNode; current && current !== output; current = current.parentNode) {
+      if (current.classList?.contains('heat-grid')) return current;
+    }
+    return null;
+  }
+
+  function setRovingCell(grid, activeCell) {
+    for (const cell of grid?.querySelectorAll('.heat-cell') || []) {
+      cell.setAttribute('tabindex', cell === activeCell ? '0' : '-1');
+    }
+  }
+
+  function showCellTooltip(button) {
+    const cell = cellModels.get(button);
+    if (cell) showTooltip(button, cellTooltipModel(cell));
+  }
+
+  function handleGridKeydown(event, button) {
+    const grid = findGrid(button);
+    const cells = [...(grid?.querySelectorAll('.heat-cell') || [])];
+    const index = cells.indexOf(button);
+    if (!grid || index < 0) return;
+    const columnCount = Number(grid.getAttribute('data-column-count')) || 24;
+    const rowCount = Number(grid.getAttribute('data-row-count')) || 1;
+    const row = Math.floor(index / columnCount);
+    const column = index % columnCount;
+    let nextIndex = index;
+    switch (event.key) {
+      case 'ArrowLeft':
+        nextIndex = column > 0 ? index - 1 : index;
+        break;
+      case 'ArrowRight':
+        nextIndex = column + 1 < columnCount && index + 1 < cells.length ? index + 1 : index;
+        break;
+      case 'ArrowUp':
+        nextIndex = row > 0 ? index - columnCount : index;
+        break;
+      case 'ArrowDown':
+        nextIndex = row + 1 < rowCount && index + columnCount < cells.length ? index + columnCount : index;
+        break;
+      case 'Home':
+        nextIndex = row * columnCount;
+        break;
+      case 'End':
+        nextIndex = Math.min(cells.length - 1, row * columnCount + columnCount - 1);
+        break;
+      case 'Escape':
+        hideTooltip();
+        button.blur();
+        return;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const nextCell = cells[Math.min(cells.length - 1, Math.max(0, nextIndex))];
+    setRovingCell(grid, nextCell);
+    nextCell.focus();
+  }
+
+  output.addEventListener('mouseover', event => {
+    const button = findCell(event.target);
+    if (button) showCellTooltip(button);
+  });
+  output.addEventListener('mouseout', event => {
+    const button = findCell(event.target);
+    if (button && !isDescendant(button, event.relatedTarget)) hideTooltip();
+  });
+  output.addEventListener('focusin', event => {
+    const button = findCell(event.target);
+    if (!button) return;
+    setRovingCell(findGrid(button), button);
+    showCellTooltip(button);
+  });
+  output.addEventListener('focusout', event => {
+    if (findCell(event.target)) hideTooltip();
+  });
+  output.addEventListener('click', event => {
+    const button = findCell(event.target);
+    if (button) showCellTooltip(button);
+  });
+  output.addEventListener('keydown', event => {
+    const button = findCell(event.target);
+    if (button) handleGridKeydown(event, button);
+  });
+
+  function configureGrid(grid, cells, rowCount, columnCount) {
     for (let index = 0; index < cells.length; index++) {
-      const button = cells[index];
-      button.setAttribute('tabindex', index === 0 ? '0' : '-1');
-      button.addEventListener('focus', () => {
-        for (const cell of cells) cell.setAttribute('tabindex', cell === button ? '0' : '-1');
-      });
-      button.addEventListener('keydown', event => {
-        const row = Math.floor(index / columnCount);
-        const column = index % columnCount;
-        let nextIndex = index;
-        switch (event.key) {
-          case 'ArrowLeft':
-            nextIndex = column > 0 ? index - 1 : index;
-            break;
-          case 'ArrowRight':
-            nextIndex = column + 1 < columnCount && index + 1 < cells.length ? index + 1 : index;
-            break;
-          case 'ArrowUp':
-            nextIndex = row > 0 ? index - columnCount : index;
-            break;
-          case 'ArrowDown':
-            nextIndex = row + 1 < rowCount && index + columnCount < cells.length ? index + columnCount : index;
-            break;
-          case 'Home':
-            nextIndex = row * columnCount;
-            break;
-          case 'End':
-            nextIndex = Math.min(cells.length - 1, row * columnCount + columnCount - 1);
-            break;
-          case 'Escape':
-            hideTooltip();
-            button.blur();
-            return;
-          default:
-            return;
-        }
-        event.preventDefault();
-        focusCell(nextIndex);
-      });
+      cells[index].setAttribute('tabindex', index === 0 ? '0' : '-1');
     }
     grid.setAttribute('aria-rowcount', String(rowCount));
     grid.setAttribute('aria-colcount', String(columnCount + 1));
+    grid.setAttribute('data-row-count', String(rowCount));
+    grid.setAttribute('data-column-count', String(columnCount));
   }
 
   function createPanel(service, data) {
     const panel = createElement(documentRef, 'section', 'heatmap-panel');
+    panel.setAttribute('data-service-id', service.id);
     const heading = createElement(documentRef, 'div', 'heatmap-panel-heading');
     const identity = createElement(documentRef, 'div', 'heatmap-model bold');
-    identity.append(createElement(documentRef, 'span', '', service.model));
-    if (service.provider) {
-      appendText(documentRef, identity, ' ');
-      identity.append(createElement(documentRef, 'span', 'heatmap-provider', `· ${service.provider}`));
-    }
+    identity.append(createElement(documentRef, 'span', 'heatmap-model-name', service.model));
+    appendText(documentRef, identity, ' ');
+    identity.append(createElement(documentRef, 'span', 'heatmap-provider', service.provider ? `· ${service.provider}` : ''));
     heading.append(identity, createElement(documentRef, 'span', `heatmap-current ${service.status}`, `● ${service.status}`));
 
     const summary = createElement(documentRef, 'div', 'heatmap-summary');
-    appendMetric(documentRef, summary, 'uptime', service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—');
-    appendMetric(documentRef, summary, 'p95', service.latency_samples ? formatLatency(service.p95_latency_ms) : '—');
+    appendMetric(documentRef, summary, 'uptime', service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—', 'heatmap-uptime-value');
+    appendMetric(documentRef, summary, 'p95', service.latency_samples ? formatLatency(service.p95_latency_ms) : '—', 'heatmap-p95-value');
 
     const axis = createElement(documentRef, 'div', 'heat-axis');
     axis.append(createElement(documentRef, 'span', '', data.range === 'day' ? 'min' : 'date'));
@@ -236,12 +320,43 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
       }
       grid.append(row);
     }
-    enableGridKeyboardNavigation(grid, gridCells, (data.rows || []).length, columnCount);
+    configureGrid(grid, gridCells, (data.rows || []).length, columnCount);
     panel.append(heading, summary, axis, grid);
     return panel;
   }
 
+  function updatePanel(panel, service) {
+    panel.setAttribute('data-service-id', service.id);
+    panel.querySelector('.heatmap-model-name').textContent = service.model;
+    panel.querySelector('.heatmap-provider').textContent = service.provider ? `· ${service.provider}` : '';
+    const current = panel.querySelector('.heatmap-current');
+    current.className = `heatmap-current ${service.status}`;
+    current.textContent = `● ${service.status}`;
+    panel.querySelector('.heatmap-uptime-value').textContent = service.samples
+      ? `${Number(service.uptime_pct || 0).toFixed(2)}%`
+      : '—';
+    panel.querySelector('.heatmap-p95-value').textContent = service.latency_samples
+      ? formatLatency(service.p95_latency_ms)
+      : '—';
+    const cells = [...panel.querySelectorAll('.heat-cell')];
+    if (cells.length !== service.cells.length) return false;
+    for (let index = 0; index < cells.length; index++) {
+      updateCell(cells[index], service.cells[index], service.id, index);
+    }
+    return true;
+  }
+
+  function restoreFocusedCell(panel, focusedCell) {
+    if (!focusedCell || panel.getAttribute('data-service-id') !== focusedCell.serviceID) return;
+    const replacement = [...panel.querySelectorAll('.heat-cell')].find(cell => (
+      cell.getAttribute('data-cell-index') === focusedCell.cellIndex
+    ));
+    replacement?.focus();
+  }
+
   function render(data) {
+    const version = ++renderVersion;
+    cancelPendingRender();
     const activeElement = documentRef.activeElement;
     const focusedCell = activeElement?.classList?.contains('heat-cell') && isDescendant(output, activeElement)
       ? {
@@ -259,23 +374,50 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     }
-    const fragment = documentRef.createDocumentFragment();
-    if (!(data.services || []).length) {
-      fragment.append(createElement(documentRef, 'div', 'heatmap-empty', 'no enabled services'));
-    } else {
-      for (const service of data.services) fragment.append(createPanel(service, data));
+    const services = data.services || [];
+    const layoutKey = `${data.range}|${(data.rows || []).join(',')}|${(data.columns || []).join(',')}`;
+    const serviceKey = JSON.stringify(services.map(service => service.id));
+    const panels = [...output.querySelectorAll('.heatmap-panel')];
+    if (renderedComplete && renderedLayoutKey === layoutKey && renderedServiceKey === serviceKey
+      && panels.length === services.length
+      && panels.every((panel, index) => updatePanel(panel, services[index]))) {
+      return;
     }
-    output.replaceChildren(fragment);
-    if (focusedCell) {
-      const replacement = [...output.querySelectorAll('.heat-cell')].find(cell => (
-        cell.getAttribute('data-service-id') === focusedCell.serviceID
-        && cell.getAttribute('data-cell-index') === focusedCell.cellIndex
-      ));
-      replacement?.focus();
+
+    renderedLayoutKey = layoutKey;
+    renderedServiceKey = serviceKey;
+    renderedComplete = false;
+    output.replaceChildren();
+    if (!services.length) {
+      output.append(createElement(documentRef, 'div', 'heatmap-empty', 'no enabled services'));
+      renderedComplete = true;
+      return;
     }
+
+    let serviceIndex = 0;
+    // 首个模型立即提交，避免其余模型的 DOM 构建阻塞首屏绘制。
+    const appendNextPanel = () => {
+      pendingFrame = null;
+      if (version !== renderVersion) return;
+      const panel = createPanel(services[serviceIndex], data);
+      output.append(panel);
+      restoreFocusedCell(panel, focusedCell);
+      serviceIndex++;
+      if (serviceIndex < services.length) {
+        pendingFrame = schedule(appendNextPanel);
+      } else {
+        renderedComplete = true;
+      }
+    };
+    appendNextPanel();
   }
 
   function renderError() {
+    renderVersion++;
+    cancelPendingRender();
+    renderedLayoutKey = '';
+    renderedServiceKey = '';
+    renderedComplete = false;
     hideTooltip();
     output.replaceChildren(createElement(documentRef, 'div', 'heatmap-error', '● heatmap unavailable'));
   }

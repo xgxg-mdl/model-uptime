@@ -97,7 +97,7 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.match(output.textContent, /gpt-5/);
   assert.match(output.textContent, /99\.50%/);
 
-  cells[0].dispatchEvent({ type: 'focus' });
+  cells[0].focus();
   const tip = document.getElementById('tip');
   assert.ok(tip.classList.contains('show'));
   assert.match(tip.textContent, /WARNING/);
@@ -127,7 +127,7 @@ test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
 
   const keydown = (target, key) => {
     let prevented = false;
-    target.dispatchEvent({ type: 'keydown', key, preventDefault() { prevented = true; } });
+    target.dispatchEvent({ type: 'keydown', key, bubbles: true, preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
   };
   cells[0].focus();
@@ -144,19 +144,105 @@ test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
   assert.equal(cells.filter(item => item.getAttribute('tabindex') === '0').length, 1);
 });
 
-test('数据刷新后恢复当前模型和网格位置的焦点', () => {
+test('相同网格的数据刷新复用节点并保留焦点', () => {
   const document = heatmapDocument();
   const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
   renderer.render(data());
   const firstRenderCells = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heat-cell'));
   firstRenderCells[7].focus();
 
-  renderer.render(data({ generated_at: 1_776_504_060 }));
+  const service = data().services[0];
+  renderer.render(data({
+    generated_at: 1_776_504_060,
+    services: [{
+      ...service,
+      status: 'failing',
+      cells: [cell({ status: 'failing', intensity: 5, failed_samples: 60, healthy_samples: 0 }), ...service.cells.slice(1)],
+    }],
+  }));
   const secondRenderCells = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heat-cell'));
-  assert.notEqual(secondRenderCells[7], firstRenderCells[7]);
+  assert.equal(secondRenderCells[7], firstRenderCells[7]);
   assert.equal(document.activeElement, secondRenderCells[7]);
+  assert.ok(secondRenderCells[0].classList.contains('failing'));
   assert.equal(secondRenderCells[7].getAttribute('tabindex'), '0');
   assert.equal(secondRenderCells.filter(item => item.getAttribute('tabindex') === '0').length, 1);
+});
+
+test('格子交互由输出容器统一委托', () => {
+  const document = heatmapDocument();
+  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  renderer.render(data());
+
+  const output = document.getElementById('heatmap-out');
+  const cells = findAll(output, element => element.classList.contains('heat-cell'));
+  assert.ok(cells.every(item => item.listeners.size === 0));
+  for (const eventType of ['mouseover', 'mouseout', 'focusin', 'focusout', 'click', 'keydown']) {
+    assert.equal(output.listeners.get(eventType)?.length, 1, `${eventType} 应只绑定一次`);
+  }
+
+  cells[0].dispatchEvent({ type: 'mouseover', bubbles: true });
+  assert.ok(document.getElementById('tip').classList.contains('show'));
+  assert.match(document.getElementById('tip').textContent, /WARNING/);
+});
+
+test('首次渲染先提交一个模型并逐帧追加其余模型', () => {
+  const document = heatmapDocument();
+  const scheduled = [];
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+    scheduleFrame(callback) {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    cancelFrame() {},
+  });
+  const service = data().services[0];
+  renderer.render(data({
+    services: [
+      service,
+      { ...service, id: 'service-2', model: 'gpt-5-mini' },
+      { ...service, id: 'service-3', model: 'gpt-5-nano' },
+    ],
+  }));
+
+  const output = document.getElementById('heatmap-out');
+  const panelCount = () => findAll(output, element => element.classList.contains('heatmap-panel')).length;
+  assert.equal(panelCount(), 1);
+  assert.equal(scheduled.length, 1);
+  scheduled.shift()();
+  assert.equal(panelCount(), 2);
+  scheduled.shift()();
+  assert.equal(panelCount(), 3);
+});
+
+test('结构变化取消尚未提交的旧模型', () => {
+  const document = heatmapDocument();
+  const scheduled = [];
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+    scheduleFrame(callback) {
+      const task = { callback, cancelled: false };
+      scheduled.push(task);
+      return task;
+    },
+    cancelFrame(task) { task.cancelled = true; },
+  });
+  const service = data().services[0];
+  renderer.render(data({
+    services: [service, { ...service, id: 'stale-service', model: 'stale-model' }],
+  }));
+  renderer.render(data({
+    range: 'day',
+    services: [{ ...service, id: 'fresh-service', model: 'fresh-model' }],
+  }));
+
+  assert.equal(scheduled[0].cancelled, true);
+  scheduled[0].callback();
+  const panels = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heatmap-panel'));
+  assert.equal(panels.length, 1);
+  assert.equal(panels[0].getAttribute('data-service-id'), 'fresh-service');
 });
 
 test('低覆盖率 tooltip 明确显示 insufficient data', () => {

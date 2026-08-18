@@ -138,6 +138,9 @@ export class FakeElement extends FakeNode {
     eventObject.target ||= this;
     eventObject.currentTarget = this;
     for (const listener of this.listeners.get(eventObject.type) || []) listener(eventObject);
+    if (eventObject.bubbles && !eventObject.cancelBubble && this.parentNode?.dispatchEvent) {
+      this.parentNode.dispatchEvent(eventObject);
+    }
     return true;
   }
 
@@ -145,6 +148,7 @@ export class FakeElement extends FakeNode {
     this.blurred = true;
     if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = null;
     this.dispatchEvent({ type: 'blur' });
+    this.dispatchEvent({ type: 'focusout', bubbles: true });
   }
 
   focus() {
@@ -153,6 +157,7 @@ export class FakeElement extends FakeNode {
     }
     this.ownerDocument.activeElement = this;
     this.dispatchEvent({ type: 'focus' });
+    this.dispatchEvent({ type: 'focusin', bubbles: true });
   }
 
   scrollIntoView(options) {
