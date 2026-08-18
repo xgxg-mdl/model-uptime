@@ -79,3 +79,26 @@ func TestSnapshotUptimeExcludesHistoryBeforeCurrentWindow(t *testing.T) {
 		t.Fatalf("窗口起点前的延续记录不应进入 uptime，got %v", got)
 	}
 }
+
+func TestSnapshotUptimeExcludesCurrentPartialInterval(t *testing.T) {
+	s := New(nil, nil)
+	page := defaultPage()
+	page.HistoryLen = 2
+	service := testSvc("s1", true)
+	service.IntervalSec = 60
+	if err := s.Reload([]model.Service{service}, page); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	windowEnd := now - now%60
+	s.mu.Lock()
+	s.states["s1"].history = []model.ProbeResult{
+		{OK: true, TS: windowEnd - 30, StartedAt: windowEnd - 30},
+		{OK: false, TS: windowEnd + 1, StartedAt: windowEnd},
+	}
+	s.mu.Unlock()
+
+	if got := s.Snapshot().Services[0].UptimePct; got != 100 {
+		t.Fatalf("当前未完成 interval 的结果不应进入 uptime，got %v", got)
+	}
+}

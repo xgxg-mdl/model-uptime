@@ -21,7 +21,7 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 			ID: st.svc.ID, Model: st.svc.Name, Provider: st.svc.Provider, SortOrder: st.svc.SortOrder,
 			IntervalSec: st.svc.IntervalSec, WarningSec: st.svc.WarningSec,
 			ObservedSince: st.observedSince,
-			UptimePct:     uptimePct(currentWindowHistory(st.history, now, page.HistoryLen, st.svc.IntervalSec)), Last: st.last,
+			UptimePct:     uptimePct(completedWindowHistory(st.history, now, page.HistoryLen, st.svc.IntervalSec)), Last: st.last,
 			History: append([]model.ProbeResult(nil), st.history...),
 		}
 		if st.flight != nil {
@@ -43,14 +43,26 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 	return resp
 }
 
-func currentWindowHistory(history []model.ProbeResult, windowEnd int64, historyLength, intervalSec int) []model.ProbeResult {
+func completedWindowHistory(history []model.ProbeResult, now int64, historyLength, intervalSec int) []model.ProbeResult {
 	if len(history) == 0 || historyLength <= 0 || intervalSec <= 0 {
 		return history
 	}
+	windowEnd := completedWindowEnd(now, intervalSec)
 	cutoff := windowEnd - int64(historyLength)*int64(intervalSec)
 	first := 0
 	for first < len(history) && probeStartedAt(history[first]) <= cutoff {
 		first++
 	}
-	return history[first:]
+	last := first
+	for last < len(history) && probeStartedAt(history[last]) < windowEnd {
+		last++
+	}
+	return history[first:last]
+}
+
+func completedWindowEnd(timestamp int64, intervalSec int) int64 {
+	if intervalSec <= 0 {
+		return timestamp
+	}
+	return timestamp - timestamp%int64(intervalSec)
 }

@@ -15,8 +15,9 @@ func TestReloadPreservesHistory(t *testing.T) {
 	s.Reload([]model.Service{testSvc("s1", true)}, defaultPage())
 
 	now := time.Now().Unix()
-	s.record("s1", model.ProbeResult{OK: true, TS: now - 1, LatencyMS: 10})
-	s.record("s1", model.ProbeResult{OK: false, TS: now, Error: "boom"})
+	windowEnd := now - now%60
+	s.record("s1", model.ProbeResult{OK: true, TS: windowEnd - 2, LatencyMS: 10})
+	s.record("s1", model.ProbeResult{OK: false, TS: windowEnd - 1, Error: "boom"})
 
 	// 同 id 再次 Reload：历史保留、配置更新
 	updated := testSvc("s1", true)

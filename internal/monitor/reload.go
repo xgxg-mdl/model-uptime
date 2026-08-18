@@ -44,7 +44,8 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 			if intervalSec <= 0 {
 				intervalSec = 60
 			}
-			windowStart := now - int64(page.HistoryLen)*int64(intervalSec)
+			windowEnd := completedWindowEnd(now, intervalSec)
+			windowStart := windowEnd - int64(page.HistoryLen)*int64(intervalSec)
 			history, err := s.store.LoadResultsStartedBetween(ctx, service.ID, windowStart, now)
 			if err != nil {
 				return fmt.Errorf("恢复服务 %q 状态页时间窗失败: %w", service.ID, err)

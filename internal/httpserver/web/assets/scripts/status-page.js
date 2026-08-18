@@ -24,15 +24,15 @@ export function normalizeRefreshSeconds(value, fallback = DEFAULT_REFRESH_SECOND
   return Math.min(MAX_REFRESH_SECONDS, Math.max(MIN_REFRESH_SECONDS, seconds));
 }
 
-export function axisLabels(historyLength, intervalSeconds) {
-  const windowSeconds = historyLength * intervalSeconds;
-  const formatAgo = seconds => {
-    if (seconds <= 0) return 'now';
-    if (seconds % 3600 === 0) return `-${seconds / 3600}h`;
-    if (seconds >= 3600) return `-${(seconds / 3600).toFixed(1)}h`;
-    return `-${Math.round(seconds / 60)}m`;
-  };
-  return [0, 1, 2, 3, 4].map(index => formatAgo(Math.round(windowSeconds * (4 - index) / 4)));
+export function timeBucketAxisLabels(buckets = []) {
+  if (!buckets.length) return ['', '', '', '', ''];
+  return [0, 1, 2, 3, 4].map(index => {
+    const boundaryIndex = Math.round(buckets.length * index / 4);
+    const timestamp = boundaryIndex === buckets.length
+      ? buckets.at(-1).to
+      : buckets[boundaryIndex].from;
+    return formatTimeShort(timestamp).slice(0, 5);
+  });
 }
 
 export function resultStatus(result, warningSeconds = 30) {
@@ -44,11 +44,12 @@ function resultTime(result) {
   return Number(result?.started_at) || Number(result?.ts) || 0;
 }
 
-/** 以 generatedAt 为右边界构造等宽滚动观测时间桶。 */
+/** 构造当前 interval 之前的固定等宽观测时间桶。 */
 export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) {
   const length = Math.max(1, Number(historyLength) || 60);
   const intervalSeconds = Math.max(1, Number(service.interval_sec) || 60);
-  const windowEnd = Number(generatedAt);
+  const observationEnd = Number(generatedAt);
+  const windowEnd = Math.floor(observationEnd / intervalSeconds) * intervalSeconds;
   const windowStart = windowEnd - length * intervalSeconds;
   const buckets = Array.from({ length }, (_, index) => ({
     from: windowStart + index * intervalSeconds,
@@ -92,9 +93,9 @@ export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) 
   }
 
   const probeStartedAt = Number(service.current_probe_started_at);
-  if (probeStartedAt > 0 && probeStartedAt <= windowEnd) {
+  if (probeStartedAt > 0 && probeStartedAt < windowEnd) {
     for (const bucket of buckets) {
-      if (bucket.kind || probeStartedAt >= bucket.to || windowEnd <= bucket.from) continue;
+      if (bucket.kind || probeStartedAt >= bucket.to || observationEnd <= bucket.from) continue;
       bucket.kind = 'probing';
       bucket.probeStartedAt = probeStartedAt;
     }
@@ -103,7 +104,7 @@ export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) 
   const observedSince = Number(service.observed_since);
   for (const bucket of buckets) {
     if (bucket.kind) continue;
-    bucket.kind = observedSince > 0 && bucket.to <= observedSince ? 'not-started' : 'unobserved';
+    bucket.kind = observedSince > 0 && bucket.from < observedSince ? 'not-started' : 'unobserved';
   }
   return buckets;
 }
@@ -174,7 +175,6 @@ function tooltipModel(event) {
     ['at', formatTime(result.ts)],
     ['lat', `${result.latency_ms}ms`],
   ];
-  if (event.results.length > 1) fields.push(['samples', event.results.length]);
   if (result.error) fields.push(['err', String(result.error).slice(0, 80)]);
   return {
     status: event.kind === 'warning' ? 'WARNING' : (result.ok ? 'OK' : 'FAIL'),
@@ -359,13 +359,9 @@ export function createStatusRenderer({
       const uptimeClass = uptime >= 99 ? 'ok' : (uptime >= 95 ? 'warn' : 'bad');
       if (page.show_uptime) metadata.append(metric(documentRef, 'uptime', `${uptime.toFixed(2)}%`, uptimeClass));
       if (page.show_samples) {
-        const intervalSeconds = Number(service.interval_sec) || 60;
-        const windowStart = Number(generatedAt) - historyLength * intervalSeconds;
-        const samples = (service.history || []).filter(result => {
-          const timestamp = resultTime(result);
-          return timestamp > windowStart && timestamp <= Number(generatedAt);
-        }).length;
-        metadata.append(metric(documentRef, 'samples', `${samples}/${historyLength}`));
+        const observedBuckets = buckets.filter(bucket =>
+          ['ok', 'warning', 'bad', 'probing'].includes(bucket.kind)).length;
+        metadata.append(metric(documentRef, 'samples', `${observedBuckets}/${historyLength}`));
       }
       if (page.show_latency && last) {
         const latencyStatus = resultStatus(last, service.warning_sec);
@@ -375,7 +371,7 @@ export function createStatusRenderer({
       const barsWrapper = createElement(documentRef, 'div', 'service-indent service-bars');
       barsWrapper.append(createBars(buckets));
       const axis = createElement(documentRef, 'div', 'axis service-indent');
-      axisLabels(historyLength, service.interval_sec || 60).forEach((label, labelIndex) => {
+      timeBucketAxisLabels(buckets).forEach((label, labelIndex) => {
         axis.append(createElement(documentRef, 'span', labelIndex > 0 && labelIndex < 4 ? 'mid-label' : '', label));
       });
       fragment.append(heading, metadata, barsWrapper, axis);

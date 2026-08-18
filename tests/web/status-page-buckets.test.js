@@ -5,13 +5,15 @@ import {
   buildTimeBuckets,
   createStatusPoller,
   createStatusRenderer,
+  formatTimeShort,
   resultStatus,
+  timeBucketAxisLabels,
 } from '../../internal/httpserver/web/assets/scripts/status-page.js';
 import { createStatusDocument, findAll } from './helpers/fake-dom.js';
 
 function statusData(service, page = {}) {
   return {
-    generated_at: 400,
+    generated_at: 420,
     all_ok: service.last?.ok !== false,
     services: [service],
     page: {
@@ -53,51 +55,52 @@ function render(data) {
   return { document, renderer };
 }
 
-test('时间桶按范围接收不同启动相位的周期样本', () => {
+test('完整时间桶使用固定边界并接收不同启动相位的观测周期', () => {
   const buckets = buildTimeBuckets(service({
     observed_since: 145,
     history: [145, 205, 265, 325, 385].map(startedAt => ({
       ts: startedAt + 5, started_at: startedAt, ok: true, latency_ms: 10,
     })),
-  }), 5, 400);
+  }), 5, 420);
 
   assert.deepEqual(buckets.map(bucket => bucket.kind), ['ok', 'ok', 'ok', 'ok', 'ok']);
   assert.deepEqual(buckets.map(bucket => [bucket.from, bucket.to]), [
-    [100, 160], [160, 220], [220, 280], [280, 340], [340, 400],
+    [120, 180], [180, 240], [240, 300], [300, 360], [360, 420],
   ]);
 });
 
-test('时间桶区分启动前、暂停、缺失并聚合同桶最严重结果', () => {
+test('当前 interval 内刷新时保持完整时间桶边界固定', () => {
+  const early = buildTimeBuckets(service(), 5, 421);
+  const late = buildTimeBuckets(service(), 5, 479);
+  assert.deepEqual(
+    early.map(bucket => [bucket.from, bucket.to]),
+    late.map(bucket => [bucket.from, bucket.to]),
+  );
+});
+
+test('完整时间桶区分启动前、暂停、缺失并聚合同桶最严重结果', () => {
   const buckets = buildTimeBuckets(service({
     observed_since: 170,
     history: [
       { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
       { ts: 255, started_at: 250, ok: true, latency_ms: 20 },
-      { ts: 258, started_at: 250, ok: false, latency_ms: 30 },
+      { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
     ],
-    pauses: [{ from: 280, to: 340 }],
-  }), 5, 400);
+    pauses: [{ from: 300, to: 360 }],
+  }), 5, 420);
 
   assert.deepEqual(buckets.map(bucket => bucket.kind), [
     'not-started', 'ok', 'bad', 'paused', 'unobserved',
   ]);
   assert.equal(buckets[2].results.length, 3);
   assert.equal(buckets[2].result.ok, false);
-
-  const longPause = buildTimeBuckets(service({
-    history: [],
-    pauses: [{ from: 160, to: 340 }],
-  }), 5, 400);
-  assert.deepEqual(longPause.map(bucket => bucket.kind), [
-    'unobserved', 'paused', 'paused', 'paused', 'unobserved',
-  ]);
 });
 
-test('请求执行期间以 probing 填充在途时间桶而不是显示 no data', () => {
+test('跨过完整桶的在途请求显示 probing 而不是 no data', () => {
   const buckets = buildTimeBuckets(service({
     history: [{ ts: 315, started_at: 300, ok: true, latency_ms: 15_000 }],
     current_probe_started_at: 400,
-  }), 5, 420);
+  }), 5, 480);
 
   assert.equal(buckets.at(-1).kind, 'probing');
   assert.equal(buckets.at(-1).probeStartedAt, 400);
@@ -117,7 +120,7 @@ test('已完成探测覆盖请求耗时和正常调度间隔，不制造空桶',
   assert.ok(buckets.every(bucket => bucket.kind !== 'unobserved'));
 });
 
-test('超过观测周期且没有请求运行时仍保留真正的 no data', () => {
+test('完整 interval 没有观测覆盖时仍保留真正的 no data', () => {
   const buckets = buildTimeBuckets(service({
     observed_since: 120,
     history: [
@@ -129,6 +132,15 @@ test('超过观测周期且没有请求运行时仍保留真正的 no data', () 
   assert.deepEqual(buckets.map(bucket => bucket.kind), [
     'ok', 'unobserved', 'unobserved', 'ok', 'unobserved',
   ]);
+});
+
+test('底部刻度使用固定时间桶的真实边界时间', () => {
+  const buckets = buildTimeBuckets(service({ history: [] }), 4, 420);
+  const boundaries = [180, 240, 300, 360, 420];
+  assert.deepEqual(
+    timeBucketAxisLabels(buckets),
+    boundaries.map(timestamp => formatTimeShort(timestamp).slice(0, 5)),
+  );
 });
 
 test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
@@ -161,24 +173,20 @@ test('慢响应在服务状态、历史条、耗时和总览中显示 warning', 
   assert.match(document.getElementById('tip').textContent, /WARNING/);
 });
 
-test('状态页严格渲染时间桶并按窗口内实际结果统计 samples', () => {
+test('状态页严格渲染完整时间桶并按观测覆盖统计 samples', () => {
   const partial = service({
     observed_since: 170,
     history: [
       { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
       { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
     ],
-    pauses: [{ from: 280, to: 340 }],
+    pauses: [{ from: 300, to: 360 }],
     last: { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
   });
   const { document } = render(statusData(partial));
   const bars = findAll(document.getElementById('svc-out'), element => element.classList.contains('bar'));
   assert.deepEqual(bars.map(bar => bar.className), [
-    'bar not-started',
-    'bar ok',
-    'bar bad',
-    'bar paused',
-    'bar unobserved',
+    'bar not-started', 'bar ok', 'bar bad', 'bar paused', 'bar unobserved',
   ]);
   assert.match(document.getElementById('svc-out').textContent, /samples 2\/5/);
 

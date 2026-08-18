@@ -63,7 +63,8 @@ func (s *Scheduler) recordGenerationContext(ctx context.Context, id string, gene
 	history = append(history, r)
 	statsHistory := history
 	if historyLimit > 0 {
-		cutoff := r.StartedAt - int64(historyLimit)*int64(service.IntervalSec)
+		windowEnd := completedWindowEnd(r.StartedAt, service.IntervalSec)
+		cutoff := windowEnd - int64(historyLimit)*int64(service.IntervalSec)
 		first := 0
 		for first < len(history) && probeStartedAt(history[first]) <= cutoff {
 			first++
