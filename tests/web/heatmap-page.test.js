@@ -18,7 +18,7 @@ const css = readFileSync(new URL('../../internal/httpserver/web/assets/styles/he
 
 function heatmapDocument() {
   const document = createElementDocument([
-    'heatmap-out', 'tip', 'term-subtitle', 'active-range', 'cmd-models', 'updated', 'login-time',
+    'heatmap-out', 'tip', 'term-subtitle', 'probe-comment', 'active-range', 'cmd-models', 'updated', 'login-time',
   ]);
   document.getElementById('tip').className = 'tip';
   return document;
@@ -50,7 +50,7 @@ function data(overrides = {}) {
     timezone: 'Asia/Shanghai',
     rows: ['08-18'],
     columns: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
-    page: { title: 'Status', subtitle: 'model-uptime' },
+    page: { title: 'Status', subtitle: 'model-uptime', probe_comment: 'Monitoring production models' },
     services: [{
       id: 'service-1',
       model: 'gpt-5',
@@ -74,6 +74,8 @@ test('热力图页面保留公开导航和响应式终端结构', () => {
   assert.match(html, /data-range="7d">7d<\/button>/);
   assert.match(html, /data-range="30d">30d<\/button>/);
   assert.match(html, /id="cmd-models"/);
+  assert.match(html, /id="probe-comment"># …<\/span>/);
+  assert.doesNotMatch(html, /Asia\/Shanghai/);
   assert.doesNotMatch(html, /data-range="(?:day|week|month)"/);
   assert.match(html, /href="\/"[^>]*>status<\/a>/);
   assert.match(html, /href="\/admin\/"[^>]*>manage<\/a>/);
@@ -142,6 +144,7 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.ok(cells[0].classList.contains('warning'));
   assert.match(output.textContent, /gpt-5/);
   assert.match(output.textContent, /99\.50%/);
+  assert.equal(document.getElementById('probe-comment').textContent, '# Monitoring production models');
   const commandModels = document.getElementById('cmd-models');
   assert.equal(commandModels.textContent, ' gpt-5');
   assert.ok(commandModels.children[0].classList.contains('warn'));
