@@ -70,6 +70,9 @@ func TestProbeNow(t *testing.T) {
 	if r.OK || r.Error != "boom" {
 		t.Errorf("ProbeNow 结果 = %+v", r)
 	}
+	if r.StartedAt == 0 || r.StartedAt > r.TS {
+		t.Errorf("ProbeNow 未记录合法探测开始时间: %+v", r)
+	}
 	// 结果计入历史
 	snap := s.Snapshot()
 	if snap.Services[0].Last == nil || snap.Services[0].Last.OK {

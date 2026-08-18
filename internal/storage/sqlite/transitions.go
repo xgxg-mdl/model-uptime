@@ -23,6 +23,9 @@ func (s *Store) RecordProbeResult(
 	result model.ProbeResult,
 	transition *model.StatusTransition,
 ) error {
+	if result.StartedAt == 0 {
+		result.StartedAt = result.TS
+	}
 	var payload []byte
 	if transition != nil {
 		normalized := *transition
@@ -59,9 +62,9 @@ func (s *Store) RecordProbeResult(
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO probe_results (service_id, ts, ok, latency_ms, error)
-		 VALUES (?, ?, ?, ?, ?)`,
-		serviceID, result.TS, boolInt(result.OK), result.LatencyMS, nullableStr(result.Error),
+		`INSERT INTO probe_results (service_id, ts, started_at, ok, latency_ms, error)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		serviceID, result.TS, result.StartedAt, boolInt(result.OK), result.LatencyMS, nullableStr(result.Error),
 	); err != nil {
 		return fmt.Errorf("写入探测结果失败: %w", err)
 	}

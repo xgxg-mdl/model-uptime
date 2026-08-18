@@ -3,7 +3,7 @@
 大模型 API 探针 + 终端风格状态页。复刻终端风格大模型探针状态页的核心体验，并在此基础上提供：
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
-- **终端风格状态页**：首次加载命令输入动效、60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
+- **终端风格状态页**：首次加载命令输入动效、60s 自动探测、最近 60 个滚动时间桶、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
 - **健康状态热力图**：按模型展示最近 1/7/30 个自然日的二维热力图（96/168/720 格），聚合正常、慢响应、失败和数据不足状态
 - **Telegram 聚合通知与日报**：按订阅聚合模型变化，并在每日北京时间零点发送前一日运行摘要
 - **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载
@@ -129,7 +129,7 @@ page:                    # 公开页面显示配置
   subtitle: "model-uptime"
   probe_comment: "model-uptime · service health and performance" # 两页共用顶部注释
   public_url: "https://status.example.com/" # 留空则通知不显示链接
-  history_len: 60        # 状态条数量 / 历史窗口
+  history_len: 60        # 每个服务显示的滚动时间桶数量
   refresh_sec: 5         # 状态页轮询间隔
   show_uptime: true      # ↓ 统计维度开关
   show_samples: true
@@ -204,6 +204,8 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 - **API Key 脱敏**：列表只显示掩码；编辑时留空即保留原密钥
 
 所有修改原子写回配置文件并即时热重载，无需重启。
+
+状态页以服务端生成时间为右边界，按每个服务自己的 `interval_sec` 展示最近 `history_len` 个等宽时间桶。样本按探测开始时间归桶，因此不同服务的启动相位不会制造固定空桶；同桶多次探测取最严重状态。启动前显示 `not started`，当前进程记录到的明确禁用期间显示 `paused`，应探测但没有结果显示 `no data`，三者都不计为探测失败。
 
 热力图先要求时间格达到 50% 探测覆盖率，再按聚合结果判定状态：失败率达到 20% 为 `failing`；失败或慢响应合计达到 5%，或成功请求的 p95 延迟超过服务的 `warning_sec`，为 `warning`；其余为 `healthy`。低覆盖率显示 `insufficient`，没有观测显示 `unobserved`。
 

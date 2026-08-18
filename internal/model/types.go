@@ -128,8 +128,9 @@ func (s *Service) Validate() error {
 // ProbeResult 是一次探测的运行时结果。字段由调度器与状态 API 共用。
 type ProbeResult struct {
 	OK        bool   `json:"ok"`
-	TS        int64  `json:"ts"`         // unix 秒
-	LatencyMS int64  `json:"latency_ms"` // 端到端耗时；0 表示极快响应，不省略
+	TS        int64  `json:"ts"`                   // 探测完成时间，unix 秒
+	StartedAt int64  `json:"started_at,omitempty"` // 探测开始时间；旧记录为 0 时回退到 TS
+	LatencyMS int64  `json:"latency_ms"`           // 端到端耗时；0 表示极快响应，不省略
 	Error     string `json:"error,omitempty"`
 }
 
@@ -240,16 +241,17 @@ type PauseSpan struct {
 
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
-	ID          string        `json:"id"`
-	Model       string        `json:"model"`
-	Provider    string        `json:"provider,omitempty"`
-	SortOrder   int           `json:"-"`
-	IntervalSec int           `json:"interval_sec"`
-	WarningSec  int           `json:"warning_sec"`
-	UptimePct   float64       `json:"uptime_pct"`
-	Last        *ProbeResult  `json:"last"`
-	History     []ProbeResult `json:"history"`
-	Pauses      []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
+	ID            string        `json:"id"`
+	Model         string        `json:"model"`
+	Provider      string        `json:"provider,omitempty"`
+	SortOrder     int           `json:"-"`
+	IntervalSec   int           `json:"interval_sec"`
+	WarningSec    int           `json:"warning_sec"`
+	ObservedSince int64         `json:"observed_since,omitempty"`
+	UptimePct     float64       `json:"uptime_pct"`
+	Last          *ProbeResult  `json:"last"`
+	History       []ProbeResult `json:"history"`
+	Pauses        []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
 }
 
 // StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，

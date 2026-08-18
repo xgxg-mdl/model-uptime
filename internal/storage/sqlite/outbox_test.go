@@ -58,7 +58,7 @@ func TestOpenMigratesVersionTwoDatabaseWithWorkingOutbox(t *testing.T) {
 		t.Fatalf("迁移后 schema version = %d，期望 %d", version, currentSchemaVersion)
 	}
 	history, err := store.LoadHistory(context.Background(), "svc-a", 10)
-	if err != nil || len(history) != 1 || history[0].TS != 100 {
+	if err != nil || len(history) != 1 || history[0].TS != 100 || history[0].StartedAt != 100 {
 		t.Fatalf("迁移后探测历史不完整: history=%+v err=%v", history, err)
 	}
 

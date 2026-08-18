@@ -34,35 +34,59 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 	nextGeneration := s.nextGeneration
 	s.mu.RUnlock()
 
+	now := time.Now().Unix()
 	histories := make(map[string][]model.ProbeResult)
+	observationStarts := make(map[string]int64)
+	lastResults := make(map[string]*model.ProbeResult)
 	if s.store != nil {
 		for _, service := range services {
-			if _, exists := current[service.ID]; exists {
-				continue
+			intervalSec := service.IntervalSec
+			if intervalSec <= 0 {
+				intervalSec = 60
 			}
-			history, err := s.store.LoadHistory(ctx, service.ID, page.HistoryLen)
+			windowStart := now - int64(page.HistoryLen)*int64(intervalSec)
+			history, err := s.store.LoadResultsStartedBetween(ctx, service.ID, windowStart, now)
 			if err != nil {
-				return fmt.Errorf("恢复服务 %q 历史失败: %w", service.ID, err)
+				return fmt.Errorf("恢复服务 %q 状态页时间窗失败: %w", service.ID, err)
 			}
 			histories[service.ID] = history
+			observedSince, err := s.store.LoadObservationStart(ctx, service.ID)
+			if err != nil {
+				return fmt.Errorf("恢复服务 %q 观测起点失败: %w", service.ID, err)
+			}
+			observationStarts[service.ID] = observedSince
+			lastHistory, err := s.store.LoadHistory(ctx, service.ID, 1)
+			if err != nil {
+				return fmt.Errorf("恢复服务 %q 最新状态失败: %w", service.ID, err)
+			}
+			if len(lastHistory) > 0 {
+				last := lastHistory[0]
+				lastResults[service.ID] = &last
+			}
 		}
 	}
 
 	next := make(map[string]*serviceState, len(services))
 	order := make([]string, 0, len(services))
 	seen := make(map[string]struct{}, len(services))
-	now := time.Now().Unix()
 	for _, service := range services {
 		seen[service.ID] = struct{}{}
 		state, exists := current[service.ID]
 		if !exists {
 			nextGeneration++
 			history := histories[service.ID]
+			observedSince := observationStarts[service.ID]
+			if observedSince == 0 {
+				observedSince = now
+			}
 			state = &serviceState{
 				svc: service, history: append([]model.ProbeResult(nil), history...),
-				generation: nextGeneration,
+				observedSince: observedSince, generation: nextGeneration,
 			}
-			if len(history) > 0 {
+			if last := lastResults[service.ID]; last != nil {
+				copy := *last
+				state.last = &copy
+			} else if len(history) > 0 {
 				last := history[len(history)-1]
 				state.last = &last
 			}
@@ -88,9 +112,17 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 				state.lastProbe = time.Time{}
 			}
 			state.svc = service
-		}
-		if limit := page.HistoryLen; limit > 0 && len(state.history) > limit {
-			state.history = append([]model.ProbeResult(nil), state.history[len(state.history)-limit:]...)
+			if s.store != nil {
+				state.history = append([]model.ProbeResult(nil), histories[service.ID]...)
+				if observedSince := observationStarts[service.ID]; observedSince > 0 &&
+					(state.observedSince == 0 || observedSince < state.observedSince) {
+					state.observedSince = observedSince
+				}
+				if last := lastResults[service.ID]; last != nil {
+					copy := *last
+					state.last = &copy
+				}
+			}
 		}
 		next[service.ID] = state
 		order = append(order, service.ID)

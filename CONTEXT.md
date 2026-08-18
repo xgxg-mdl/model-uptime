@@ -11,3 +11,7 @@ _Avoid_: Cross-service status matrix, latency heatmap, uptime chart
 **Heatmap Cell**:
 An aggregate health state for one time bucket with at least 50% of its expected samples. Green tolerates slow samples below 20%, yellow represents slow samples at or above 20% or failures below 20%, red represents failures at or above 20%, and gray means unobserved or insufficiently observed.
 _Avoid_: Probe result, raw sample
+
+**Status Timeline Slot**:
+One interval-wide rolling time bucket for one service. A slot aggregates probes by their start time and is healthy, slow, failing, paused, unobserved, or before the service observation lifecycle.
+_Avoid_: Raw history item, sample index

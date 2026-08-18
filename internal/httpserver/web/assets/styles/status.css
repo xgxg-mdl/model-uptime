@@ -262,10 +262,13 @@ body {
 .bar.warning { background: var(--warn); }
 .bar.bad { background: var(--bad); }
 .bar.paused { background: #3a3a42; }
+.bar.unobserved { background: #292930; }
+.bar.not-started {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px #292930;
+}
 .bar.paused:hover,
 .bar.paused:focus-visible { filter: brightness(1.25); }
-.bar.none { background: transparent; cursor: default; }
-.bar.none:hover { transform: none; filter: none; }
 
 .svc-meta {
   display: flex;
@@ -329,6 +332,7 @@ body {
 .tip .t-status.ok { color: var(--ok); }
 .tip .t-status.bad { color: var(--bad); }
 .tip .t-status.warn { color: var(--warn); }
+.tip .t-status.dim { color: var(--fg-dim); }
 
 .foot {
   margin-top: 24px;

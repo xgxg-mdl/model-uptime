@@ -13,7 +13,7 @@ page:
   probe_comment: "model-uptime · service health and performance"
   # 对外可访问的探针页地址；配置后自动追加到 Telegram 通知末尾。
   public_url: "https://status.example.com/"
-  # 状态条数量（历史窗口）
+  # 每个服务显示的滚动时间桶数量；桶宽使用该服务的 interval_sec
   history_len: 60
   # 状态页前端轮询间隔（秒）
   refresh_sec: 5

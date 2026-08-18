@@ -35,6 +35,9 @@ func (s *Scheduler) recordGenerationContext(ctx context.Context, id string, gene
 	if err := contextError(ctx); err != nil {
 		return nil
 	}
+	if r.StartedAt == 0 {
+		r.StartedAt = r.TS
+	}
 	s.reloadGate.RLock()
 	defer s.reloadGate.RUnlock()
 	s.storeMu.Lock()
@@ -58,8 +61,15 @@ func (s *Scheduler) recordGenerationContext(ctx context.Context, id string, gene
 	s.mu.RUnlock()
 
 	history = append(history, r)
-	if historyLimit > 0 && len(history) > historyLimit {
-		history = history[len(history)-historyLimit:]
+	if historyLimit > 0 {
+		cutoff := r.StartedAt - int64(historyLimit)*int64(service.IntervalSec)
+		first := 0
+		for first < len(history) && probeStartedAt(history[first]) <= cutoff {
+			first++
+		}
+		if first > 0 {
+			history = append([]model.ProbeResult(nil), history[first:]...)
+		}
 	}
 	var change *model.StatusChange
 	if previous != nil && previous.OK != r.OK {
@@ -87,8 +97,18 @@ func (s *Scheduler) recordGenerationContext(ctx context.Context, id string, gene
 		return nil
 	}
 	state.history = history
+	if state.observedSince == 0 || r.StartedAt < state.observedSince {
+		state.observedSince = r.StartedAt
+	}
 	last := r
 	state.last = &last
 	s.mu.Unlock()
 	return change
+}
+
+func probeStartedAt(result model.ProbeResult) int64 {
+	if result.StartedAt > 0 {
+		return result.StartedAt
+	}
+	return result.TS
 }

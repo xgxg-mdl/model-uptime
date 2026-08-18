@@ -84,9 +84,11 @@ func (s *Scheduler) executeProbe(job probeJob) {
 		return
 	}
 
+	startedAt := time.Now().Unix()
 	probed := s.probeFn(ctx, &job.svc)
 	result := &model.ProbeResult{
-		OK: probed.OK, TS: time.Now().Unix(), LatencyMS: probed.LatencyMS, Error: probed.Error,
+		OK: probed.OK, TS: time.Now().Unix(), StartedAt: startedAt,
+		LatencyMS: probed.LatencyMS, Error: probed.Error,
 	}
 	var (
 		probeErr  error

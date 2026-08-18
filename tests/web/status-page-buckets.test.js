@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  buildBarEvents,
+  buildTimeBuckets,
   createStatusPoller,
   createStatusRenderer,
   resultStatus,
@@ -11,7 +11,7 @@ import { createStatusDocument, findAll } from './helpers/fake-dom.js';
 
 function statusData(service, page = {}) {
   return {
-    generated_at: 1_700_000_000,
+    generated_at: 400,
     all_ok: service.last?.ok !== false,
     services: [service],
     page: {
@@ -37,10 +37,11 @@ function service(overrides = {}) {
     model: 'gpt-5',
     interval_sec: 60,
     warning_sec: 30,
+    observed_since: 100,
     uptime_pct: 99.9,
-    history: [{ ts: 100, ok: true, latency_ms: 12 }],
+    history: [{ ts: 355, started_at: 350, ok: true, latency_ms: 12 }],
     pauses: [],
-    last: { ts: 100, ok: true, latency_ms: 12 },
+    last: { ts: 355, started_at: 350, ok: true, latency_ms: 12 },
     ...overrides,
   };
 }
@@ -52,16 +53,43 @@ function render(data) {
   return { document, renderer };
 }
 
-test('buildBarEvents 按时间合并样本和暂停区间', () => {
-  const events = buildBarEvents(
-    [{ ts: 100, ok: true }, { ts: 300, ok: false }],
-    [{ from: 150, to: 250 }],
-  );
+test('时间桶按范围接收不同启动相位的周期样本', () => {
+  const buckets = buildTimeBuckets(service({
+    observed_since: 145,
+    history: [145, 205, 265, 325, 385].map(startedAt => ({
+      ts: startedAt + 5, started_at: startedAt, ok: true, latency_ms: 10,
+    })),
+  }), 5, 400);
 
-  assert.deepEqual(events.map(event => [event.ts, event.kind]), [
-    [100, 'ok'],
-    [250, 'paused'],
-    [300, 'bad'],
+  assert.deepEqual(buckets.map(bucket => bucket.kind), ['ok', 'ok', 'ok', 'ok', 'ok']);
+  assert.deepEqual(buckets.map(bucket => [bucket.from, bucket.to]), [
+    [100, 160], [160, 220], [220, 280], [280, 340], [340, 400],
+  ]);
+});
+
+test('时间桶区分启动前、暂停、缺失并聚合同桶最严重结果', () => {
+  const buckets = buildTimeBuckets(service({
+    observed_since: 170,
+    history: [
+      { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
+      { ts: 255, started_at: 250, ok: true, latency_ms: 20 },
+      { ts: 258, started_at: 250, ok: false, latency_ms: 30 },
+    ],
+    pauses: [{ from: 280, to: 340 }],
+  }), 5, 400);
+
+  assert.deepEqual(buckets.map(bucket => bucket.kind), [
+    'not-started', 'ok', 'bad', 'paused', 'unobserved',
+  ]);
+  assert.equal(buckets[2].results.length, 2);
+  assert.equal(buckets[2].result.ok, false);
+
+  const longPause = buildTimeBuckets(service({
+    history: [],
+    pauses: [{ from: 160, to: 340 }],
+  }), 5, 400);
+  assert.deepEqual(longPause.map(bucket => bucket.kind), [
+    'unobserved', 'paused', 'paused', 'paused', 'unobserved',
   ]);
 });
 
@@ -70,11 +98,13 @@ test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
   assert.equal(resultStatus({ ok: true, latency_ms: 30_001 }, 30), 'warning');
   assert.equal(resultStatus({ ok: false, latency_ms: 31_000 }, 30), 'bad');
 
-  const events = buildBarEvents([
-    { ts: 100, ok: true, latency_ms: 30_000 },
-    { ts: 200, ok: true, latency_ms: 30_001 },
-  ], [], 30);
-  assert.deepEqual(events.map(event => event.kind), ['ok', 'warning']);
+  const buckets = buildTimeBuckets(service({
+    history: [
+      { ts: 120, started_at: 110, ok: true, latency_ms: 30_000 },
+      { ts: 180, started_at: 170, ok: true, latency_ms: 30_001 },
+    ],
+  }), 5, 400);
+  assert.deepEqual(buckets.filter(bucket => bucket.result).map(bucket => bucket.kind), ['ok', 'warning']);
 });
 
 test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
@@ -84,8 +114,8 @@ test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
 
 test('慢响应在服务状态、历史条、耗时和总览中显示 warning', () => {
   const slow = service({
-    history: [{ ts: 100, ok: true, latency_ms: 30_001 }],
-    last: { ts: 100, ok: true, latency_ms: 30_001 },
+    history: [{ ts: 355, started_at: 350, ok: true, latency_ms: 30_001 }],
+    last: { ts: 355, started_at: 350, ok: true, latency_ms: 30_001 },
   });
   const { document } = render(statusData(slow));
   const output = document.getElementById('svc-out');
@@ -100,40 +130,29 @@ test('慢响应在服务状态、历史条、耗时和总览中显示 warning', 
   assert.match(document.getElementById('tip').textContent, /WARNING/);
 });
 
-test('历史格左侧补透明占位并只保留最近事件', () => {
+test('状态页严格渲染时间桶并按已观测桶统计 samples', () => {
   const partial = service({
+    observed_since: 170,
     history: [
-      { ts: 100, ok: true, latency_ms: 10 },
-      { ts: 300, ok: false, latency_ms: 20 },
+      { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
+      { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
     ],
-    pauses: [{ from: 150, to: 250 }],
-    last: { ts: 300, ok: false, latency_ms: 20 },
+    pauses: [{ from: 280, to: 340 }],
+    last: { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
   });
   const { document } = render(statusData(partial));
   const bars = findAll(document.getElementById('svc-out'), element => element.classList.contains('bar'));
   assert.deepEqual(bars.map(bar => bar.className), [
-    'bar none',
-    'bar none',
+    'bar not-started',
     'bar ok',
-    'bar paused',
     'bar bad',
+    'bar paused',
+    'bar unobserved',
   ]);
+  assert.match(document.getElementById('svc-out').textContent, /samples 2\/5/);
 
-  const overflow = service({
-    history: Array.from({ length: 10 }, (_, index) => ({
-      ts: index + 1,
-      ok: true,
-      latency_ms: index,
-    })),
-    last: { ts: 10, ok: true, latency_ms: 9 },
-  });
-  const overflowDocument = render(statusData(overflow)).document;
-  const overflowBars = findAll(
-    overflowDocument.getElementById('svc-out'),
-    element => element.classList.contains('bar'),
-  );
-  assert.equal(overflowBars.length, 5);
-  assert.ok(overflowBars.every(bar => bar.classList.contains('ok')));
+  bars[4].dispatchEvent({ type: 'focus' });
+  assert.match(document.getElementById('tip').textContent, /NO DATA/);
 });
 
 test('状态页把服务字段和错误详情作为纯文本渲染', () => {
@@ -142,8 +161,8 @@ test('状态页把服务字段和错误详情作为纯文本渲染', () => {
   const failing = service({
     name: injectedName,
     model: injectedName,
-    history: [{ ts: 100, ok: false, latency_ms: 18, error: injectedError }],
-    last: { ts: 100, ok: false, latency_ms: 18, error: injectedError },
+    history: [{ ts: 355, started_at: 350, ok: false, latency_ms: 18, error: injectedError }],
+    last: { ts: 355, started_at: 350, ok: false, latency_ms: 18, error: injectedError },
   });
   const { document } = render(statusData(failing));
   const output = document.getElementById('svc-out');

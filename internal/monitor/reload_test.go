@@ -54,21 +54,30 @@ func TestReloadDropsRemovedService(t *testing.T) {
 	}
 }
 
-func TestHistoryWindowTruncation(t *testing.T) {
+func TestHistoryWindowTruncatesByTimeInsteadOfSampleCount(t *testing.T) {
 	s := New(nil, nil)
 	page := defaultPage()
 	page.HistoryLen = 3
 	s.Reload([]model.Service{testSvc("s1", true)}, page)
 
 	for i := int64(1); i <= 10; i++ {
-		s.record("s1", model.ProbeResult{OK: true, TS: i, LatencyMS: i})
+		timestamp := i * 60
+		s.record("s1", model.ProbeResult{OK: true, TS: timestamp, LatencyMS: i})
 	}
 	snap := s.Snapshot()
 	if len(snap.Services[0].History) != 3 {
 		t.Errorf("历史应截断到 3 条，got %d", len(snap.Services[0].History))
 	}
-	if snap.Services[0].History[0].TS != 8 {
+	if snap.Services[0].History[0].TS != 480 {
 		t.Errorf("应保留最新 3 条: %+v", snap.Services[0].History)
+	}
+
+	// 同一时间桶内的额外手动探测不能挤掉窗口内的其他桶。
+	for i := int64(0); i < 5; i++ {
+		s.record("s1", model.ProbeResult{OK: true, TS: 601 + i, StartedAt: 601, LatencyMS: i})
+	}
+	if got := len(s.Snapshot().Services[0].History); got != 8 {
+		t.Fatalf("时间窗应保留同桶额外样本，got %d", got)
 	}
 }
 
@@ -169,12 +178,13 @@ func TestReloadChangedServiceDropsInFlightAndUsesModelID(t *testing.T) {
 func TestReloadPauseResumePersistsHistoryAcrossRestart(t *testing.T) {
 	ctx := context.Background()
 	st := openTestStore(t)
+	now := time.Now().Unix()
 
 	// 预置持久化历史，模拟暂停前已有的观测记录。
-	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: 100, LatencyMS: 12}); err != nil {
+	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: now - 120, LatencyMS: 12}); err != nil {
 		t.Fatalf("预置历史失败: %v", err)
 	}
-	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: 200, LatencyMS: 8}); err != nil {
+	if err := st.AppendResult(ctx, "s1", model.ProbeResult{OK: true, TS: now - 60, LatencyMS: 8}); err != nil {
 		t.Fatalf("预置历史失败: %v", err)
 	}
 
@@ -200,7 +210,7 @@ func TestReloadPauseResumePersistsHistoryAcrossRestart(t *testing.T) {
 	if len(resumed.Services) != 1 || len(resumed.Services[0].History) != 2 {
 		t.Errorf("恢复后历史应保留: %+v", resumed.Services)
 	}
-	if resumed.Services[0].Last == nil || resumed.Services[0].Last.TS != 200 {
+	if resumed.Services[0].Last == nil || resumed.Services[0].Last.TS != now-60 {
 		t.Errorf("恢复后 Last 应为暂停前最新结果: %+v", resumed.Services[0].Last)
 	}
 	if resumed.Services[0].UptimePct != 100.0 {

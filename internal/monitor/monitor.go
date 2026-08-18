@@ -17,13 +17,14 @@ const defaultMaxConcurrentProbe = 8
 // serviceState 是调度器维护的某个服务的运行时状态。generation 区分同一 ID 的观测生命周期。
 // pauses 记录运行时禁用区间，用于状态页显式渲染暂停空档；不持久化。
 type serviceState struct {
-	svc        model.Service
-	last       *model.ProbeResult
-	history    []model.ProbeResult
-	lastProbe  time.Time
-	generation uint64
-	pauses     []model.PauseSpan
-	flight     *probeFlight
+	svc           model.Service
+	last          *model.ProbeResult
+	history       []model.ProbeResult
+	observedSince int64
+	lastProbe     time.Time
+	generation    uint64
+	pauses        []model.PauseSpan
+	flight        *probeFlight
 }
 
 type probeFlight struct {
@@ -50,6 +51,8 @@ type Options struct {
 // Repository 是调度器消费的持久化接缝；SQLite adapter 由 app 负责注入。
 type Repository interface {
 	LoadHistory(context.Context, string, int) ([]model.ProbeResult, error)
+	LoadResultsStartedBetween(context.Context, string, int64, int64) ([]model.ProbeResult, error)
+	LoadObservationStart(context.Context, string) (int64, error)
 	LoadResultsSinceWithPrevious(context.Context, string, int64, int64) ([]model.ProbeResult, error)
 	LoadFailureStart(context.Context, string, int64) (int64, error)
 	RecordProbeResult(context.Context, string, model.ProbeResult, *model.StatusTransition) error

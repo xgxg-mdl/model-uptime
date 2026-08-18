@@ -20,7 +20,7 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 		view := model.ServiceView{
 			ID: st.svc.ID, Model: st.svc.Name, Provider: st.svc.Provider, SortOrder: st.svc.SortOrder,
 			IntervalSec: st.svc.IntervalSec, WarningSec: st.svc.WarningSec,
-			UptimePct: uptimePct(st.history), Last: st.last,
+			ObservedSince: st.observedSince, UptimePct: uptimePct(st.history), Last: st.last,
 			History: append([]model.ProbeResult(nil), st.history...),
 		}
 		// 输出暂停区间；进行中的区间（To == 0）以当前时刻闭合，供前端渲染当前暂停状态。

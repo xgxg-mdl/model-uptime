@@ -35,22 +35,57 @@ export function axisLabels(historyLength, intervalSeconds) {
   return [0, 1, 2, 3, 4].map(index => formatAgo(Math.round(windowSeconds * (4 - index) / 4)));
 }
 
-/** Samples and pause spans share one chronological rendering sequence. */
 export function resultStatus(result, warningSeconds = 30) {
   if (!result?.ok) return 'bad';
   return Number(result.latency_ms) > Number(warningSeconds) * 1000 ? 'warning' : 'ok';
 }
 
-export function buildBarEvents(history = [], pauses = [], warningSeconds = 30) {
-  const events = [];
-  for (const result of history || []) {
-    events.push({ ts: result.ts, kind: resultStatus(result, warningSeconds), result });
+function resultTime(result) {
+  return Number(result?.started_at) || Number(result?.ts) || 0;
+}
+
+/** 以 generatedAt 为右边界构造等宽滚动观测时间桶。 */
+export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) {
+  const length = Math.max(1, Number(historyLength) || 60);
+  const intervalSeconds = Math.max(1, Number(service.interval_sec) || 60);
+  const windowEnd = Number(generatedAt);
+  const windowStart = windowEnd - length * intervalSeconds;
+  const buckets = Array.from({ length }, (_, index) => ({
+    from: windowStart + index * intervalSeconds,
+    to: windowStart + (index + 1) * intervalSeconds,
+    kind: '',
+    results: [],
+  }));
+  const severity = { ok: 1, warning: 2, bad: 3 };
+
+  for (const result of service.history || []) {
+    const timestamp = resultTime(result);
+    if (timestamp <= windowStart || timestamp > windowEnd) continue;
+    const index = Math.ceil((timestamp - windowStart) / intervalSeconds) - 1;
+    const bucket = buckets[index];
+    const kind = resultStatus(result, service.warning_sec);
+    bucket.results.push(result);
+    if (!bucket.result || severity[kind] > severity[bucket.kind] ||
+        (severity[kind] === severity[bucket.kind] && Number(result.ts) >= Number(bucket.result.ts))) {
+      bucket.kind = kind;
+      bucket.result = result;
+    }
   }
-  for (const pause of pauses || []) {
-    events.push({ ts: pause.to, kind: 'paused', pause });
+
+  for (const pause of service.pauses || []) {
+    for (const bucket of buckets) {
+      if (bucket.result || Number(pause.from) >= bucket.to || Number(pause.to) <= bucket.from) continue;
+      bucket.kind = 'paused';
+      bucket.pause = pause;
+    }
   }
-  events.sort((left, right) => left.ts - right.ts);
-  return events;
+
+  const observedSince = Number(service.observed_since);
+  for (const bucket of buckets) {
+    if (bucket.kind) continue;
+    bucket.kind = observedSince > 0 && bucket.to <= observedSince ? 'not-started' : 'unobserved';
+  }
+  return buckets;
 }
 
 export function serviceIdentity(service, index) {
@@ -88,8 +123,18 @@ function tooltipModel(event) {
       status: 'PAUSED',
       statusClass: 'warn',
       fields: [
-        ['from', formatTime(event.pause.from)],
-        ['to', formatTime(event.pause.to)],
+        ['from', formatTime(event.from)],
+        ['to', formatTime(event.to)],
+      ],
+    };
+  }
+  if (event.kind === 'unobserved' || event.kind === 'not-started') {
+    return {
+      status: event.kind === 'unobserved' ? 'NO DATA' : 'NOT STARTED',
+      statusClass: 'dim',
+      fields: [
+        ['from', formatTime(event.from)],
+        ['to', formatTime(event.to)],
       ],
     };
   }
@@ -99,6 +144,7 @@ function tooltipModel(event) {
     ['at', formatTime(result.ts)],
     ['lat', `${result.latency_ms}ms`],
   ];
+  if (event.results.length > 1) fields.push(['samples', event.results.length]);
   if (result.error) fields.push(['err', String(result.error).slice(0, 80)]);
   return {
     status: event.kind === 'warning' ? 'WARNING' : (result.ok ? 'OK' : 'FAIL'),
@@ -229,18 +275,13 @@ export function createStatusRenderer({
     return bar;
   }
 
-  function createBars(service, historyLength) {
+  function createBars(buckets) {
     const bars = createElement(documentRef, 'div', 'bars');
-    const recent = buildBarEvents(service.history, service.pauses, service.warning_sec).slice(-historyLength);
-    const padCount = historyLength - recent.length;
-    for (let index = 0; index < padCount; index++) {
-      bars.append(createElement(documentRef, 'span', 'bar none'));
-    }
-    for (const event of recent) bars.append(createHistoryBar(event));
+    for (const bucket of buckets) bars.append(createHistoryBar(bucket));
     return bars;
   }
 
-  function renderServices(services, page) {
+  function renderServices(services, page, generatedAt) {
     const output = documentRef.getElementById('svc-out');
     const commandModels = documentRef.getElementById('cmd-models');
     clearTooltipTimer();
@@ -262,6 +303,7 @@ export function createStatusRenderer({
     const fragment = documentRef.createDocumentFragment();
     const nextServiceStates = new Map();
     services.forEach((service, index) => {
+      const buckets = buildTimeBuckets(service, historyLength, generatedAt);
       const last = service.last;
       let statusClass = 'warn';
       let statusText = 'pending';
@@ -286,14 +328,17 @@ export function createStatusRenderer({
       const uptime = Number(service.uptime_pct || 0);
       const uptimeClass = uptime >= 99 ? 'ok' : (uptime >= 95 ? 'warn' : 'bad');
       if (page.show_uptime) metadata.append(metric(documentRef, 'uptime', `${uptime.toFixed(2)}%`, uptimeClass));
-      if (page.show_samples) metadata.append(metric(documentRef, 'samples', `${(service.history || []).length}/${historyLength}`));
+      if (page.show_samples) {
+        const observedBuckets = buckets.filter(bucket => ['ok', 'warning', 'bad'].includes(bucket.kind)).length;
+        metadata.append(metric(documentRef, 'samples', `${observedBuckets}/${historyLength}`));
+      }
       if (page.show_latency && last) {
         const latencyStatus = resultStatus(last, service.warning_sec);
         metadata.append(metric(documentRef, 'latency', `${last.latency_ms}ms`, latencyStatus === 'warning' ? 'warn' : latencyStatus));
       }
 
       const barsWrapper = createElement(documentRef, 'div', 'service-indent service-bars');
-      barsWrapper.append(createBars(service, historyLength));
+      barsWrapper.append(createBars(buckets));
       const axis = createElement(documentRef, 'div', 'axis service-indent');
       axisLabels(historyLength, service.interval_sec || 60).forEach((label, labelIndex) => {
         axis.append(createElement(documentRef, 'span', labelIndex > 0 && labelIndex < 4 ? 'mid-label' : '', label));
@@ -310,7 +355,7 @@ export function createStatusRenderer({
     documentRef.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
     documentRef.getElementById('probe-comment').textContent = `# ${page.probe_comment || 'model-uptime · service health and performance'}`;
     renderBanner(data, page);
-    renderServices(data.services || [], page);
+    renderServices(data.services || [], page, data.generated_at);
     documentRef.getElementById('updated').textContent = formatTimeShort(data.generated_at);
   }
 

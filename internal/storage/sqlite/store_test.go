@@ -26,7 +26,7 @@ func TestAppendAndLoadHistory(t *testing.T) {
 
 	// 乱序写入，验证查询按 ts 升序返回
 	for _, r := range []model.ProbeResult{
-		{OK: true, TS: 100, LatencyMS: 50},
+		{OK: true, TS: 100, StartedAt: 90, LatencyMS: 50},
 		{OK: false, TS: 200, LatencyMS: 0, Error: "boom"},
 		{OK: true, TS: 150, LatencyMS: 30},
 	} {
@@ -44,6 +44,9 @@ func TestAppendAndLoadHistory(t *testing.T) {
 	}
 	if hist[0].TS != 100 || hist[2].TS != 200 {
 		t.Errorf("历史应升序: %+v", hist)
+	}
+	if hist[0].StartedAt != 90 || hist[1].StartedAt != hist[1].TS {
+		t.Errorf("探测开始时间未持久化或兼容回填: %+v", hist)
 	}
 	if hist[2].OK || hist[2].Error == "" {
 		t.Errorf("最新一条应带失败信息: %+v", hist[2])
@@ -93,6 +96,28 @@ func TestLoadResultsBetweenUsesHalfOpenRange(t *testing.T) {
 	}
 	if len(results) != 2 || results[0].TS != 100 || results[1].TS != 150 {
 		t.Fatalf("半开时间范围结果错误: %+v", results)
+	}
+}
+
+func TestLoadResultsStartedBetweenUsesRollingWindowBoundaries(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	for _, startedAt := range []int64{100, 160, 220, 280} {
+		result := model.ProbeResult{OK: true, TS: startedAt + 5, StartedAt: startedAt}
+		if err := s.AppendResult(ctx, "svc-a", result); err != nil {
+			t.Fatal(err)
+		}
+	}
+	results, err := s.LoadResultsStartedBetween(ctx, "svc-a", 100, 280)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 3 || results[0].StartedAt != 160 || results[2].StartedAt != 280 {
+		t.Fatalf("滚动时间窗边界错误: %+v", results)
+	}
+	observedSince, err := s.LoadObservationStart(ctx, "svc-a")
+	if err != nil || observedSince != 100 {
+		t.Fatalf("观测起点 = %d, err=%v", observedSince, err)
 	}
 }
 
@@ -262,7 +287,7 @@ func TestOpenMigratesLegacySchemaWithoutLosingHistory(t *testing.T) {
 				s.Close()
 				t.Fatal(err)
 			}
-			if len(history) != 2 || history[0].TS != 100 || history[1].Error != "legacy failure" {
+			if len(history) != 2 || history[0].TS != 100 || history[0].StartedAt != 100 || history[1].Error != "legacy failure" {
 				s.Close()
 				t.Fatalf("迁移后历史不完整: %+v", history)
 			}

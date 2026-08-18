@@ -19,6 +19,9 @@ func TestPendingAndDisabled(t *testing.T) {
 	if svc.Last != nil {
 		t.Errorf("pending 服务 Last 应为 nil: %+v", svc.Last)
 	}
+	if svc.ObservedSince == 0 {
+		t.Error("pending 服务应携带观测生命周期起点")
+	}
 	if svc.UptimePct != 100.0 {
 		t.Errorf("pending 服务 uptime 应为 100: %v", svc.UptimePct)
 	}

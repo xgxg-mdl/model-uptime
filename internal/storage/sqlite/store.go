@@ -18,7 +18,7 @@ type Store struct {
 	db *sql.DB
 }
 
-const currentSchemaVersion = 8
+const currentSchemaVersion = 9
 
 // Open 打开（必要时创建）数据库并初始化表结构。
 func Open(path string) (*Store, error) {
@@ -62,6 +62,9 @@ func (s *Store) init(ctx context.Context) error {
 	}
 	// 每次启动都执行幂等建表，使新增的独立表能随 schema 版本升级落地。
 	if err := createCurrentSchema(ctx, tx); err != nil {
+		return err
+	}
+	if err := migrateProbeResultsStartedAt(ctx, tx); err != nil {
 		return err
 	}
 	if err := migrateNotificationOutbox(ctx, tx); err != nil {
@@ -112,6 +115,7 @@ CREATE TABLE IF NOT EXISTS probe_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     service_id TEXT NOT NULL,
     ts         INTEGER NOT NULL,
+	started_at INTEGER NOT NULL DEFAULT 0,
     ok         INTEGER NOT NULL,
     latency_ms INTEGER NOT NULL DEFAULT 0,
     error      TEXT
@@ -163,6 +167,45 @@ CREATE TABLE IF NOT EXISTS daily_report_runs (
 );`
 	if _, err := tx.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("初始化数据库表失败: %w", err)
+	}
+	return nil
+}
+
+func migrateProbeResultsStartedAt(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(probe_results)`)
+	if err != nil {
+		return fmt.Errorf("读取探测历史表结构失败: %w", err)
+	}
+	hasStartedAt := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return fmt.Errorf("扫描探测历史表结构失败: %w", err)
+		}
+		if name == "started_at" {
+			hasStartedAt = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("读取探测历史表结构失败: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("关闭探测历史表结构查询失败: %w", err)
+	}
+	if !hasStartedAt {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE probe_results ADD COLUMN started_at INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("迁移探测开始时间列失败: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE probe_results SET started_at = ts WHERE started_at = 0`); err != nil {
+			return fmt.Errorf("回填探测开始时间失败: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_probe_results_service_started ON probe_results(service_id, started_at, id)`); err != nil {
+		return fmt.Errorf("创建探测开始时间索引失败: %w", err)
 	}
 	return nil
 }
@@ -223,16 +266,18 @@ CREATE TABLE probe_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     service_id TEXT NOT NULL,
     ts         INTEGER NOT NULL,
+	started_at INTEGER NOT NULL DEFAULT 0,
     ok         INTEGER NOT NULL,
     latency_ms INTEGER NOT NULL DEFAULT 0,
     error      TEXT
 );
-INSERT INTO probe_results(service_id, ts, ok, latency_ms, error)
-SELECT service_id, ts, ok, latency_ms, error
+INSERT INTO probe_results(service_id, ts, started_at, ok, latency_ms, error)
+SELECT service_id, ts, ts, ok, latency_ms, error
 FROM probe_results_v1
 ORDER BY ts, service_id;
 DROP TABLE probe_results_v1;
 CREATE INDEX idx_probe_results_service_time ON probe_results(service_id, ts, id);
+CREATE INDEX idx_probe_results_service_started ON probe_results(service_id, started_at, id);
 CREATE INDEX idx_probe_results_ts ON probe_results(ts);`
 	if _, err := tx.ExecContext(ctx, migration); err != nil {
 		return fmt.Errorf("迁移探测历史表到版本 %d 失败: %w", currentSchemaVersion, err)
@@ -252,7 +297,7 @@ func (s *Store) AppendResult(ctx context.Context, svcID string, r model.ProbeRes
 // LoadHistory 按时间升序返回某服务最近 limit 条结果（用于启动后恢复历史）。
 func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]model.ProbeResult, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT ts, ok, latency_ms, error FROM probe_results WHERE service_id=? ORDER BY ts DESC, id DESC LIMIT ?`,
+		`SELECT ts, started_at, ok, latency_ms, error FROM probe_results WHERE service_id=? ORDER BY ts DESC, id DESC LIMIT ?`,
 		svcID, limit,
 	)
 	if err != nil {
@@ -264,7 +309,7 @@ func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]mod
 		var r model.ProbeResult
 		var ok int
 		var errText sql.NullString
-		if err := rows.Scan(&r.TS, &ok, &r.LatencyMS, &errText); err != nil {
+		if err := rows.Scan(&r.TS, &r.StartedAt, &ok, &r.LatencyMS, &errText); err != nil {
 			return nil, fmt.Errorf("扫描历史失败: %w", err)
 		}
 		r.OK = ok != 0
@@ -279,6 +324,51 @@ func (s *Store) LoadHistory(ctx context.Context, svcID string, limit int) ([]mod
 		out[i], out[j] = out[j], out[i]
 	}
 	return out, nil
+}
+
+// LoadResultsStartedBetween 按探测开始时间返回 (since, until] 内的完整结果，供状态页构造滚动时间桶。
+func (s *Store) LoadResultsStartedBetween(ctx context.Context, svcID string, since, until int64) ([]model.ProbeResult, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT ts, started_at, ok, latency_ms, error
+		 FROM probe_results
+		 WHERE service_id=? AND started_at>? AND started_at<=?
+		 ORDER BY started_at, id`,
+		svcID, since, until,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询状态页时间窗失败: %w", err)
+	}
+	defer rows.Close()
+	results := make([]model.ProbeResult, 0)
+	for rows.Next() {
+		var result model.ProbeResult
+		var ok int
+		var errText sql.NullString
+		if err := rows.Scan(&result.TS, &result.StartedAt, &ok, &result.LatencyMS, &errText); err != nil {
+			return nil, fmt.Errorf("扫描状态页时间窗失败: %w", err)
+		}
+		result.OK = ok != 0
+		result.Error = errText.String
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("读取状态页时间窗失败: %w", err)
+	}
+	return results, nil
+}
+
+// LoadObservationStart 返回服务保留历史中最早的探测开始时间。
+func (s *Store) LoadObservationStart(ctx context.Context, svcID string) (int64, error) {
+	var startedAt sql.NullInt64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT MIN(started_at) FROM probe_results WHERE service_id=?`, svcID,
+	).Scan(&startedAt); err != nil {
+		return 0, fmt.Errorf("查询观测起点失败: %w", err)
+	}
+	if !startedAt.Valid {
+		return 0, nil
+	}
+	return startedAt.Int64, nil
 }
 
 // LoadResultsBetween 按时间升序返回服务在 [since, until) 内的探测结果。

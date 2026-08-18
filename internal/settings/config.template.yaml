@@ -8,7 +8,7 @@ page:
   subtitle: "model-uptime"
   probe_comment: "model-uptime · service health and performance"
   public_url: ""
-  history_len: 60
+  history_len: 60 # Rolling time buckets per service; bucket width follows interval_sec.
   refresh_sec: 5
   show_uptime: true
   show_samples: true
