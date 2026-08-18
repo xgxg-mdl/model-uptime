@@ -124,10 +124,10 @@ ADMIN_TOKEN=xxx go run ./cmd/model-uptime --port 9090 --data ./data
 ```yaml
 admin_token: ""          # 建议用环境变量 ADMIN_TOKEN 代替
 
-page:                    # 状态页显示配置
+page:                    # 公开页面显示配置
   title: "model-uptime // status"
   subtitle: "model-uptime"
-  probe_comment: "model-uptime service monitor · probing every 60s"
+  probe_comment: "model-uptime · service health and performance" # 两页共用顶部注释
   public_url: "https://status.example.com/" # 留空则通知不显示链接
   history_len: 60        # 状态条数量 / 历史窗口
   refresh_sec: 5         # 状态页轮询间隔

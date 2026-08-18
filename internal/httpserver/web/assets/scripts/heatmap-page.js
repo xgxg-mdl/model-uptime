@@ -441,7 +441,7 @@ export function createHeatmapRenderer({
     hideTooltip();
     documentRef.title = `${data.page?.title || 'model-uptime'} // heatmap`;
     documentRef.getElementById('term-subtitle').textContent = data.page?.subtitle || 'model-uptime';
-    documentRef.getElementById('probe-comment').textContent = `# ${data.page?.probe_comment || 'model-uptime service monitor · probing every 60s'}`;
+    documentRef.getElementById('probe-comment').textContent = `# ${data.page?.probe_comment || 'model-uptime · service health and performance'}`;
     documentRef.getElementById('active-range').textContent = rangeLabel(data.range);
     documentRef.getElementById('updated').textContent = formatBeijingTime(data.generated_at).slice(11);
     for (const button of documentRef.querySelectorAll?.('[data-range]') || []) {

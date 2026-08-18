@@ -6,7 +6,7 @@ admin_token: ""
 page:
   title: "model-uptime // status"
   subtitle: "model-uptime"
-  probe_comment: "model-uptime service monitor · probing every 60s"
+  probe_comment: "model-uptime · service health and performance"
   public_url: ""
   history_len: 60
   refresh_sec: 5

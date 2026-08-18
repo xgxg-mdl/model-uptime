@@ -77,6 +77,11 @@ test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
   assert.deepEqual(events.map(event => event.kind), ['ok', 'warning']);
 });
 
+test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
+  const { document } = render(statusData(service(), { probe_comment: '' }));
+  assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
+});
+
 test('慢响应在服务状态、历史条、耗时和总览中显示 warning', () => {
   const slow = service({
     history: [{ ts: 100, ok: true, latency_ms: 30_001 }],

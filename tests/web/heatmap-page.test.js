@@ -101,6 +101,13 @@ test('范围和北京时间格式采用稳定默认值', () => {
   assert.equal(formatBeijingTime(0), '1970-01-01 08:00');
 });
 
+test('热力图缺少顶部注释配置时使用两页共享默认值', () => {
+  const document = heatmapDocument();
+  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  renderer.render(data({ page: {} }));
+  assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
+});
+
 test('每种范围只显示五个均匀分布的底部刻度', () => {
   assert.deepEqual(axisLabels('1d'), ['00:00', '06:00', '12:00', '18:00', '24:00']);
   assert.deepEqual(axisLabels('7d'), ['00:00', '06:00', '12:00', '18:00', '24:00']);

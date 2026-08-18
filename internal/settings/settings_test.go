@@ -91,6 +91,9 @@ services:
 	if c.Page.Title == "" {
 		t.Error("Title 应有默认值")
 	}
+	if c.Page.ProbeComment != "model-uptime · service health and performance" {
+		t.Errorf("ProbeComment 默认值 = %q", c.Page.ProbeComment)
+	}
 	// 全关回退全开
 	if !c.Page.ShowUptime || !c.Page.ShowSamples || !c.Page.ShowLatency || !c.Page.ShowAvgLoad {
 		t.Error("全部统计维度关闭时应回退全开")

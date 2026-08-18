@@ -306,7 +306,7 @@ export function createStatusRenderer({
     const page = data.page || {};
     documentRef.title = page.title || 'model-uptime // status';
     documentRef.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
-    documentRef.getElementById('probe-comment').textContent = `# ${page.probe_comment || 'model-uptime service monitor · probing every 60s'}`;
+    documentRef.getElementById('probe-comment').textContent = `# ${page.probe_comment || 'model-uptime · service health and performance'}`;
     renderBanner(data, page);
     renderServices(data.services || [], page);
     documentRef.getElementById('updated').textContent = formatTimeShort(data.generated_at);

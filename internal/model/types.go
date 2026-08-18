@@ -196,7 +196,7 @@ func (p *PageConfig) Normalize() {
 		p.Subtitle = "model-uptime"
 	}
 	if p.ProbeComment == "" {
-		p.ProbeComment = "model-uptime service monitor · probing every 60s"
+		p.ProbeComment = "model-uptime · service health and performance"
 	}
 	if p.HistoryLen <= 0 {
 		p.HistoryLen = 60

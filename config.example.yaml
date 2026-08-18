@@ -9,8 +9,8 @@ page:
   title: "model-uptime // status"
   # 终端标题栏中间文本
   subtitle: "model-uptime"
-  # 顶部注释文案
-  probe_comment: "model-uptime service monitor · probing every 60s"
+  # 状态页与热力图共用的顶部注释文案
+  probe_comment: "model-uptime · service health and performance"
   # 对外可访问的探针页地址；配置后自动追加到 Telegram 通知末尾。
   public_url: "https://status.example.com/"
   # 状态条数量（历史窗口）
