@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  axisLabels,
   buildTimeBuckets,
   createStatusPoller,
   createStatusRenderer,
-  formatTimeShort,
   resultStatus,
-  timeBucketAxisLabels,
 } from '../../internal/httpserver/web/assets/scripts/status-page.js';
 import { createStatusDocument, findAll } from './helpers/fake-dom.js';
 
@@ -135,13 +134,9 @@ test('完整 interval 没有观测覆盖时仍保留真正的 no data', () => {
   ]);
 });
 
-test('底部刻度取固定 60 个时间桶的真实边界', () => {
-  const buckets = buildTimeBuckets(service({ history: [] }), 60, 3720);
-  const boundaries = [120, 1020, 1920, 2820, 3720];
-  assert.deepEqual(
-    timeBucketAxisLabels(buckets),
-    boundaries.map(timestamp => formatTimeShort(timestamp).slice(0, 5)),
-  );
+test('底部刻度按固定 60 个时间桶显示相对分钟或小时', () => {
+  assert.deepEqual(axisLabels(60, 60), ['-1h', '-45m', '-30m', '-15m', 'now']);
+  assert.deepEqual(axisLabels(60, 300), ['-5h', '-3.8h', '-2.5h', '-1.3h', 'now']);
 });
 
 test('成功探测仅在耗时严格超过阈值时进入 warning', () => {

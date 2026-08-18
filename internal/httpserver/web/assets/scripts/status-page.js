@@ -24,15 +24,15 @@ export function normalizeRefreshSeconds(value, fallback = DEFAULT_REFRESH_SECOND
   return Math.min(MAX_REFRESH_SECONDS, Math.max(MIN_REFRESH_SECONDS, seconds));
 }
 
-export function timeBucketAxisLabels(buckets = []) {
-  if (!buckets.length) return ['', '', '', '', ''];
-  return [0, 1, 2, 3, 4].map(index => {
-    const boundaryIndex = Math.round(buckets.length * index / 4);
-    const timestamp = boundaryIndex === buckets.length
-      ? buckets.at(-1).to
-      : buckets[boundaryIndex].from;
-    return formatTimeShort(timestamp).slice(0, 5);
-  });
+export function axisLabels(historyLength, intervalSeconds) {
+  const windowSeconds = historyLength * intervalSeconds;
+  const formatAgo = seconds => {
+    if (seconds <= 0) return 'now';
+    if (seconds % 3600 === 0) return `-${seconds / 3600}h`;
+    if (seconds >= 3600) return `-${(seconds / 3600).toFixed(1)}h`;
+    return `-${Math.round(seconds / 60)}m`;
+  };
+  return [0, 1, 2, 3, 4].map(index => formatAgo(Math.round(windowSeconds * (4 - index) / 4)));
 }
 
 export function resultStatus(result, warningSeconds = 30) {
@@ -371,7 +371,7 @@ export function createStatusRenderer({
       const barsWrapper = createElement(documentRef, 'div', 'service-indent service-bars');
       barsWrapper.append(createBars(buckets));
       const axis = createElement(documentRef, 'div', 'axis service-indent');
-      timeBucketAxisLabels(buckets).forEach((label, labelIndex) => {
+      axisLabels(historyLength, service.interval_sec || 60).forEach((label, labelIndex) => {
         axis.append(createElement(documentRef, 'span', labelIndex > 0 && labelIndex < 4 ? 'mid-label' : '', label));
       });
       fragment.append(heading, metadata, barsWrapper, axis);
