@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  axisLabels,
   cellTooltipModel,
   createHeatmapPoller,
   createHeatmapRenderer,
   formatBeijingTime,
+  gridLayout,
   normalizeRange,
 } from '../../internal/httpserver/web/assets/scripts/heatmap-page.js';
 import { createElementDocument, findAll } from './helpers/fake-dom.js';
@@ -44,7 +46,7 @@ function cell(overrides = {}) {
 function data(overrides = {}) {
   return {
     generated_at: 1_776_504_000,
-    range: 'week',
+    range: '7d',
     timezone: 'Asia/Shanghai',
     rows: ['08-18'],
     columns: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
@@ -67,21 +69,64 @@ function data(overrides = {}) {
   };
 }
 
-test('热力图页面保留公开导航和响应式双列结构', () => {
-  assert.match(html, /data-range="day"/);
-  assert.match(html, /data-range="week"/);
-  assert.match(html, /data-range="month"/);
+test('热力图页面保留公开导航和响应式终端结构', () => {
+  assert.match(html, /data-range="1d">1d<\/button>/);
+  assert.match(html, /data-range="7d">7d<\/button>/);
+  assert.match(html, /data-range="30d">30d<\/button>/);
+  assert.doesNotMatch(html, /data-range="(?:day|week|month)"/);
   assert.match(html, /href="\/"[^>]*>status<\/a>/);
   assert.match(html, /href="\/admin\/"[^>]*>manage<\/a>/);
-  assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /grid-template-columns:\s*34px repeat\(24, 9px\)/);
-  assert.match(css, /@media \(max-width: 760px\)[^]*grid-template-columns:\s*1fr/);
+  assert.match(css, /\.heatmap-panels\s*{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /@media \(max-width: 899px\)[^]*\.heatmap-panels\s*{[^}]*grid-template-columns:\s*1fr/);
+  assert.match(css, /\.heat-grid\s*{[^}]*width:\s*100%/);
+  assert.match(css, /\.heat-row\s*{[^}]*grid-template-columns:\s*repeat\(24, minmax\(0, 1fr\)\)/);
+  assert.match(css, /--heat-healthy:\s*var\(--ok\)/);
+  assert.match(css, /--heat-warning:\s*var\(--warn\)/);
+  assert.match(css, /--heat-failing:\s*var\(--bad\)/);
+  assert.match(css, /--heat-empty:\s*#3a3a42/);
+  assert.match(css, /\.heatmap-panel \.service-heading\s*{[^}]*margin-top:\s*0/);
+  assert.doesNotMatch(css, /\.heatmap-panel\s*{[^}]*(?:border|background):/);
+  assert.doesNotMatch(css, /\.heat-cell\.[^{]+{[^}]*opacity:/);
+  assert.doesNotMatch(css, /\.heat-cell(?:\.[^{]+)?\s*{[^}]*box-shadow:/);
+  assert.match(css, /\.heatmap-term \.body::before\s*{\s*display:\s*none/);
 });
 
 test('范围和北京时间格式采用稳定默认值', () => {
-  assert.equal(normalizeRange('month'), 'month');
-  assert.equal(normalizeRange('year'), 'week');
+  assert.equal(normalizeRange('30d'), '30d');
+  assert.equal(normalizeRange('month'), '7d');
+  assert.equal(normalizeRange('year'), '7d');
   assert.equal(formatBeijingTime(0), '1970-01-01 08:00');
+});
+
+test('每种范围只显示五个均匀分布的底部刻度', () => {
+  assert.deepEqual(axisLabels('1d'), ['00:00', '06:00', '12:00', '18:00', '24:00']);
+  assert.deepEqual(axisLabels('7d'), ['00:00', '06:00', '12:00', '18:00', '24:00']);
+  const dates = Array.from({ length: 30 }, (_, index) => `07-${String(index + 1).padStart(2, '0')}`);
+  const labels = axisLabels('30d', dates);
+  assert.equal(labels.length, 5);
+  assert.equal(labels[0], dates[0]);
+  assert.equal(labels.at(-1), dates.at(-1));
+});
+
+test('三种范围都形成无结构空位的完整二维矩阵', () => {
+  const columns = Array.from({ length: 24 }, (_, hour) => String(hour));
+  const cases = [
+    { range: '1d', rowCount: 4, columnCount: 24, cells: 96 },
+    { range: '7d', rowCount: 7, columnCount: 24, cells: 168 },
+    { range: '30d', rowCount: 24, columnCount: 30, cells: 720 },
+  ];
+  for (const item of cases) {
+    const rows = Array.from({ length: item.range === '1d' ? 4 : Number.parseInt(item.range, 10) }, (_, index) => String(index));
+    const cells = Array.from({ length: item.cells }, (_, sourceIndex) => ({ sourceIndex }));
+    const layout = gridLayout(item.range, rows, columns, cells);
+    assert.equal(layout.rows.length, item.rowCount);
+    assert.equal(layout.columnCount, item.columnCount);
+    assert.ok(layout.rows.every(row => row.length === item.columnCount));
+    assert.equal(layout.rows.flat().length, item.cells);
+  }
+  const transposed = gridLayout('30d', Array.from({ length: 30 }, (_, index) => String(index)), columns, Array.from({ length: 720 }, (_, sourceIndex) => ({ sourceIndex })));
+  assert.deepEqual(transposed.rows[0].slice(0, 3).map(item => item.sourceIndex), [0, 24, 48]);
+  assert.equal(transposed.rows[1][0].sourceIndex, 1);
 });
 
 test('渲染每个模型的二维网格并提供完整 tooltip', () => {
@@ -106,10 +151,14 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.match(cells[0].getAttribute('aria-label'), /WARNING/);
   const grid = findAll(output, element => element.getAttribute('role') === 'grid')[0];
   assert.equal(grid.getAttribute('aria-rowcount'), '1');
-  assert.equal(grid.getAttribute('aria-colcount'), '25');
+  assert.equal(grid.getAttribute('aria-colcount'), '24');
   assert.equal(cells.filter(item => item.getAttribute('tabindex') === '0').length, 1);
   assert.ok(cells.every(item => item.getAttribute('role') === 'gridcell'));
-  assert.equal(cells[0].getAttribute('aria-colindex'), '2');
+  assert.equal(cells[0].getAttribute('aria-colindex'), '1');
+  assert.equal(findAll(output, element => element.classList.contains('heat-axis')).length, 0);
+  assert.equal(findAll(output, element => element.classList.contains('heat-row-label')).length, 0);
+  const axis = findAll(output, element => element.classList.contains('heatmap-axis'))[0];
+  assert.equal(axis.children.length, 5);
 });
 
 test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
@@ -142,6 +191,43 @@ test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
   keydown(cells[24], 'ArrowUp');
   assert.equal(document.activeElement, cells[0]);
   assert.equal(cells.filter(item => item.getAttribute('tabindex') === '0').length, 1);
+});
+
+test('30d 将日期转为列并按源索引刷新单元格', () => {
+  const document = heatmapDocument();
+  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1280 } });
+  const sourceCells = Array.from({ length: 720 }, (_, index) => cell({
+    start_ts: 1_776_500_400 + index * 3600,
+    end_ts: 1_776_504_000 + index * 3600,
+    status: index === 24 ? 'warning' : 'healthy',
+  }));
+  const service = { ...data().services[0], cells: sourceCells };
+  renderer.render(data({
+    range: '30d',
+    rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+    services: [service],
+  }));
+
+  const output = document.getElementById('heatmap-out');
+  const grid = findAll(output, element => element.getAttribute('role') === 'grid')[0];
+  const rows = findAll(grid, element => element.getAttribute('role') === 'row');
+  const cells = findAll(grid, element => element.classList.contains('heat-cell'));
+  assert.equal(grid.getAttribute('aria-rowcount'), '24');
+  assert.equal(grid.getAttribute('aria-colcount'), '30');
+  assert.equal(rows.length, 24);
+  assert.ok(rows.every(row => row.style.gridTemplateColumns === 'repeat(30, minmax(0, 1fr))'));
+  assert.equal(cells.length, 720);
+  assert.equal(cells[1].getAttribute('data-cell-index'), '24');
+  assert.ok(cells[1].classList.contains('warning'));
+
+  const updatedCells = sourceCells.map((item, index) => index === 24 ? { ...item, status: 'failing' } : item);
+  renderer.render(data({
+    range: '30d',
+    rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+    services: [{ ...service, cells: updatedCells }],
+  }));
+  assert.equal(findAll(output, element => element.classList.contains('heat-cell'))[1], cells[1]);
+  assert.ok(cells[1].classList.contains('failing'));
 });
 
 test('相同网格的数据刷新复用节点并保留焦点', () => {
@@ -234,7 +320,7 @@ test('结构变化取消尚未提交的旧模型', () => {
     services: [service, { ...service, id: 'stale-service', model: 'stale-model' }],
   }));
   renderer.render(data({
-    range: 'day',
+    range: '1d',
     services: [{ ...service, id: 'fresh-service', model: 'fresh-model' }],
   }));
 
@@ -259,7 +345,7 @@ test('轮询切换范围、隐藏暂停、恢复后立即刷新', async () => {
   const rendered = [];
   const scheduled = [];
   const poller = createHeatmapPoller({
-    initialRange: 'week',
+    initialRange: '7d',
     fetchRange: async range => { requested.push(range); return { range }; },
     render: response => rendered.push(response.range),
     renderError: error => { throw error; },
@@ -268,14 +354,14 @@ test('轮询切换范围、隐藏暂停、恢复后立即刷新', async () => {
   });
 
   await poller.start();
-  assert.deepEqual(requested, ['week']);
+  assert.deepEqual(requested, ['7d']);
   assert.equal(scheduled.at(-1).delay, 60_000);
-  await poller.setRange('month');
-  assert.deepEqual(rendered, ['week', 'month']);
+  await poller.setRange('30d');
+  assert.deepEqual(rendered, ['7d', '30d']);
   await poller.setVisible(false);
-  await poller.setRange('day');
-  assert.deepEqual(requested, ['week', 'month']);
+  await poller.setRange('1d');
+  assert.deepEqual(requested, ['7d', '30d']);
   await poller.setVisible(true);
-  assert.deepEqual(requested, ['week', 'month', 'day']);
+  assert.deepEqual(requested, ['7d', '30d', '1d']);
   poller.stop();
 });

@@ -4,7 +4,7 @@
 
 - **多协议探针**：`chat`（OpenAI Chat Completions）、`response`（OpenAI Responses）、`message`（Anthropic Messages）、`http`（通用 HTTP），适配器架构便于扩展
 - **终端风格状态页**：60s 自动探测、60 根历史状态条、uptime% / samples / latency、悬停 tooltip 错误详情、5s 轮询
-- **健康状态热力图**：按模型展示日（96 格）、周（168 格）、月（720 格）二维热力图，聚合正常、慢响应、失败和数据不足状态
+- **健康状态热力图**：按模型展示最近 1/7/30 个自然日的二维热力图（96/168/720 格），聚合正常、慢响应、失败和数据不足状态
 - **Telegram 聚合通知与日报**：按订阅聚合模型变化，并在每日北京时间零点发送前一日运行摘要
 - **配置页**：在线管理监控目标、页面显示配置和版本更新，修改即时热重载
 - **一键更新**：检查 GitHub 稳定版本，并确认目标版本与 GHCR `latest` digest 一致后更新容器
@@ -211,7 +211,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 |---|---|---|---|
 | `/healthz` | GET | 公开 | 轻量进程健康检查（`204 No Content`） |
 | `/api/status` | GET | 公开 | 状态页数据（保持状态 API 的稳定数据结构） |
-| `/api/heatmap?range=day\|week\|month` | GET | 公开 | 按北京时间聚合的健康状态热力图；默认 `week` |
+| `/api/heatmap?range=1d\|7d\|30d` | GET | 公开 | 按北京时间自然日聚合的健康状态热力图；默认 `7d`，兼容 `day`/`week`/`month` 旧参数 |
 | `/api/admin/setup-status` | GET | 公开 | 管理密码是否已配置（前端选择登录/设置视图） |
 | `/api/admin/setup` | POST | — | 首次设置管理密码（仅未配置时可用） |
 | `/api/admin/login` | POST | — | `{token}` 校验 |

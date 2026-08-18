@@ -1,9 +1,15 @@
-const DEFAULT_RANGE = 'week';
+const DEFAULT_RANGE = '7d';
 const REFRESH_MS = 60_000;
-const VALID_RANGES = new Set(['day', 'week', 'month']);
+const VALID_RANGES = new Set(['1d', '7d', '30d']);
+const RANGE_LABELS = { '1d': '1d', '7d': '7d', '30d': '30d' };
+const HOUR_AXIS_LABELS = ['00:00', '06:00', '12:00', '18:00', '24:00'];
 
 export function normalizeRange(value) {
   return VALID_RANGES.has(value) ? value : DEFAULT_RANGE;
+}
+
+export function rangeLabel(value) {
+  return RANGE_LABELS[normalizeRange(value)];
 }
 
 function pad(value) {
@@ -83,8 +89,39 @@ function percentage(count, total) {
 }
 
 function accessibleCellName(cell) {
-  const tooltip = cellTooltipModel(cell);
-  return [tooltip.status, ...tooltip.fields.map(([key, value]) => `${key} ${value}`)].join(', ');
+  return `${statusLabel(cell.status)}, ${formatBeijingTime(cell.start_ts)} – ${formatBeijingTime(cell.end_ts)}`;
+}
+
+function currentStatusLabel(status) {
+  return { healthy: 'online', warning: 'slow', failing: 'failing', pending: 'pending' }[status] || status;
+}
+
+export function gridLayout(range, rows = [], columns = [], cells = []) {
+  const sourceColumnCount = columns.length || 24;
+  if (range === '30d') {
+    return {
+      columnCount: rows.length,
+      rows: Array.from({ length: sourceColumnCount }, (_, columnIndex) => (
+        rows.map((_, rowIndex) => {
+          const sourceIndex = rowIndex * sourceColumnCount + columnIndex;
+          return { cell: cells[sourceIndex], sourceIndex };
+        })
+      )),
+    };
+  }
+  return {
+    columnCount: sourceColumnCount,
+    rows: rows.map((_, rowIndex) => (
+      cells.slice(rowIndex * sourceColumnCount, (rowIndex + 1) * sourceColumnCount)
+        .map((cell, columnIndex) => ({ cell, sourceIndex: rowIndex * sourceColumnCount + columnIndex }))
+    )),
+  };
+}
+
+export function axisLabels(range, rows = []) {
+  if (range !== '30d' || rows.length < 2) return [...HOUR_AXIS_LABELS];
+  const lastIndex = rows.length - 1;
+  return [0, 0.25, 0.5, 0.75, 1].map(position => rows[Math.round(lastIndex * position)]);
 }
 
 function isDescendant(root, node) {
@@ -155,9 +192,7 @@ export function createHeatmapRenderer({
     ].join('|');
   }
 
-  function updateCell(button, cell, serviceID, cellIndex) {
-    button.setAttribute('data-service-id', serviceID);
-    button.setAttribute('data-cell-index', String(cellIndex));
+  function updateCell(button, cell) {
     cellModels.set(button, cell);
     const signature = cellSignature(cell);
     if (cellSignatures.get(button) === signature) return;
@@ -172,7 +207,9 @@ export function createHeatmapRenderer({
     const button = createElement(documentRef, 'button');
     button.type = 'button';
     button.setAttribute('aria-describedby', 'tip');
-    updateCell(button, cell, serviceID, cellIndex);
+    button.setAttribute('data-service-id', serviceID);
+    button.setAttribute('data-cell-index', String(cellIndex));
+    updateCell(button, cell);
     return button;
   }
 
@@ -274,7 +311,7 @@ export function createHeatmapRenderer({
       cells[index].setAttribute('tabindex', index === 0 ? '0' : '-1');
     }
     grid.setAttribute('aria-rowcount', String(rowCount));
-    grid.setAttribute('aria-colcount', String(columnCount + 1));
+    grid.setAttribute('aria-colcount', String(columnCount));
     grid.setAttribute('data-row-count', String(rowCount));
     grid.setAttribute('data-column-count', String(columnCount));
   }
@@ -282,66 +319,69 @@ export function createHeatmapRenderer({
   function createPanel(service, data) {
     const panel = createElement(documentRef, 'section', 'heatmap-panel');
     panel.setAttribute('data-service-id', service.id);
-    const heading = createElement(documentRef, 'div', 'heatmap-panel-heading');
-    const identity = createElement(documentRef, 'div', 'heatmap-model bold');
-    identity.append(createElement(documentRef, 'span', 'heatmap-model-name', service.model));
-    appendText(documentRef, identity, ' ');
-    identity.append(createElement(documentRef, 'span', 'heatmap-provider', service.provider ? `· ${service.provider}` : ''));
-    heading.append(identity, createElement(documentRef, 'span', `heatmap-current ${service.status}`, `● ${service.status}`));
+    const heading = createElement(documentRef, 'div', 'line service-heading heatmap-panel-heading');
+    heading.append(createElement(documentRef, 'span', 'mute', '→'));
+    appendText(documentRef, heading, ' ');
+    heading.append(createElement(documentRef, 'span', 'cmd bold heatmap-model-name', service.model));
+    heading.append(createElement(documentRef, 'span', 'heatmap-provider', service.provider ? ` · ${service.provider}` : ''));
+    heading.append(createElement(documentRef, 'span', `heatmap-current ${service.status}`, ` · ● ${currentStatusLabel(service.status)}`));
 
-    const summary = createElement(documentRef, 'div', 'heatmap-summary');
+    const summary = createElement(documentRef, 'div', 'svc-meta service-indent heatmap-summary');
     appendMetric(documentRef, summary, 'uptime', service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—', 'heatmap-uptime-value');
     appendMetric(documentRef, summary, 'p95', service.latency_samples ? formatLatency(service.p95_latency_ms) : '—', 'heatmap-p95-value');
 
-    const axis = createElement(documentRef, 'div', 'heat-axis');
-    axis.append(createElement(documentRef, 'span', '', data.range === 'day' ? 'min' : 'date'));
-    for (const label of data.columns || []) axis.append(createElement(documentRef, 'span', '', label));
-
-    const grid = createElement(documentRef, 'div', 'heat-grid');
+    const grid = createElement(documentRef, 'div', 'heat-grid service-indent');
     grid.setAttribute('role', 'grid');
-    grid.setAttribute('aria-label', `${service.model} health history`);
-    const columnCount = (data.columns || []).length || 24;
+    grid.setAttribute('aria-label', `${service.model} ${rangeLabel(data.range)} health history`);
+    const layout = gridLayout(data.range, data.rows, data.columns, service.cells);
     const gridCells = [];
-    for (let rowIndex = 0; rowIndex < (data.rows || []).length; rowIndex++) {
+    for (const [rowIndex, layoutRow] of layout.rows.entries()) {
       const row = createElement(documentRef, 'div', 'heat-row');
       row.setAttribute('role', 'row');
       row.setAttribute('aria-rowindex', String(rowIndex + 1));
-      const rowLabel = createElement(documentRef, 'span', 'heat-row-label', data.rows[rowIndex]);
-      rowLabel.setAttribute('role', 'rowheader');
-      rowLabel.setAttribute('aria-colindex', '1');
-      row.append(rowLabel);
-      const start = rowIndex * columnCount;
-      for (const [columnIndex, cell] of service.cells.slice(start, start + columnCount).entries()) {
-        const button = createCell(cell, service.id, start + columnIndex);
+      row.style.gridTemplateColumns = `repeat(${layout.columnCount}, minmax(0, 1fr))`;
+      for (const [columnIndex, item] of layoutRow.entries()) {
+        const button = createCell(item.cell, service.id, item.sourceIndex);
         button.setAttribute('role', 'gridcell');
-        button.setAttribute('aria-colindex', String(columnIndex + 2));
+        button.setAttribute('aria-colindex', String(columnIndex + 1));
         row.append(button);
         gridCells.push(button);
       }
       grid.append(row);
     }
-    configureGrid(grid, gridCells, (data.rows || []).length, columnCount);
-    panel.append(heading, summary, axis, grid);
+    configureGrid(grid, gridCells, layout.rows.length, layout.columnCount);
+    const axis = createElement(documentRef, 'div', 'axis service-indent heatmap-axis');
+    axis.setAttribute('aria-hidden', 'true');
+    for (const label of axisLabels(data.range, data.rows)) {
+      axis.append(createElement(documentRef, 'span', '', label));
+    }
+    panel.append(heading, summary, grid, axis);
     return panel;
   }
 
-  function updatePanel(panel, service) {
+  function updatePanel(panel, service, data) {
     panel.setAttribute('data-service-id', service.id);
     panel.querySelector('.heatmap-model-name').textContent = service.model;
-    panel.querySelector('.heatmap-provider').textContent = service.provider ? `· ${service.provider}` : '';
+    panel.querySelector('.heatmap-provider').textContent = service.provider ? ` · ${service.provider}` : '';
     const current = panel.querySelector('.heatmap-current');
     current.className = `heatmap-current ${service.status}`;
-    current.textContent = `● ${service.status}`;
+    current.textContent = ` · ● ${currentStatusLabel(service.status)}`;
     panel.querySelector('.heatmap-uptime-value').textContent = service.samples
       ? `${Number(service.uptime_pct || 0).toFixed(2)}%`
       : '—';
     panel.querySelector('.heatmap-p95-value').textContent = service.latency_samples
       ? formatLatency(service.p95_latency_ms)
       : '—';
+    const labels = axisLabels(data.range, data.rows);
+    const axisItems = [...panel.querySelector('.heatmap-axis').children];
+    if (axisItems.length !== labels.length) return false;
+    for (let index = 0; index < labels.length; index++) axisItems[index].textContent = labels[index];
     const cells = [...panel.querySelectorAll('.heat-cell')];
     if (cells.length !== service.cells.length) return false;
-    for (let index = 0; index < cells.length; index++) {
-      updateCell(cells[index], service.cells[index], service.id, index);
+    for (const button of cells) {
+      const sourceIndex = Number(button.getAttribute('data-cell-index'));
+      if (!service.cells[sourceIndex]) return false;
+      updateCell(button, service.cells[sourceIndex]);
     }
     return true;
   }
@@ -367,7 +407,7 @@ export function createHeatmapRenderer({
     hideTooltip();
     documentRef.title = `${data.page?.title || 'model-uptime'} // heatmap`;
     documentRef.getElementById('term-subtitle').textContent = data.page?.subtitle || 'model-uptime';
-    documentRef.getElementById('active-range').textContent = data.range;
+    documentRef.getElementById('active-range').textContent = rangeLabel(data.range);
     documentRef.getElementById('updated').textContent = formatBeijingTime(data.generated_at).slice(11);
     for (const button of documentRef.querySelectorAll?.('[data-range]') || []) {
       const active = button.dataset.range === data.range;
@@ -375,12 +415,12 @@ export function createHeatmapRenderer({
       button.setAttribute('aria-pressed', String(active));
     }
     const services = data.services || [];
-    const layoutKey = `${data.range}|${(data.rows || []).join(',')}|${(data.columns || []).join(',')}`;
+    const layoutKey = `${data.range}|${(data.rows || []).length}|${(data.columns || []).length}`;
     const serviceKey = JSON.stringify(services.map(service => service.id));
     const panels = [...output.querySelectorAll('.heatmap-panel')];
     if (renderedComplete && renderedLayoutKey === layoutKey && renderedServiceKey === serviceKey
       && panels.length === services.length
-      && panels.every((panel, index) => updatePanel(panel, services[index]))) {
+      && panels.every((panel, index) => updatePanel(panel, services[index], data))) {
       return;
     }
 

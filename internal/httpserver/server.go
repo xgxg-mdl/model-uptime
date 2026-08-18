@@ -3,6 +3,7 @@ package httpserver
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,7 +81,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
-	mux.HandleFunc("GET /api/heatmap", s.handleHeatmap)
+	mux.Handle("GET /api/heatmap", gzipJSON(http.HandlerFunc(s.handleHeatmap)))
 	mux.HandleFunc("POST /api/admin/login", s.handleLogin)
 	mux.HandleFunc("GET /api/admin/setup-status", s.handleSetupStatus)
 	mux.HandleFunc("POST /api/admin/setup", s.handleSetup)
@@ -114,10 +116,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleHeatmap(w http.ResponseWriter, r *http.Request) {
-	rangeName := r.URL.Query().Get("range")
-	if rangeName == "" {
-		rangeName = heatmap.RangeWeek
-	}
+	rangeName := normalizeHeatmapRange(r.URL.Query().Get("range"))
 	response, err := s.heatmap.Build(r.Context(), rangeName)
 	if errors.Is(err, heatmap.ErrInvalidRange) {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -129,6 +128,21 @@ func (s *Server) handleHeatmap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func normalizeHeatmapRange(rangeName string) string {
+	switch rangeName {
+	case "":
+		return heatmap.Range7D
+	case "day":
+		return heatmap.Range1D
+	case "week":
+		return heatmap.Range7D
+	case "month":
+		return heatmap.Range30D
+	default:
+		return rangeName
+	}
 }
 
 func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +216,66 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		slog.Default().Debug("写入 JSON 响应失败", "err", err)
 	}
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	writer *gzip.Writer
+}
+
+func (w gzipResponseWriter) WriteHeader(status int) {
+	w.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w gzipResponseWriter) Write(body []byte) (int, error) {
+	w.Header().Del("Content-Length")
+	return w.writer.Write(body)
+}
+
+func gzipJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Vary", "Accept-Encoding")
+		if !acceptsGzip(strings.Join(r.Header.Values("Accept-Encoding"), ",")) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		writer := gzip.NewWriter(w)
+		next.ServeHTTP(gzipResponseWriter{ResponseWriter: w, writer: writer}, r)
+		if err := writer.Close(); err != nil {
+			slog.Default().Debug("结束 gzip JSON 响应失败", "err", err)
+		}
+	})
+}
+
+func acceptsGzip(header string) bool {
+	wildcardAccepted := false
+	for _, item := range strings.Split(header, ",") {
+		parts := strings.Split(item, ";")
+		encoding := strings.ToLower(strings.TrimSpace(parts[0]))
+		quality := 1.0
+		for _, parameter := range parts[1:] {
+			name, value, found := strings.Cut(strings.TrimSpace(parameter), "=")
+			if found && strings.EqualFold(strings.TrimSpace(name), "q") {
+				parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+				if err != nil {
+					quality = 0
+				} else {
+					quality = parsed
+				}
+			}
+		}
+		accepted := quality > 0 && quality <= 1
+		if encoding == "gzip" {
+			return accepted
+		}
+		if encoding == "*" {
+			wildcardAccepted = accepted
+		}
+	}
+	return wildcardAccepted
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

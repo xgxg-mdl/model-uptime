@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	RangeDay   = "day"
-	RangeWeek  = "week"
-	RangeMonth = "month"
+	Range1D  = "1d"
+	Range7D  = "7d"
+	Range30D = "30d"
 
 	StatusHealthy      = "healthy"
 	StatusWarning      = "warning"
@@ -31,7 +31,7 @@ const (
 
 var beijingLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 
-var ErrInvalidRange = errors.New("range 仅支持 day、week 或 month")
+var ErrInvalidRange = errors.New("range 仅支持 1d、7d 或 30d")
 
 type Repository interface {
 	LoadResultsBetween(context.Context, string, int64, int64) ([]model.ProbeResult, error)
@@ -132,7 +132,7 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 	snapshot := s.status.Snapshot()
 	services := append([]model.ServiceView(nil), snapshot.Services...)
 	sort.SliceStable(services, func(i, j int) bool { return services[i].SortOrder < services[j].SortOrder })
-	key := buildCacheKey(rangeName, snapshot.Page, services)
+	key := buildCacheKey(spec, snapshot.Page, services)
 	if cached, ok := s.cache[rangeName]; ok && cached.key == key && now.Sub(cached.createdAt) < cacheTTL {
 		return cached.response, nil
 	}
@@ -146,7 +146,7 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 		if err != nil {
 			return Response{}, fmt.Errorf("构建服务 %q 热力图失败: %w", service.ID, err)
 		}
-		response.Services = append(response.Services, buildServiceView(service, results, spec, now))
+		response.Services = append(response.Services, buildServiceView(service, results, spec))
 	}
 	s.cache[rangeName] = cacheEntry{key: key, createdAt: now, response: response}
 	return response, nil
@@ -154,56 +154,68 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 
 func makeGridSpec(rangeName string, now time.Time) (gridSpec, error) {
 	now = now.In(beijingLocation)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, beijingLocation)
+	end := today.AddDate(0, 0, 1)
 	columns := make([]string, 24)
 	for hour := range columns {
 		columns[hour] = fmt.Sprintf("%02d", hour)
 	}
-	switch rangeName {
-	case RangeDay:
+	if rangeName == Range1D {
 		bucket := 15 * time.Minute
-		end := now
-		start := end.Add(-24 * time.Hour)
 		spec := gridSpec{
 			rangeName: rangeName, bucket: bucket,
-			rows: make([]string, 4), columns: columns,
-			slots: make([]timeSlot, 4*24), queryFrom: start, queryTo: end,
+			rows: []string{"00", "15", "30", "45"}, columns: columns,
+			slots: make([]timeSlot, 4*24), queryFrom: today, queryTo: observedQueryEnd(now, end),
 		}
-		for bucketIndex, cursor := 0, start; cursor.Before(end); bucketIndex, cursor = bucketIndex+1, cursor.Add(bucket) {
-			row := bucketIndex % 4
-			if bucketIndex < 4 {
-				spec.rows[row] = fmt.Sprintf("%02d", cursor.Minute())
-			}
-			index := row*24 + cursor.Hour()
+		for cursor := today; cursor.Before(end); cursor = cursor.Add(bucket) {
+			index := (cursor.Minute()/15)*24 + cursor.Hour()
 			spec.slots[index] = timeSlot{start: cursor, end: cursor.Add(bucket)}
 		}
 		return spec, nil
-	case RangeWeek, RangeMonth:
-		days := 7
-		if rangeName == RangeMonth {
-			days = 30
+	}
+
+	days, err := rangeDays(rangeName)
+	if err != nil {
+		return gridSpec{}, err
+	}
+	start := today.AddDate(0, 0, -(days - 1))
+	spec := gridSpec{
+		rangeName: rangeName, bucket: time.Hour,
+		rows: make([]string, days), columns: columns,
+		slots: make([]timeSlot, days*24), queryFrom: start, queryTo: observedQueryEnd(now, end),
+	}
+	for day := 0; day < days; day++ {
+		date := start.AddDate(0, 0, day)
+		spec.rows[day] = date.Format("01-02")
+		for hour := 0; hour < 24; hour++ {
+			cellStart := date.Add(time.Duration(hour) * time.Hour)
+			spec.slots[day*24+hour] = timeSlot{start: cellStart, end: cellStart.Add(time.Hour)}
 		}
-		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, beijingLocation)
-		start := today.AddDate(0, 0, -(days - 1))
-		spec := gridSpec{
-			rangeName: rangeName, bucket: time.Hour,
-			rows: make([]string, days), columns: columns,
-			slots: make([]timeSlot, days*24), queryFrom: start, queryTo: now.Add(time.Second),
-		}
-		for day := 0; day < days; day++ {
-			date := start.AddDate(0, 0, day)
-			spec.rows[day] = date.Format("01-02")
-			for hour := 0; hour < 24; hour++ {
-				cellStart := date.Add(time.Duration(hour) * time.Hour)
-				spec.slots[day*24+hour] = timeSlot{start: cellStart, end: cellStart.Add(time.Hour)}
-			}
-		}
-		return spec, nil
+	}
+	return spec, nil
+}
+
+func rangeDays(rangeName string) (int, error) {
+	switch rangeName {
+	case Range7D:
+		return 7, nil
+	case Range30D:
+		return 30, nil
 	default:
-		return gridSpec{}, ErrInvalidRange
+		return 0, ErrInvalidRange
 	}
 }
 
-func buildServiceView(service model.ServiceView, results []model.ProbeResult, spec gridSpec, now time.Time) ServiceView {
+func observedQueryEnd(now, periodEnd time.Time) time.Time {
+	// 探测时间戳只有秒精度；半开查询推进到下一秒，才能包含当前秒并用同一终点计算覆盖率。
+	queryEnd := time.Unix(now.Unix()+1, 0).In(beijingLocation)
+	if queryEnd.After(periodEnd) {
+		return periodEnd
+	}
+	return queryEnd
+}
+
+func buildServiceView(service model.ServiceView, results []model.ProbeResult, spec gridSpec) ServiceView {
 	cells := make([]Cell, len(spec.slots))
 	buckets := make([][]model.ProbeResult, len(spec.slots))
 	for _, result := range results {
@@ -221,7 +233,7 @@ func buildServiceView(service model.ServiceView, results []model.ProbeResult, sp
 		}
 	}
 	for index, slot := range spec.slots {
-		cells[index] = aggregateCell(slot, buckets[index], service.IntervalSec, service.WarningSec, now)
+		cells[index] = aggregateCell(slot, buckets[index], service.IntervalSec, service.WarningSec, spec.queryTo)
 	}
 	uptime := 0.0
 	if len(results) > 0 {
@@ -238,13 +250,13 @@ func slotIndex(spec gridSpec, timestamp time.Time) int {
 	if timestamp.Before(spec.queryFrom) || !timestamp.Before(spec.queryTo) {
 		return -1
 	}
-	if spec.rangeName == RangeDay {
+	if spec.rangeName == Range1D {
 		bucketIndex := int(timestamp.Sub(spec.queryFrom) / spec.bucket)
 		if bucketIndex < 0 || bucketIndex >= len(spec.slots) {
 			return -1
 		}
 		bucketStart := spec.queryFrom.Add(time.Duration(bucketIndex) * spec.bucket)
-		return (bucketIndex%4)*24 + bucketStart.Hour()
+		return (bucketStart.Minute()/15)*24 + bucketStart.Hour()
 	}
 	day := int(timestamp.Sub(spec.queryFrom) / (24 * time.Hour))
 	if day < 0 || day >= len(spec.rows) {
@@ -253,9 +265,11 @@ func slotIndex(spec gridSpec, timestamp time.Time) int {
 	return day*24 + timestamp.Hour()
 }
 
-func buildCacheKey(rangeName string, page *model.PageConfig, services []model.ServiceView) string {
+func buildCacheKey(spec gridSpec, page *model.PageConfig, services []model.ServiceView) string {
 	var key strings.Builder
-	fmt.Fprintf(&key, "%s|%#v", rangeName, page)
+	// 自然日边界只在北京时间跨日时变化，既避免跨秒缓存失效，也不会跨天返回旧网格。
+	periodEnd := spec.slots[len(spec.slots)-1].end.Unix()
+	fmt.Fprintf(&key, "%s|%d|%d|%d|%#v", spec.rangeName, spec.queryFrom.Unix(), periodEnd, len(spec.slots), page)
 	for _, service := range services {
 		fmt.Fprintf(&key, "|%s|%s|%s|%d|%d|%d", service.ID, service.Model, service.Provider, service.SortOrder, service.IntervalSec, service.WarningSec)
 		if service.Last != nil {
@@ -265,11 +279,11 @@ func buildCacheKey(rangeName string, page *model.PageConfig, services []model.Se
 	return key.String()
 }
 
-func aggregateCell(slot timeSlot, results []model.ProbeResult, intervalSec, warningSec int, now time.Time) Cell {
+func aggregateCell(slot timeSlot, results []model.ProbeResult, intervalSec, warningSec int, observedUntil time.Time) Cell {
 	cell := Cell{StartTS: slot.start.Unix(), EndTS: slot.end.Unix(), Status: StatusUnobserved}
 	observedEnd := slot.end
-	if now.Before(observedEnd) {
-		observedEnd = now
+	if observedUntil.Before(observedEnd) {
+		observedEnd = observedUntil
 	}
 	if !observedEnd.After(slot.start) {
 		return cell

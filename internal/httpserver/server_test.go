@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -173,16 +174,19 @@ func TestStaticFilesHaveSecurityAndCacheHeaders(t *testing.T) {
 	}
 }
 
-func TestPublicHeatmapEndpointDefaultsToWeek(t *testing.T) {
+func TestPublicHeatmapEndpointDefaultsTo7D(t *testing.T) {
 	t.Parallel()
 	server := newTestServer(t, nil)
-	server.heatmaps.response = heatmap.Response{Range: heatmap.RangeWeek, Timezone: "Asia/Shanghai"}
+	server.heatmaps.response = heatmap.Response{Range: heatmap.Range7D, Timezone: "Asia/Shanghai"}
 
 	response := request(t, server.handler, http.MethodGet, "/api/heatmap", "", false)
 	if response.Code != http.StatusOK {
 		t.Fatalf("热力图 API = %d: %s", response.Code, response.Body.String())
 	}
-	if len(server.heatmaps.ranges) != 1 || server.heatmaps.ranges[0] != heatmap.RangeWeek {
+	if response.Header().Get("Content-Encoding") != "" || !strings.Contains(response.Header().Get("Vary"), "Accept-Encoding") {
+		t.Fatalf("identity 热力图编码头错误: Content-Encoding=%q Vary=%q", response.Header().Get("Content-Encoding"), response.Header().Get("Vary"))
+	}
+	if len(server.heatmaps.ranges) != 1 || server.heatmaps.ranges[0] != heatmap.Range7D {
 		t.Fatalf("默认范围 = %v", server.heatmaps.ranges)
 	}
 
@@ -190,6 +194,168 @@ func TestPublicHeatmapEndpointDefaultsToWeek(t *testing.T) {
 	invalid := request(t, server.handler, http.MethodGet, "/api/heatmap?range=year", "", false)
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("非法热力图范围 = %d", invalid.Code)
+	}
+}
+
+func TestPublicHeatmapEndpointNormalizesLegacyRanges(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		legacy    string
+		canonical string
+	}{
+		{legacy: "day", canonical: heatmap.Range1D},
+		{legacy: "week", canonical: heatmap.Range7D},
+		{legacy: "month", canonical: heatmap.Range30D},
+	} {
+		t.Run(test.legacy, func(t *testing.T) {
+			server := newTestServer(t, nil)
+			server.heatmaps.response = heatmap.Response{Range: test.canonical}
+			response := request(t, server.handler, http.MethodGet, "/api/heatmap?range="+test.legacy, "", false)
+			if response.Code != http.StatusOK {
+				t.Fatalf("旧范围 %q 响应 = %d: %s", test.legacy, response.Code, response.Body.String())
+			}
+			if len(server.heatmaps.ranges) != 1 || server.heatmaps.ranges[0] != test.canonical {
+				t.Fatalf("旧范围 %q 规范化结果 = %v，期望 %q", test.legacy, server.heatmaps.ranges, test.canonical)
+			}
+		})
+	}
+}
+
+func TestPublicHeatmapEndpointCompressesLargeResponses(t *testing.T) {
+	t.Parallel()
+	server := newTestServer(t, nil)
+	cells := make([]heatmap.Cell, 30*24)
+	for index := range cells {
+		cells[index] = heatmap.Cell{
+			StartTS: 1_776_000_000 + int64(index)*3600, EndTS: 1_776_003_600 + int64(index)*3600,
+			Status: heatmap.StatusHealthy, Intensity: 5, CoveragePct: 100,
+			ActualSamples: 60, ExpectedSamples: 60, HealthySamples: 60, UptimePct: 100,
+		}
+	}
+	server.heatmaps.response = heatmap.Response{
+		Range:    heatmap.Range30D,
+		Services: []heatmap.ServiceView{{ID: "service-1", Model: "Model", Cells: cells}},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/heatmap?range=30d", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	recorder := httptest.NewRecorder()
+	server.handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("gzip 热力图响应 = %d, Content-Encoding=%q", recorder.Code, recorder.Header().Get("Content-Encoding"))
+	}
+	if !strings.Contains(recorder.Header().Get("Vary"), "Accept-Encoding") {
+		t.Fatalf("gzip 热力图响应缺少 Vary: %q", recorder.Header().Get("Vary"))
+	}
+	reader, err := gzip.NewReader(recorder.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	var response heatmap.Response
+	if err := json.NewDecoder(reader).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Services) != 1 || len(response.Services[0].Cells) != len(cells) {
+		t.Fatalf("解压后的热力图响应不完整: %+v", response)
+	}
+	if recorder.Header().Get("Content-Length") != "" {
+		t.Fatalf("gzip 响应不应保留 Content-Length: %q", recorder.Header().Get("Content-Length"))
+	}
+}
+
+func TestAcceptsGzipHonorsQualityAndCasing(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		header string
+		want   bool
+	}{
+		{"gzip", true},
+		{"GZIP", true},
+		{"br, gzip;q=0.5", true},
+		{"*;q=0.5", true},
+		{"br", false},
+		{"gzip;q=0", false},
+		{"gzip;q=2", false},
+		{"gzip;q=invalid", false},
+	} {
+		if got := acceptsGzip(test.header); got != test.want {
+			t.Errorf("acceptsGzip(%q) = %t，期望 %t", test.header, got, test.want)
+		}
+	}
+}
+
+func TestPublicHeatmapEndpointReadsMultipleAcceptEncodingHeaders(t *testing.T) {
+	t.Parallel()
+	server := newTestServer(t, nil)
+	server.heatmaps.response = heatmap.Response{Range: heatmap.Range7D}
+	req := httptest.NewRequest(http.MethodGet, "/api/heatmap", nil)
+	req.Header.Add("Accept-Encoding", "br")
+	req.Header.Add("Accept-Encoding", "GZIP;q=0.5")
+	recorder := httptest.NewRecorder()
+	server.handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("多值 Accept-Encoding 响应 = %d, Content-Encoding=%q", recorder.Code, recorder.Header().Get("Content-Encoding"))
+	}
+}
+
+func TestPublicHeatmapEndpointCompressesErrors(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		err    error
+		path   string
+		status int
+	}{
+		{"invalid range", heatmap.ErrInvalidRange, "/api/heatmap?range=year", http.StatusBadRequest},
+		{"build failure", errors.New("database unavailable"), "/api/heatmap?range=7d", http.StatusInternalServerError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := newTestServer(t, nil)
+			server.heatmaps.err = test.err
+			req := httptest.NewRequest(http.MethodGet, test.path, nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			recorder := httptest.NewRecorder()
+			server.handler.ServeHTTP(recorder, req)
+			if recorder.Code != test.status || recorder.Header().Get("Content-Encoding") != "gzip" {
+				t.Fatalf("gzip 错误响应 = %d, Content-Encoding=%q", recorder.Code, recorder.Header().Get("Content-Encoding"))
+			}
+			reader, err := gzip.NewReader(recorder.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reader.Close()
+			var body map[string]string
+			if err := json.NewDecoder(reader).Decode(&body); err != nil || body["error"] == "" {
+				t.Fatalf("gzip 错误响应无法解码: body=%v err=%v", body, err)
+			}
+		})
+	}
+}
+
+func TestPublicHeatmapHeadResponseHasNoBody(t *testing.T) {
+	t.Parallel()
+	server := newTestServer(t, nil)
+	server.heatmaps.response = heatmap.Response{Range: heatmap.Range7D}
+	httpServer := httptest.NewServer(server.handler)
+	defer httpServer.Close()
+	req, err := http.NewRequest(http.MethodHead, httpServer.URL+"/api/heatmap", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Encoding", "gzip")
+	client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
+	response, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Encoding") != "gzip" || len(body) != 0 {
+		t.Fatalf("HEAD 响应 = %d, Content-Encoding=%q, body=%dB", response.StatusCode, response.Header.Get("Content-Encoding"), len(body))
 	}
 }
 
