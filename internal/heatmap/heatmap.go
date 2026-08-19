@@ -3,6 +3,7 @@ package heatmap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -134,7 +135,7 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 	}
 	snapshot := s.status.Snapshot()
 	services := append([]model.ServiceView(nil), snapshot.Services...)
-	sort.SliceStable(services, func(i, j int) bool { return services[i].SortOrder < services[j].SortOrder })
+	sort.SliceStable(services, func(i, j int) bool { return model.ServiceViewLess(services[i], services[j]) })
 	key := buildCacheKey(spec, snapshot.Page, services)
 	if cached, ok := s.cache[rangeName]; ok && cached.key == key && now.Sub(cached.createdAt) < cacheTTL {
 		return cached.response, nil
@@ -297,7 +298,8 @@ func buildCacheKey(spec gridSpec, page *model.PageConfig, services []model.Servi
 	var key strings.Builder
 	// 自然日边界只在北京时间跨日时变化，既避免跨秒缓存失效，也不会跨天返回旧网格。
 	periodEnd := spec.slots[len(spec.slots)-1].end.Unix()
-	fmt.Fprintf(&key, "%s|%d|%d|%d|%#v", spec.rangeName, spec.queryFrom.Unix(), periodEnd, len(spec.slots), page)
+	pageJSON, _ := json.Marshal(page)
+	fmt.Fprintf(&key, "%s|%d|%d|%d|%s", spec.rangeName, spec.queryFrom.Unix(), periodEnd, len(spec.slots), pageJSON)
 	for _, service := range services {
 		fmt.Fprintf(&key, "|%s|%s|%s|%d|%d|%d", service.ID, service.Model, service.Provider, service.SortOrder, service.IntervalSec, service.WarningSec)
 		if service.Last != nil {

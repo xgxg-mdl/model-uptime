@@ -10,6 +10,7 @@ page:
   public_url: ""
   history_len: 60 # Rolling time buckets per service; bucket width follows interval_sec.
   refresh_sec: 5
+  enable_command_animation: true
   show_uptime: true
   show_samples: true
   show_latency: true

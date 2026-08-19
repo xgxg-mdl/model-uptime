@@ -10,6 +10,7 @@ import {
   formatBeijingTime,
   gridLayout,
   normalizeRange,
+  uptimeStatusClass,
 } from '../../internal/httpserver/web/assets/scripts/heatmap-page.js';
 import { createElementDocument, findAll } from './helpers/fake-dom.js';
 
@@ -133,6 +134,12 @@ test('范围和北京时间格式采用稳定默认值', () => {
   assert.equal(formatBeijingTime(0), '1970-01-01 08:00');
 });
 
+test('uptime 使用与状态页一致的健康阈值颜色', () => {
+  assert.equal(uptimeStatusClass(99), 'ok');
+  assert.equal(uptimeStatusClass(98.99), 'warn');
+  assert.equal(uptimeStatusClass(94.99), 'bad');
+});
+
 test('热力图缺少顶部注释配置时使用两页共享默认值', () => {
   const document = heatmapDocument();
   const renderer = createHeatmapRenderer({
@@ -220,6 +227,8 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.ok(cells[0].classList.contains('warning'));
   assert.match(output.textContent, /gpt-5/);
   assert.match(output.textContent, /99\.50%/);
+  assert.doesNotMatch(output.textContent, /OpenAI/);
+  assert.ok(findAll(output, element => element.classList.contains('heatmap-uptime-value'))[0].classList.contains('ok'));
   assert.equal(document.getElementById('probe-comment').textContent, '# Monitoring production models');
   const commandModels = document.getElementById('cmd-models');
   assert.equal(commandModels.textContent, ' gpt-5');
@@ -428,6 +437,39 @@ test('首次渲染先提交一个模型并逐帧追加其余模型', () => {
   assert.equal(panelCount(), 2);
   scheduled.shift()();
   assert.equal(panelCount(), 3);
+});
+
+test('命令输出揭示前只提交首批格子，揭示后继续渐进渲染', () => {
+  const document = heatmapDocument();
+  const scheduled = [];
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1280 },
+    deferUntilReveal: true,
+    scheduleFrame(callback) {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    cancelFrame() {},
+  });
+  const service = data().services[0];
+  renderer.render(
+    data({
+      range: '30d',
+      rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+      services: [{ ...service, cells: Array.from({ length: 720 }, () => cell()) }],
+    }),
+  );
+
+  const output = document.getElementById('heatmap-out');
+  const cellCount = () => findAll(output, element => element.classList.contains('heat-cell')).length;
+  assert.equal(cellCount(), 90);
+  assert.equal(scheduled.length, 0);
+
+  renderer.resume();
+  assert.equal(scheduled.length, 1);
+  scheduled.shift()();
+  assert.equal(cellCount(), 180);
 });
 
 test('30d 单模型按固定格子预算渐进渲染，避免一次创建全部格子', () => {

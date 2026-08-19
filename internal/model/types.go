@@ -181,10 +181,12 @@ type PageConfig struct {
 	PublicURL    string `yaml:"public_url" json:"public_url"`
 	HistoryLen   int    `yaml:"history_len" json:"history_len"`
 	RefreshSec   int    `yaml:"refresh_sec" json:"refresh_sec"`
-	ShowUptime   bool   `yaml:"show_uptime" json:"show_uptime"`
-	ShowSamples  bool   `yaml:"show_samples" json:"show_samples"`
-	ShowLatency  bool   `yaml:"show_latency" json:"show_latency"`
-	ShowAvgLoad  bool   `yaml:"show_avg_load" json:"show_avg_load"`
+	// 指针用于区分旧配置未声明（默认开启）与用户显式关闭。
+	EnableCommandAnimation *bool `yaml:"enable_command_animation,omitempty" json:"enable_command_animation"`
+	ShowUptime             bool  `yaml:"show_uptime" json:"show_uptime"`
+	ShowSamples            bool  `yaml:"show_samples" json:"show_samples"`
+	ShowLatency            bool  `yaml:"show_latency" json:"show_latency"`
+	ShowAvgLoad            bool  `yaml:"show_avg_load" json:"show_avg_load"`
 }
 
 // Normalize 填充页面显示配置的默认值。
@@ -204,6 +206,10 @@ func (p *PageConfig) Normalize() {
 	}
 	if p.RefreshSec <= 0 {
 		p.RefreshSec = 5
+	}
+	if p.EnableCommandAnimation == nil {
+		enabled := true
+		p.EnableCommandAnimation = &enabled
 	}
 	if !p.ShowUptime && !p.ShowSamples && !p.ShowLatency && !p.ShowAvgLoad {
 		// 全关会导致页面无统计维度，回退到全开
@@ -253,6 +259,24 @@ type ServiceView struct {
 	Last           *ProbeResult  `json:"last"`
 	History        []ProbeResult `json:"history"`
 	Pauses         []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
+}
+
+// ServiceViewLess 定义公开页面统一使用的模型顺序：显式 order 优先，
+// 未设置的 order 置底，同 order 再以展示名和稳定 ID 消除来源切片差异。
+func ServiceViewLess(left, right ServiceView) bool {
+	if left.SortOrder != right.SortOrder {
+		if left.SortOrder <= 0 {
+			return false
+		}
+		if right.SortOrder <= 0 {
+			return true
+		}
+		return left.SortOrder < right.SortOrder
+	}
+	if left.Model != right.Model {
+		return left.Model < right.Model
+	}
+	return left.ID < right.ID
 }
 
 // StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，

@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"sort"
 	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/model"
@@ -40,6 +41,9 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 			resp.AllOK = false
 		}
 	}
+	sort.SliceStable(resp.Services, func(i, j int) bool {
+		return model.ServiceViewLess(resp.Services[i], resp.Services[j])
+	})
 	return resp
 }
 

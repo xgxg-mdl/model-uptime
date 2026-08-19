@@ -5,6 +5,7 @@ export function fillPageForm(documentRef, page) {
   documentRef.getElementById('p-public-url').value = page.public_url || '';
   documentRef.getElementById('p-history').value = page.history_len || 60;
   documentRef.getElementById('p-refresh').value = page.refresh_sec || 5;
+  documentRef.getElementById('p-command-animation').checked = page.enable_command_animation !== false;
   documentRef.getElementById('p-uptime').checked = Boolean(page.show_uptime);
   documentRef.getElementById('p-samples').checked = Boolean(page.show_samples);
   documentRef.getElementById('p-latency').checked = Boolean(page.show_latency);
@@ -19,6 +20,7 @@ export function readPageForm(documentRef) {
     public_url: documentRef.getElementById('p-public-url').value.trim(),
     history_len: Number.parseInt(documentRef.getElementById('p-history').value, 10) || 60,
     refresh_sec: Number.parseInt(documentRef.getElementById('p-refresh').value, 10) || 5,
+    enable_command_animation: documentRef.getElementById('p-command-animation').checked,
     show_uptime: documentRef.getElementById('p-uptime').checked,
     show_samples: documentRef.getElementById('p-samples').checked,
     show_latency: documentRef.getElementById('p-latency').checked,

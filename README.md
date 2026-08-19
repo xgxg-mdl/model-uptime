@@ -131,6 +131,7 @@ page:                    # 公开页面显示配置
   public_url: "https://status.example.com/" # 留空则通知不显示链接
   history_len: 60        # 每个服务显示的完整时间桶数量
   refresh_sec: 5         # 状态页轮询间隔
+  enable_command_animation: true # 两页首次加载的命令输入动画
   show_uptime: true      # ↓ 统计维度开关
   show_samples: true
   show_latency: true

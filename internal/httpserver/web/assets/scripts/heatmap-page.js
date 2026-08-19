@@ -15,6 +15,11 @@ export function rangeLabel(value) {
   return RANGE_LABELS[normalizeRange(value)];
 }
 
+export function uptimeStatusClass(value) {
+  const uptime = Number(value) || 0;
+  return uptime >= 99 ? 'ok' : uptime >= 95 ? 'warn' : 'bad';
+}
+
 function pad(value) {
   return String(value).padStart(2, '0');
 }
@@ -146,7 +151,13 @@ function isDescendant(root, node) {
   return false;
 }
 
-export function createHeatmapRenderer({ document: documentRef, window: windowRef, scheduleFrame, cancelFrame } = {}) {
+export function createHeatmapRenderer({
+  document: documentRef,
+  window: windowRef,
+  scheduleFrame,
+  cancelFrame,
+  deferUntilReveal = false,
+} = {}) {
   if (!documentRef) throw new Error('document is required');
   const output = documentRef.getElementById('heatmap-out');
   const tip = documentRef.getElementById('tip');
@@ -167,6 +178,8 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
       ? handle => windowRef.cancelAnimationFrame(handle)
       : () => {});
   let pendingFrame = null;
+  let deferredFrame = null;
+  let renderingDeferred = Boolean(deferUntilReveal);
   let renderVersion = 0;
   let renderedLayoutKey = '';
   let renderedServiceKey = '';
@@ -179,6 +192,23 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
   function cancelPendingRender() {
     if (pendingFrame !== null) cancel(pendingFrame);
     pendingFrame = null;
+    deferredFrame = null;
+  }
+
+  function scheduleNextFrame(callback) {
+    if (renderingDeferred) {
+      deferredFrame = callback;
+      return;
+    }
+    pendingFrame = schedule(callback);
+  }
+
+  function resume() {
+    renderingDeferred = false;
+    if (!deferredFrame) return;
+    const callback = deferredFrame;
+    deferredFrame = null;
+    pendingFrame = schedule(callback);
   }
 
   function hideTooltip() {
@@ -365,9 +395,6 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
     appendText(documentRef, heading, ' ');
     heading.append(createElement(documentRef, 'span', 'cmd bold heatmap-model-name', service.model));
     heading.append(
-      createElement(documentRef, 'span', 'heatmap-provider', service.provider ? ` · ${service.provider}` : ''),
-    );
-    heading.append(
       createElement(
         documentRef,
         'span',
@@ -377,12 +404,13 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
     );
 
     const summary = createElement(documentRef, 'div', 'svc-meta service-indent heatmap-summary');
+    const uptimeClass = service.samples ? uptimeStatusClass(service.uptime_pct) : 'dim';
     appendMetric(
       documentRef,
       summary,
       'uptime',
       service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—',
-      'heatmap-uptime-value',
+      `heatmap-uptime-value ${uptimeClass}`,
     );
     appendMetric(
       documentRef,
@@ -444,13 +472,12 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
   function updatePanel(panel, service, data) {
     panel.setAttribute('data-service-id', service.id);
     panel.querySelector('.heatmap-model-name').textContent = service.model;
-    panel.querySelector('.heatmap-provider').textContent = service.provider ? ` · ${service.provider}` : '';
     const current = panel.querySelector('.heatmap-current');
     current.className = `heatmap-current ${service.status}`;
     current.textContent = ` · ● ${currentStatusLabel(service.status)}`;
-    panel.querySelector('.heatmap-uptime-value').textContent = service.samples
-      ? `${Number(service.uptime_pct || 0).toFixed(2)}%`
-      : '—';
+    const uptimeValue = panel.querySelector('.heatmap-uptime-value');
+    uptimeValue.textContent = service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—';
+    uptimeValue.className = `heatmap-uptime-value ${service.samples ? uptimeStatusClass(service.uptime_pct) : 'dim'}`;
     panel.querySelector('.heatmap-p95-value').textContent = service.latency_samples
       ? formatLatency(service.p95_latency_ms)
       : '—';
@@ -549,13 +576,13 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
       appendPanelRows(panelState, services[serviceIndex], rowIndex, endRow);
       rowIndex = endRow;
       if (rowIndex < panelState.layout.rows.length) {
-        pendingFrame = schedule(appendNextPanel);
+        scheduleNextFrame(appendNextPanel);
         return;
       }
       restoreFocusedCell(panelState.panel, focusedCell);
       panelState = null;
       serviceIndex++;
-      if (serviceIndex < services.length) pendingFrame = schedule(appendNextPanel);
+      if (serviceIndex < services.length) scheduleNextFrame(appendNextPanel);
       else renderedComplete = true;
     };
     appendNextPanel();
@@ -571,7 +598,7 @@ export function createHeatmapRenderer({ document: documentRef, window: windowRef
     output.replaceChildren(createElement(documentRef, 'div', 'heatmap-error', '● heatmap unavailable'));
   }
 
-  return { render, renderError, hideTooltip };
+  return { render, renderError, hideTooltip, resume };
 }
 
 export function createHeatmapPoller({
@@ -663,14 +690,18 @@ export function startHeatmapPage({
   const renderer = createHeatmapRenderer({
     document: documentRef,
     window: windowRef,
+    deferUntilReveal: true,
   });
+  let commandAnimationEnabled = true;
   const intro = createTerminalIntro({
     root: documentRef.getElementById('terminal'),
     schedule,
-    disabled: terminalMotionDisabled({
-      document: documentRef,
-      window: windowRef,
-    }),
+    disabled: () =>
+      !commandAnimationEnabled ||
+      terminalMotionDisabled({
+        document: documentRef,
+        window: windowRef,
+      }),
     stages: [
       {
         command: heatmapCommand,
@@ -680,6 +711,7 @@ export function startHeatmapPage({
       {
         command: documentRef.getElementById('command-heatmap-monitor'),
         reveal: [documentRef.getElementById('heatmap-out')],
+        onReveal: renderer.resume,
       },
     ],
   });
@@ -693,12 +725,15 @@ export function startHeatmapPage({
       return response.json();
     },
     render(data) {
+      commandAnimationEnabled = data.page?.enable_command_animation !== false;
       renderer.render(data);
       intro.setDataReady();
+      intro.start();
     },
     renderError(error) {
       renderer.renderError(error);
       intro.setDataReady();
+      intro.start();
     },
   });
   for (const button of documentRef.querySelectorAll('[data-range]')) {
@@ -712,7 +747,6 @@ export function startHeatmapPage({
   documentRef.addEventListener('visibilitychange', () => {
     void poller.setVisible(documentRef.visibilityState !== 'hidden');
   });
-  intro.start();
   void poller.start();
   return poller;
 }

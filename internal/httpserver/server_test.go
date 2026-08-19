@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -420,10 +421,10 @@ func TestPageUpdateReturnsNormalizedServerState(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &page); err != nil {
 		t.Fatal(err)
 	}
-	if page.Title == "" || page.RefreshSec != 5 || !page.ShowUptime || !page.ShowSamples || !page.ShowLatency || !page.ShowAvgLoad {
+	if page.Title == "" || page.RefreshSec != 5 || page.EnableCommandAnimation == nil || !*page.EnableCommandAnimation || !page.ShowUptime || !page.ShowSamples || !page.ShowLatency || !page.ShowAvgLoad {
 		t.Fatalf("响应不是归一化页面配置: %+v", page)
 	}
-	if server.repo.saved.Page != page || server.monitor.page != page {
+	if !reflect.DeepEqual(server.repo.saved.Page, page) || !reflect.DeepEqual(server.monitor.page, page) {
 		t.Fatalf("磁盘、监控器与响应状态不一致: saved=%+v monitor=%+v response=%+v", server.repo.saved.Page, server.monitor.page, page)
 	}
 }

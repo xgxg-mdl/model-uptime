@@ -33,6 +33,7 @@ func (c *Config) Clone() Config {
 		return Config{}
 	}
 	out := *c
+	out.Page.EnableCommandAnimation = cloneBool(c.Page.EnableCommandAnimation)
 	out.Services = append([]model.Service(nil), c.Services...)
 	for i := range out.Services {
 		out.Services[i].Enabled = cloneBool(c.Services[i].Enabled)

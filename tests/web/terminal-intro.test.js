@@ -188,3 +188,24 @@ test('reduced-motion 和后台页面直接显示最终状态', () => {
   assert.equal(intro.complete, true);
   assert.equal(document.getElementById('terminal').classList.contains('terminal-intro'), false);
 });
+
+test('配置关闭动画时直接完成并触发各阶段揭示回调', () => {
+  const document = introElements();
+  const revealed = [];
+  const intro = createTerminalIntro({
+    root: document.getElementById('terminal'),
+    stages: [
+      { command: document.getElementById('command-one'), onReveal: () => revealed.push('one') },
+      { command: document.getElementById('command-two'), onReveal: () => revealed.push('two') },
+    ],
+    disabled: () => true,
+    schedule() {
+      throw new Error('关闭动效后不应创建定时任务');
+    },
+  });
+
+  intro.start();
+
+  assert.equal(intro.complete, true);
+  assert.deepEqual(revealed, ['one', 'two']);
+});

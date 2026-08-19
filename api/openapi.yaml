@@ -590,6 +590,7 @@ components:
         - public_url
         - history_len
         - refresh_sec
+        - enable_command_animation
         - show_uptime
         - show_samples
         - show_latency
@@ -611,6 +612,8 @@ components:
           type: integer
           minimum: 1
           maximum: 60
+        enable_command_animation:
+          type: boolean
         show_uptime:
           type: boolean
         show_samples:
@@ -640,6 +643,8 @@ components:
           type: integer
           minimum: 1
           maximum: 60
+        enable_command_animation:
+          type: boolean
         show_uptime:
           type: boolean
         show_samples:

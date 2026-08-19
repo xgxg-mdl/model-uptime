@@ -480,13 +480,16 @@ export function startStatusPage({
     schedule,
     cancel,
   });
+  let commandAnimationEnabled = true;
   const intro = createTerminalIntro({
     root: documentRef.getElementById('terminal'),
     schedule,
-    disabled: terminalMotionDisabled({
-      document: documentRef,
-      window: windowRef,
-    }),
+    disabled: () =>
+      !commandAnimationEnabled ||
+      terminalMotionDisabled({
+        document: documentRef,
+        window: windowRef,
+      }),
     stages: [
       {
         command: documentRef.getElementById('command-uptime'),
@@ -506,17 +509,19 @@ export function startStatusPage({
       return response.json();
     },
     render(data) {
+      commandAnimationEnabled = data.page?.enable_command_animation !== false;
       renderer.render(data);
       intro.setDataReady();
+      intro.start();
     },
     renderError(error) {
       renderer.renderError(error);
       intro.setDataReady();
+      intro.start();
     },
     schedule,
     cancel,
   });
-  intro.start();
   void poller.start();
   return poller;
 }

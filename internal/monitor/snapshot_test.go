@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -55,6 +56,32 @@ func TestSnapshotIncludesStableServiceID(t *testing.T) {
 	}
 	if snapshot.Services[0].WarningSec != 12 {
 		t.Fatalf("状态快照 warning_sec = %d，期望 12", snapshot.Services[0].WarningSec)
+	}
+}
+
+func TestSnapshotSortsServicesByOrderModelAndID(t *testing.T) {
+	s := New(nil, nil)
+	services := []model.Service{
+		testSvc("unordered", true),
+		testSvc("z-id", true),
+		testSvc("a-id", true),
+		testSvc("first", true),
+	}
+	services[0].SortOrder = 0
+	services[1].SortOrder, services[1].Name = 20, "Same"
+	services[2].SortOrder, services[2].Name = 20, "Same"
+	services[3].SortOrder = 10
+	if err := s.Reload(services, defaultPage()); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := s.Snapshot()
+	got := make([]string, len(snapshot.Services))
+	for index, service := range snapshot.Services {
+		got[index] = service.ID
+	}
+	want := []string{"first", "a-id", "z-id", "unordered"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("状态页模型顺序 = %v，期望 %v", got, want)
 	}
 }
 

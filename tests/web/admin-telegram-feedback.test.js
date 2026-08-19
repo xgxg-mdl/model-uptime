@@ -126,6 +126,7 @@ test('页面公开地址参与配置读取和服务端回填', () => {
     'p-public-url',
     'p-history',
     'p-refresh',
+    'p-command-animation',
     'p-uptime',
     'p-samples',
     'p-latency',
@@ -139,11 +140,14 @@ test('页面公开地址参与配置读取和服务端回填', () => {
     public_url: 'https://status.example.com/',
     history_len: 30,
     refresh_sec: 9,
+    enable_command_animation: false,
     show_uptime: true,
     show_samples: false,
     show_latency: true,
     show_avg_load: false,
   });
 
-  assert.equal(readPageForm(document).public_url, 'https://status.example.com/');
+  const page = readPageForm(document);
+  assert.equal(page.public_url, 'https://status.example.com/');
+  assert.equal(page.enable_command_animation, false);
 });

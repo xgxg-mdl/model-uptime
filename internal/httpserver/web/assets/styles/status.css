@@ -171,11 +171,15 @@ body {
 }
 
 .terminal-intro .terminal-reveal {
+  position: absolute;
   visibility: hidden;
   opacity: 0;
+  pointer-events: none;
 }
 .terminal-intro .terminal-reveal.terminal-reveal-visible {
+  position: static;
   visibility: visible;
+  pointer-events: auto;
   animation: terminal-output-in var(--motion-base) var(--motion-ease-out) forwards;
 }
 

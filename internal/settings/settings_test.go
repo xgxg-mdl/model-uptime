@@ -3,6 +3,7 @@ package settings_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func TestLoadOrCreatePublishesValidPrivateDefault(t *testing.T) {
 	}
 	expectedPage := model.PageConfig{}
 	expectedPage.Normalize()
-	if config.Page != expectedPage {
+	if !reflect.DeepEqual(config.Page, expectedPage) {
 		t.Fatalf("配置模板与 PageConfig.Normalize 的完整默认值不一致:\n模板: %+v\n规范: %+v", config.Page, expectedPage)
 	}
 	info, err := os.Stat(path)
@@ -57,6 +58,31 @@ func TestLoadOrCreatePublishesValidPrivateDefault(t *testing.T) {
 	}
 	if created || loaded.Page.Title != "Existing" {
 		t.Fatalf("已有配置被覆盖: created=%v title=%q", created, loaded.Page.Title)
+	}
+}
+
+func TestCommandAnimationDefaultsOnAndPreservesExplicitOff(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		pageYAML string
+		enabled  bool
+	}{
+		{name: "missing defaults on", pageYAML: "page: {}\n", enabled: true},
+		{name: "explicit off", pageYAML: "page:\n  enable_command_animation: false\n", enabled: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(test.pageYAML), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			config, err := settings.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.Page.EnableCommandAnimation == nil || *config.Page.EnableCommandAnimation != test.enabled {
+				t.Fatalf("enable_command_animation = %v，期望 %t", config.Page.EnableCommandAnimation, test.enabled)
+			}
+		})
 	}
 }
 

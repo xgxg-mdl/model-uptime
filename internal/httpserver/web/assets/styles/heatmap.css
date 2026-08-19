@@ -81,7 +81,6 @@
 
 .heatmap-panel .service-heading { margin-top: 0; }
 .heatmap-model-name { overflow-wrap: anywhere; }
-.heatmap-provider { color: var(--fg-dim); font-size: 11px; }
 .heatmap-current { font-size: 11px; }
 .heatmap-current.healthy { color: var(--ok); }
 .heatmap-current.warning { color: var(--warn); }
@@ -95,6 +94,10 @@
 }
 
 .heatmap-summary b { color: var(--fg); font-weight: 500; }
+.heatmap-summary b.ok { color: var(--ok); }
+.heatmap-summary b.warn { color: var(--warn); }
+.heatmap-summary b.bad { color: var(--bad); }
+.heatmap-summary b.dim { color: var(--fg-dim); }
 
 .heat-grid {
   width: 100%;

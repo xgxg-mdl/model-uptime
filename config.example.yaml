@@ -17,6 +17,8 @@ page:
   history_len: 60
   # 状态页前端轮询间隔（秒）
   refresh_sec: 5
+  # 两个公开页面首次加载时是否播放终端命令输入动画
+  enable_command_animation: true
   # 统计维度开关：探针页显示哪些指标
   show_uptime: true    # 每个服务的 uptime%
   show_samples: true   # samples 样本计数

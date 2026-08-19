@@ -130,6 +130,7 @@ export function createTerminalIntro({
     stage.command.classList.remove('terminal-command-waiting');
     stage.command.classList.add('terminal-command-complete');
     for (const element of stage.reveal || []) element.classList.add('terminal-reveal-visible');
+    stage.onReveal?.();
 
     const nextDelay = stageIndex + 1 < stages.length ? revealDuration + (stage.pause || 0) : revealDuration;
     schedule(() => startStage(stageIndex + 1), nextDelay);
@@ -138,7 +139,9 @@ export function createTerminalIntro({
   function start() {
     if (started) return;
     started = true;
-    if (disabled || stages.length === 0) {
+    const motionDisabled = typeof disabled === 'function' ? disabled() : disabled;
+    if (motionDisabled || stages.length === 0) {
+      for (const stage of stages) stage.onReveal?.();
       finish();
       return;
     }
