@@ -24,6 +24,7 @@ function introElements() {
 test('命令依次输入并等待首批数据后显示输出', () => {
   const document = introElements();
   const scheduled = [];
+  const revealCompleted = [];
   const intro = createTerminalIntro({
     root: document.getElementById('terminal'),
     schedule(callback, delay) {
@@ -36,11 +37,13 @@ test('命令依次输入并等待首批数据后显示输出', () => {
         duration: 100,
         pause: 20,
         reveal: [document.getElementById('output-one')],
+        onRevealComplete: () => revealCompleted.push('one'),
       },
       {
         command: document.getElementById('command-two'),
         duration: 200,
         reveal: [document.getElementById('args-two'), document.getElementById('output-two')],
+        onRevealComplete: () => revealCompleted.push('two'),
       },
     ],
     initialDelay: 10,
@@ -64,9 +67,11 @@ test('命令依次输入并等待首批数据后显示输出', () => {
 
   intro.setDataReady();
   assert.ok(document.getElementById('output-one').classList.contains('terminal-reveal-visible'));
+  assert.deepEqual(revealCompleted, []);
   assert.equal(scheduled[0].delay, 50);
 
   scheduled.shift().callback();
+  assert.deepEqual(revealCompleted, ['one']);
   assert.ok(document.getElementById('command-two').classList.contains('terminal-command-active'));
   assert.equal(scheduled[0].delay, 200);
 
@@ -76,6 +81,7 @@ test('命令依次输入并等待首批数据后显示输出', () => {
   assert.equal(scheduled[0].delay, 30);
 
   scheduled.shift().callback();
+  assert.deepEqual(revealCompleted, ['one', 'two']);
   assert.equal(intro.complete, true);
   assert.ok(document.getElementById('terminal').classList.contains('terminal-intro-complete'));
   assert.equal(document.getElementById('terminal').classList.contains('terminal-intro'), false);
@@ -192,11 +198,20 @@ test('reduced-motion 和后台页面直接显示最终状态', () => {
 test('配置关闭动画时直接完成并触发各阶段揭示回调', () => {
   const document = introElements();
   const revealed = [];
+  const revealCompleted = [];
   const intro = createTerminalIntro({
     root: document.getElementById('terminal'),
     stages: [
-      { command: document.getElementById('command-one'), onReveal: () => revealed.push('one') },
-      { command: document.getElementById('command-two'), onReveal: () => revealed.push('two') },
+      {
+        command: document.getElementById('command-one'),
+        onReveal: () => revealed.push('one'),
+        onRevealComplete: () => revealCompleted.push('one'),
+      },
+      {
+        command: document.getElementById('command-two'),
+        onReveal: () => revealed.push('two'),
+        onRevealComplete: () => revealCompleted.push('two'),
+      },
     ],
     disabled: () => true,
     schedule() {
@@ -208,4 +223,5 @@ test('配置关闭动画时直接完成并触发各阶段揭示回调', () => {
 
   assert.equal(intro.complete, true);
   assert.deepEqual(revealed, ['one', 'two']);
+  assert.deepEqual(revealCompleted, ['one', 'two']);
 });

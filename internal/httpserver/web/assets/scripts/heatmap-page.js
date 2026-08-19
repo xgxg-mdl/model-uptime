@@ -711,7 +711,8 @@ export function startHeatmapPage({
       {
         command: documentRef.getElementById('command-heatmap-monitor'),
         reveal: [documentRef.getElementById('heatmap-out')],
-        onReveal: renderer.resume,
+        // 输出容器完成合成后再继续扩充内容，避免 1d 多面板改变尺寸时整块闪烁。
+        onRevealComplete: renderer.resume,
       },
     ],
   });

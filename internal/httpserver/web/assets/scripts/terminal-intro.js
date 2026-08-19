@@ -133,7 +133,10 @@ export function createTerminalIntro({
     stage.onReveal?.();
 
     const nextDelay = stageIndex + 1 < stages.length ? revealDuration + (stage.pause || 0) : revealDuration;
-    schedule(() => startStage(stageIndex + 1), nextDelay);
+    schedule(() => {
+      stage.onRevealComplete?.();
+      startStage(stageIndex + 1);
+    }, nextDelay);
   }
 
   function start() {
@@ -141,7 +144,10 @@ export function createTerminalIntro({
     started = true;
     const motionDisabled = typeof disabled === 'function' ? disabled() : disabled;
     if (motionDisabled || stages.length === 0) {
-      for (const stage of stages) stage.onReveal?.();
+      for (const stage of stages) {
+        stage.onReveal?.();
+        stage.onRevealComplete?.();
+      }
       finish();
       return;
     }
