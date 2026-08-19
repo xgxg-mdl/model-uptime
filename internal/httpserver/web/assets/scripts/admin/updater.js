@@ -47,6 +47,7 @@ export function createUpdateController({
   toast,
   storage,
   confirm: confirmAction = globalThis.confirm,
+  reload = () => globalThis.location?.reload(),
   schedule = globalThis.setTimeout,
   cancel = globalThis.clearTimeout,
   now = () => Date.now(),
@@ -65,6 +66,13 @@ export function createUpdateController({
     renderUpdateStatus(documentRef, data);
   }
 
+  function completeUpdate(target) {
+    clearPollTimer();
+    storage.removeItem(UPDATE_TARGET_KEY);
+    toast(`Updated to ${target}`);
+    reload();
+  }
+
   function poll(target) {
     clearPollTimer();
     const deadline = now() + 11 * 60 * 1000;
@@ -73,8 +81,7 @@ export function createUpdateController({
         const data = await api('/api/admin/update');
         render(data);
         if (data.current_version === target) {
-          storage.removeItem(UPDATE_TARGET_KEY);
-          toast(`Updated to ${target}`);
+          completeUpdate(target);
           return;
         }
         if (data.last_update_error) {
@@ -105,8 +112,7 @@ export function createUpdateController({
       render(data);
       const target = storage.getItem(UPDATE_TARGET_KEY);
       if (target && data.current_version === target) {
-        storage.removeItem(UPDATE_TARGET_KEY);
-        toast(`Updated to ${target}`);
+        completeUpdate(target);
       } else if (target) {
         poll(target);
       }

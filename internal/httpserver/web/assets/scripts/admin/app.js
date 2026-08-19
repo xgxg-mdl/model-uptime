@@ -60,6 +60,7 @@ export function startAdminApp({
     toast,
     storage,
     confirm: confirmAction,
+    reload: () => locationRef.reload(),
     schedule,
     cancel,
     now,

@@ -56,6 +56,7 @@ test('更新控制器检查、触发并轮询到目标版本', async () => {
   const scheduled = [];
   const calls = [];
   const toasts = [];
+  let reloads = 0;
   const values = new Map();
   let currentVersion = 'v1.0.0';
   const storage = {
@@ -83,6 +84,7 @@ test('更新控制器检查、触发并轮询到目标版本', async () => {
     toast: message => toasts.push(message),
     storage,
     confirm: () => true,
+    reload: () => reloads++,
     schedule(callback, delay) {
       scheduled.push({ callback, delay });
       return scheduled.length;
@@ -103,6 +105,35 @@ test('更新控制器检查、触发并轮询到目标版本', async () => {
   await scheduled.at(-1).callback();
   assert.equal(values.has(UPDATE_TARGET_KEY), false);
   assert.equal(toasts.at(-1), 'Updated to v1.1.0');
+  assert.equal(reloads, 1);
   assert.equal(calls.at(-1)[0], '/api/admin/update');
   controller.stop();
+});
+
+test('容器重启后重新进入管理页时确认目标版本并刷新', async () => {
+  const document = createElementDocument(updateIDs);
+  const values = new Map([[UPDATE_TARGET_KEY, 'v1.1.0']]);
+  let reloads = 0;
+  const controller = createUpdateController({
+    document,
+    api: async () => ({
+      current_version: 'v1.1.0',
+      latest_version: 'v1.1.0',
+      enabled: true,
+      update_available: false,
+      updating: false,
+    }),
+    toast() {},
+    storage: {
+      getItem: key => values.get(key) || null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: key => values.delete(key),
+    },
+    reload: () => reloads++,
+  });
+
+  await controller.load();
+
+  assert.equal(values.has(UPDATE_TARGET_KEY), false);
+  assert.equal(reloads, 1);
 });
