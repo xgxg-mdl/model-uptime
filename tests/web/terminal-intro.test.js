@@ -128,19 +128,22 @@ test('动态模型属于命令文本并决定完整输入时长', () => {
 
   assert.deepEqual(
     commandTypingMetrics(fullCommand),
-    { characters: 83, duration: 2656 },
+    { characters: 83, duration: 1660 },
   );
   intro.setDataReady();
   intro.start();
   scheduled.shift().callback();
-  assert.equal(scheduled[0].delay, 2656);
+  scheduled.shift().callback();
+  assert.equal(scheduled[0].delay, 20);
   assert.equal(command.style['--terminal-command-chars'], '83');
-  assert.equal(command.style['--terminal-command-duration'], '2656ms');
+  assert.equal(command.style['--terminal-command-duration'], '1660ms');
+  assert.equal(commandText.textContent, 'm');
   command.scrollWidth = 900;
   frames.shift()();
   assert.equal(command.scrollLeft, 900);
   assert.equal(frames.length, 1);
-  scheduled.shift().callback();
+  for (let index = 1; index < 83; index++) scheduled.shift().callback();
+  assert.equal(commandText.textContent, fullCommand);
   frames.shift()();
   assert.equal(frames.length, 0, '命令输入完成后应停止滚动跟随');
 });

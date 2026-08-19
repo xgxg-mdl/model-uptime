@@ -134,17 +134,12 @@ body {
   --terminal-command-chars: 1;
   --terminal-command-duration: 32ms;
   min-height: 1lh;
-  white-space: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  white-space: normal;
 }
 
-.terminal-command::-webkit-scrollbar { display: none; }
-
 .terminal-command-text {
-  display: inline-block;
-  white-space: nowrap;
+  display: inline;
+  white-space: normal;
   vertical-align: bottom;
 }
 
@@ -157,17 +152,8 @@ body {
   vertical-align: text-bottom;
 }
 
-.terminal-intro .terminal-command-text {
-  width: 0;
-  overflow: hidden;
-}
-
 .terminal-intro .terminal-command:not(.terminal-command-active):not(.terminal-command-waiting):not(.terminal-command-complete) {
   visibility: hidden;
-}
-
-.terminal-intro .terminal-command-active .terminal-command-text {
-  animation: terminal-type var(--terminal-command-duration) steps(var(--terminal-command-chars), end) forwards;
 }
 
 .terminal-intro .terminal-command-active .terminal-typing-cursor,
@@ -194,11 +180,6 @@ body {
 }
 
 .terminal-intro .terminal-idle { visibility: hidden; }
-
-@keyframes terminal-type {
-  from { width: 0; }
-  to { width: calc(var(--terminal-command-chars) * 1ch); }
-}
 
 @keyframes terminal-output-in {
   from { opacity: 0; transform: translateY(var(--motion-distance)); }
@@ -404,7 +385,6 @@ body {
   .term,
   .cursor,
   .status-change,
-  .terminal-command-text,
   .terminal-typing-cursor,
   .terminal-reveal { animation: none; }
   .bar,
@@ -414,7 +394,6 @@ body {
   .bar:focus-visible { transform: none; }
   .cursor { opacity: 1; }
   .terminal-intro .terminal-command { visibility: visible; }
-  .terminal-intro .terminal-command-text { width: auto; overflow: visible; }
   .terminal-intro .terminal-reveal,
   .terminal-intro .terminal-idle { visibility: visible; opacity: 1; transform: none; }
   .terminal-intro .terminal-typing-cursor { display: none; }

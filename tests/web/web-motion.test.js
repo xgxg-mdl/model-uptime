@@ -63,7 +63,7 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   for (const marker of ['.status-change', '@keyframes status-change']) {
     assert.ok(statusCSS.includes(marker), `状态页缺少状态变化动效: ${marker}`);
   }
-  for (const marker of ['.terminal-command-active', '@keyframes terminal-type', '@keyframes terminal-output-in']) {
+  for (const marker of ['.terminal-command-active', '@keyframes terminal-output-in']) {
     assert.ok(statusCSS.includes(marker), `公开页面缺少终端输入动效: ${marker}`);
   }
   assert.match(heatmapCSS, /\.range-change\s*{[^}]*animation:/);
@@ -75,7 +75,8 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.match(heatmapHTML, /id="command-heatmap-monitor"/);
   assert.match(heatmapHTML, /id="command-heatmap"/);
   assert.match(heatmapHTML, /id="command-heatmap-monitor"[^>]*>[\s\S]*?class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/);
-  assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*nowrap;[^}]*overflow-x:\s*auto;/s);
+  assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*normal;/s);
+  assert.match(statusCSS, /\.terminal-command-text\s*{[^}]*display:\s*inline;[^}]*white-space:\s*normal;/s);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?body\s*{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-width:\s*thin;/);
   assert.doesNotMatch(statusCSS, /scrollbar-gutter:/);

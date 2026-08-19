@@ -1,9 +1,21 @@
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
-const CHARACTER_DURATION_MS = 32;
+const CHARACTER_DURATION_MS = 20;
 
 export function commandTypingMetrics(text) {
   const characters = Array.from(String(text)).length;
   return { characters, duration: characters * CHARACTER_DURATION_MS };
+}
+
+function commandTextNodes(root) {
+  const nodes = [];
+  const visit = node => {
+    for (const child of node.childNodes || []) {
+      if (child.nodeType === 3) nodes.push(child);
+      else visit(child);
+    }
+  };
+  visit(root);
+  return nodes;
 }
 
 export function terminalMotionDisabled({ document: documentRef, window: windowRef } = {}) {
@@ -41,7 +53,25 @@ export function createTerminalIntro({
     const metrics = commandTypingMetrics(commandText?.textContent || '');
     setCommandProperty(command, '--terminal-command-chars', String(metrics.characters));
     setCommandProperty(command, '--terminal-command-duration', `${metrics.duration}ms`);
-    return metrics.duration;
+    const textNodes = commandTextNodes(commandText || command);
+    const segments = textNodes.map(node => Array.from(node.textContent));
+    for (const node of textNodes) node.textContent = '';
+
+    let nodeIndex = 0;
+    let characterIndex = 0;
+    return {
+      ...metrics,
+      typeNext() {
+        while (nodeIndex < segments.length && characterIndex >= segments[nodeIndex].length) {
+          nodeIndex += 1;
+          characterIndex = 0;
+        }
+        if (nodeIndex >= segments.length) return true;
+        textNodes[nodeIndex].textContent += segments[nodeIndex][characterIndex];
+        characterIndex += 1;
+        return nodeIndex === segments.length - 1 && characterIndex === segments[nodeIndex].length;
+      },
+    };
   }
 
   function followTyping(command) {
@@ -69,16 +99,28 @@ export function createTerminalIntro({
 
     stageIndex = index;
     const stage = stages[index];
-    const duration = stage.duration ?? prepareCommand(stage.command);
+    const typing = stage.duration === undefined ? prepareCommand(stage.command) : null;
     stage.command.classList.add('terminal-command-active');
     followTyping(stage.command);
-    schedule(() => {
+    const finishTyping = () => {
       stage.command.classList.remove('terminal-command-active');
       stage.command.classList.add('terminal-command-waiting');
       stage.command.scrollLeft = stage.command.scrollWidth;
       waitingForData = true;
       if (dataReady) revealStage();
-    }, duration);
+    };
+    if (!typing || typing.characters === 0) {
+      schedule(finishTyping, stage.duration ?? 0);
+      return;
+    }
+    const typeNext = () => {
+      if (typing.typeNext()) {
+        finishTyping();
+        return;
+      }
+      schedule(typeNext, CHARACTER_DURATION_MS);
+    };
+    schedule(typeNext, CHARACTER_DURATION_MS);
   }
 
   function revealStage() {
