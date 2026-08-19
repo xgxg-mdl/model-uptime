@@ -173,7 +173,7 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.equal(document.getElementById('probe-comment').textContent, '# Monitoring production models');
   const commandModels = document.getElementById('cmd-models');
   assert.equal(commandModels.textContent, ' gpt-5');
-  assert.ok(commandModels.children[0].classList.contains('warn'));
+  assert.ok(commandModels.children[0].classList.contains('str'));
 
   cells[0].focus();
   const tip = document.getElementById('tip');

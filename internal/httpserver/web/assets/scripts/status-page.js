@@ -322,10 +322,7 @@ export function createStatusRenderer({
     } else {
       for (const service of services) {
         appendText(documentRef, commandModels, ' ');
-        const last = service.last;
-        const status = last ? resultStatus(last, service.warning_sec) : 'pending';
-        const statusClass = status === 'warning' || status === 'pending' ? 'warn' : status;
-        appendSpan(documentRef, commandModels, service.model, statusClass);
+        appendSpan(documentRef, commandModels, service.model, 'str');
       }
     }
 

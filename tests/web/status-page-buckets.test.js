@@ -151,6 +151,22 @@ test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
   assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
 });
 
+test('监控命令的模型统一使用参数色，不映射服务可用性', () => {
+  const healthy = service({ id: 'healthy', model: 'gpt-5.6' });
+  const failing = service({
+    id: 'failing',
+    model: 'gpt-5.4-mini',
+    history: [{ ts: 355, started_at: 350, ok: false, latency_ms: 12 }],
+    last: { ts: 355, started_at: 350, ok: false, latency_ms: 12 },
+  });
+  const { document } = render({ ...statusData(healthy), services: [healthy, failing] });
+  const commandModels = document.getElementById('cmd-models');
+
+  assert.equal(commandModels.textContent, ' gpt-5.6 gpt-5.4-mini');
+  assert.ok(commandModels.children.every(model => model.classList.contains('str')));
+  assert.equal(commandModels.children.some(model => model.classList.contains('ok') || model.classList.contains('bad')), false);
+});
+
 test('慢响应在服务状态、历史条、耗时和总览中显示 warning', () => {
   const slow = service({
     history: [{ ts: 355, started_at: 350, ok: true, latency_ms: 30_001 }],

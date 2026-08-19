@@ -389,13 +389,7 @@ export function createHeatmapRenderer({
     }
     for (const service of services) {
       appendText(documentRef, commandModels, ' ');
-      const statusClass = {
-        healthy: 'ok',
-        warning: 'warn',
-        failing: 'bad',
-        pending: 'warn',
-      }[service.status] || 'dim';
-      commandModels.append(createElement(documentRef, 'span', statusClass, service.model));
+      commandModels.append(createElement(documentRef, 'span', 'str', service.model));
     }
   }
 
