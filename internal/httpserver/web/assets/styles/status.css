@@ -99,21 +99,6 @@ body {
   position: relative;
 }
 
-.body::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.012) 0,
-    rgba(255, 255, 255, 0.012) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  z-index: 2;
-}
-
 .line { word-break: break-word; }
 .block + .block { margin-top: 18px; }
 .prompt { color: var(--prompt); font-weight: 700; }

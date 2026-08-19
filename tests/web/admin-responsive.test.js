@@ -59,11 +59,11 @@ test('管理页使用外置资源并保留响应式结构', () => {
     '.metric-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));',
     '.admin-window {',
     '.light.close { background: var(--btn-close); }',
-    '.admin-surface::before {',
   ]) {
     assert.ok(adminCSS.includes(marker), `missing responsive admin style: ${marker}`);
   }
   assert.doesNotMatch(adminCSS, /@media \(max-width: 960px\)|content:\s*attr\(data-label\)/);
+  assert.doesNotMatch(adminCSS, /\.admin-surface::before|repeating-linear-gradient/);
 });
 
 test('登录密码自动填充保持暗色主题', () => {

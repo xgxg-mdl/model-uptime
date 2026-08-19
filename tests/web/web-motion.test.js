@@ -103,6 +103,12 @@ test('管理页背景固定且不重复，避免内容高度变化时出现渐�
   assert.match(adminCSS, /background-size:\s*100%\s+100%;/);
 });
 
+test('三页终端窗口不叠加 CRT 扫描线', () => {
+  assert.doesNotMatch(statusCSS, /\.body::before|repeating-linear-gradient/);
+  assert.doesNotMatch(heatmapCSS, /\.body::before|repeating-linear-gradient/);
+  assert.doesNotMatch(adminCSS, /\.admin-surface::before|repeating-linear-gradient/);
+});
+
 test('首次渲染不播放变化动效，整体状态实际变化时才播放', () => {
   const document = createStatusDocument();
   const renderer = createStatusRenderer({

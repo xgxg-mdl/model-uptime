@@ -124,7 +124,7 @@ test('热力图页面保留公开导航和响应式终端结构', () => {
   assert.doesNotMatch(css, /\.heatmap-panel\s*{[^}]*(?:border|background):/);
   assert.doesNotMatch(css, /\.heat-cell\.[^{]+{[^}]*opacity:/);
   assert.doesNotMatch(css, /\.heat-cell(?:\.[^{]+)?\s*{[^}]*box-shadow:/);
-  assert.match(css, /\.heatmap-term \.body::before\s*{\s*display:\s*none/);
+  assert.doesNotMatch(css, /\.body::before|repeating-linear-gradient/);
 });
 
 test('范围和北京时间格式采用稳定默认值', () => {

@@ -7,7 +7,6 @@
   max-width: 1180px;
 }
 
-.heatmap-term .body::before { display: none; }
 .heatmap-command { display: grid; gap: 8px; }
 
 .heatmap-toolbar {
