@@ -43,7 +43,10 @@ test('管理页使用外置资源并保留响应式结构', () => {
     'class="wrap admin-window"',
     'class="titlebar"',
     'class="lights" aria-hidden="true"',
-    'id="login-title">authentication required',
+    'class="auth-view page-reveal" id="login-view"',
+    'id="login-title">Welcome back',
+    'class="auth-input-row"',
+    'class="product-lockup"',
   ]) {
     assert.ok(html.includes(marker), `missing responsive service marker: ${marker}`);
   }
@@ -52,6 +55,7 @@ test('管理页使用外置资源并保留响应式结构', () => {
   for (const marker of [
     '@media (max-width: 959px)',
     '.service-table-wrap { display: none; }',
+    '.service-toolbar > #new-btn { grid-column: 3; justify-self: end; }',
     'grid-template-columns: 20px minmax(0, 1fr) auto',
     '.service-item-actions .icon-btn { width: 32px; height: 32px;',
     '@media (max-width: 559px)',
@@ -64,12 +68,41 @@ test('管理页使用外置资源并保留响应式结构', () => {
   }
   assert.doesNotMatch(adminCSS, /@media \(max-width: 960px\)|content:\s*attr\(data-label\)/);
   assert.doesNotMatch(adminCSS, /\.admin-surface::before|repeating-linear-gradient/);
+  assert.match(adminCSS, /\.btn\.primary:disabled\s*{[^}]*background:\s*#15151a;/s);
 });
 
 test('登录密码自动填充保持暗色主题', () => {
-  assert.match(adminCSS, /\.login-card input:-webkit-autofill/);
+  assert.match(adminCSS, /\.auth-card input:-webkit-autofill/);
   assert.match(adminCSS, /-webkit-text-fill-color:\s*var\(--fg\)/);
-  assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px #15151a inset/);
+  assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px #0d0d10 inset/);
+});
+
+test('认证页和管理页保持清晰的视觉层级', () => {
+  for (const marker of [
+    'grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.2fr)',
+    '.auth-identity {',
+    '.auth-card {',
+    '.product-mark {',
+    '#app-view > .panel > h2::before',
+  ]) {
+    assert.ok(adminCSS.includes(marker), `missing admin visual marker: ${marker}`);
+  }
+
+  const mobileOffset = adminCSS.indexOf('@media (max-width: 559px)');
+  const mobileCSS = adminCSS.slice(mobileOffset);
+  assert.match(mobileCSS, /\.auth-view \{ grid-template-columns: 1fr;/);
+  assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
+});
+
+test('toast 提供统一状态视觉和无障碍容器', () => {
+  assert.match(html, /id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true"/);
+  assert.match(html, /id="page-load-status" role="alert" aria-live="assertive" aria-atomic="true"/);
+  assert.match(html, /role="status" aria-live="polite" aria-atomic="true">\s*<div class="update-grid">/);
+  for (const marker of ['.toast.success', '.toast.warning', '.toast.error', '.toast::before']) {
+    assert.ok(adminCSS.includes(marker), `missing toast style: ${marker}`);
+  }
+  assert.match(adminCSS, /\.toast \{[^}]*visibility:\s*hidden;/s);
+  assert.match(adminCSS, /\.toast\.show \{[^}]*visibility:\s*visible;/s);
 });
 
 test('管理密码长度按 Unicode 字符而非编码单元计算', () => {

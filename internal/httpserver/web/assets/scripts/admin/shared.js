@@ -29,12 +29,23 @@ export function createToast({
   cancel = globalThis.clearTimeout,
 } = {}) {
   const element = documentRef.getElementById('toast');
+  const tones = new Set(['info', 'success', 'warning', 'error']);
   let timer = null;
-  return message => {
-    element.textContent = message;
-    element.classList.add('show');
+  return (message, tone = 'info') => {
+    const resolvedTone = tones.has(tone) ? tone : 'info';
+    element.setAttribute('aria-hidden', 'false');
+    element.textContent = String(message ?? 'Something went wrong');
+    element.classList.remove('info', 'success', 'warning', 'error');
+    element.classList.add(resolvedTone, 'show');
+    element.setAttribute('role', resolvedTone === 'error' ? 'alert' : 'status');
+    element.setAttribute('aria-live', resolvedTone === 'error' ? 'assertive' : 'polite');
     if (timer !== null) cancel(timer);
-    timer = schedule(() => element.classList.remove('show'), 2600);
+    const duration = resolvedTone === 'error' ? 4200 : resolvedTone === 'warning' ? 3400 : 2800;
+    timer = schedule(() => {
+      element.classList.remove('show');
+      element.setAttribute('aria-hidden', 'true');
+      timer = null;
+    }, duration);
   };
 }
 

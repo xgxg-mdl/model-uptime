@@ -77,7 +77,6 @@ test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async
     textContent: '',
   };
   const calls = [];
-  const toasts = [];
   let savedOptions;
 
   const success = await sendTelegramTest({
@@ -89,7 +88,6 @@ test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async
     api: async (...args) => {
       calls.push(args);
     },
-    toast: message => toasts.push(message),
   });
   assert.equal(success, true);
   assert.deepEqual(savedOptions, { quiet: true });
@@ -100,7 +98,6 @@ test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async
     assert.match(result.className, /\bok\b/);
     assert.doesNotMatch(result.className, /\bhidden\b/);
   }
-  assert.equal(toasts.at(-1), 'Test message sent for Operations');
 
   const failure = await sendTelegramTest({
     subscription: { id: 'ops', name: 'Operations' },
@@ -109,7 +106,6 @@ test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async
     api: async () => {
       throw new Error('Telegram API returned: chat not found');
     },
-    toast: message => toasts.push(message),
   });
   assert.equal(failure, false);
   assert.equal(rowResult.textContent, 'Telegram API returned: chat not found');

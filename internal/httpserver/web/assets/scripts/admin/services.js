@@ -36,7 +36,7 @@ export function serviceActionButton(action, id) {
 export function serviceActionsMarkup(service) {
   const id = escapeHTML(service.id);
   const buttons = SERVICE_ACTIONS.map(action => serviceActionButton(action, id)).join('');
-  return `<div class="actions">${buttons}</div><div class="service-test-result feedback-in hidden" data-service-test-status="${id}" role="status" aria-live="polite"></div>`;
+  return `<div class="actions">${buttons}</div><div class="service-test-result feedback-in hidden" data-service-test-status="${id}" role="status" aria-live="polite" aria-atomic="true"></div>`;
 }
 
 export function compareServiceOrder(left, right) {
@@ -244,10 +244,13 @@ export function createServicesController({
     if (!ids.length) return;
     try {
       await bulkUpdate(ids, { enabled });
-      toast(`${ids.length} 个服务已${enabled ? '启用' : '禁用'}`);
+      toast(
+        `${ids.length} ${ids.length === 1 ? 'service' : 'services'} ${enabled ? 'enabled' : 'disabled'}`,
+        'success',
+      );
       await load();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   }
 
@@ -255,7 +258,7 @@ export function createServicesController({
     event.preventDefault();
     const ids = selectedIDs();
     if (!ids.length) {
-      toast('请先选择服务');
+      toast('Select at least one service', 'warning');
       return;
     }
     const patch = {};
@@ -269,16 +272,16 @@ export function createServicesController({
     if (stream === 'true') patch.stream = true;
     else if (stream === 'false') patch.stream = false;
     if (!Object.keys(patch).length) {
-      toast('请至少填写一项要批量修改的字段');
+      toast('Enter at least one setting to update', 'warning');
       return;
     }
     try {
       await bulkUpdate(ids, patch);
-      toast(`已批量更新 ${ids.length} 个服务`);
+      toast(`Updated ${ids.length} ${ids.length === 1 ? 'service' : 'services'}`, 'success');
       element('bulk-editor').classList.add('hidden');
       await load();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   }
 
@@ -289,10 +292,10 @@ export function createServicesController({
         method: 'DELETE',
       });
       if (editorState.editingID === id) closeEditor();
-      toast('已删除');
+      toast('Service deleted', 'success');
       await Promise.all([load(), onServiceDeleted()]);
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   }
 
@@ -301,10 +304,10 @@ export function createServicesController({
       await api(`/api/admin/services/${encodeURIComponent(id)}/duplicate`, {
         method: 'POST',
       });
-      toast('已复制');
+      toast('Service duplicated', 'success');
       await load();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   }
 
@@ -413,7 +416,7 @@ export function createServicesController({
     try {
       service = collectService();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
       return;
     }
     const session = editorState.beginSave();
@@ -426,18 +429,18 @@ export function createServicesController({
           method: 'PUT',
           body: JSON.stringify(service),
         });
-        toast('已保存');
+        toast('Service saved', 'success');
       } else {
         await api('/api/admin/services', {
           method: 'POST',
           body: JSON.stringify(service),
         });
-        toast('已创建');
+        toast('Service created', 'success');
       }
       if (editorState.isCurrent(session.version)) closeEditor();
       await load();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     } finally {
       editorState.finishSave(session.version);
       if (editorState.isCurrent(session.version)) saveButton.disabled = false;
@@ -474,7 +477,7 @@ export function createServicesController({
   element('test-btn').addEventListener('click', () => {
     const id = editorState.editingID;
     if (!id) {
-      toast('先保存服务再测试');
+      toast('Save the service before testing', 'warning');
       return;
     }
     void showServiceTestResult({

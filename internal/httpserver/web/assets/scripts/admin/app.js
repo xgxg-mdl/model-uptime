@@ -105,13 +105,13 @@ export function startAdminApp({
         body: JSON.stringify({ token: value }),
       });
       if (!response.ok) {
-        toast('密码无效');
+        toast('Invalid password', 'error');
         return;
       }
       storage.setItem(TOKEN_KEY, value);
       enterApp();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   });
 
@@ -120,11 +120,11 @@ export function startAdminApp({
     const value = documentRef.getElementById('setup-token').value.trim();
     const confirmation = documentRef.getElementById('setup-confirm').value.trim();
     if (passwordCharacterCount(value) < 8) {
-      toast('密码至少 8 个字符');
+      toast('Password must be at least 8 characters', 'warning');
       return;
     }
     if (value !== confirmation) {
-      toast('两次输入的密码不一致');
+      toast('Passwords do not match', 'warning');
       return;
     }
     try {
@@ -135,13 +135,13 @@ export function startAdminApp({
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        toast(data.error || '设置失败');
+        toast(data.error || 'Setup failed', 'error');
         return;
       }
       storage.setItem(TOKEN_KEY, value);
       enterApp();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   });
 

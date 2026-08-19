@@ -69,7 +69,7 @@ export function createUpdateController({
   function completeUpdate(target) {
     clearPollTimer();
     storage.removeItem(UPDATE_TARGET_KEY);
-    toast(`Updated to ${target}`);
+    toast(`Updated to ${target}`, 'success');
     reload();
   }
 
@@ -135,11 +135,11 @@ export function createUpdateController({
       const requestedTarget = result.target_version || target;
       storage.setItem(UPDATE_TARGET_KEY, requestedTarget);
       render({ ...status, updating: true, last_update_error: '' });
-      toast('Update triggered');
+      toast('Update triggered', 'info');
       poll(requestedTarget);
     } catch (error) {
       renderUpdateError(documentRef, error.message);
-      toast(error.message);
+      toast(error.message, 'error');
     }
   }
 

@@ -22,7 +22,7 @@ export function normalizeTelegramSubscription(subscription, templates = {}) {
   };
 }
 
-export async function sendTelegramTest({ subscription, results, save, api, toast, kind = 'event' }) {
+export async function sendTelegramTest({ subscription, results, save, api, kind = 'event' }) {
   const setResult = (state, text) =>
     results.forEach(result => {
       const base = result.id === 'tg-test-result' ? 'test-result feedback-in' : 'subscription-test-result feedback-in';
@@ -40,11 +40,9 @@ export async function sendTelegramTest({ subscription, results, save, api, toast
       ),
     });
     setResult('ok', 'test message sent');
-    toast(`${kind === 'daily' ? 'Daily test' : 'Test message'} sent for ${subscription.name || subscription.id}`);
     return true;
   } catch (error) {
     setResult('bad', error.message);
-    toast(error.message);
     return false;
   }
 }
@@ -112,7 +110,7 @@ export function createTelegramController({
         <div class="subscription-meta">
           <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${escapeHTML(subscription.name || subscription.id)}</b>
           <div class="subscription-summary">#${escapeHTML(subscription.id)} · chat ${escapeHTML(subscription.chat_id)} · ${escapeHTML(subscription.language)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
-          <div class="subscription-test-result feedback-in hidden" data-tg-test-status="${index}"></div>
+          <div class="subscription-test-result feedback-in hidden" data-tg-test-status="${index}" role="status" aria-live="polite" aria-atomic="true"></div>
         </div>
         <div class="actions">
           <button class="btn" type="button" data-tg-action="edit" data-index="${index}">edit</button>
@@ -233,7 +231,7 @@ export function createTelegramController({
     if (body.bot_token) tokenConfigured = true;
     tokenInput.value = '';
     tokenInput.placeholder = tokenConfigured ? 'configured — leave blank to keep' : 'not configured';
-    if (!options.quiet) toast('Telegram config saved');
+    if (!options.quiet) toast('Telegram config saved', 'success');
   }
 
   async function testSubscription(index, kind = 'event') {
@@ -242,7 +240,7 @@ export function createTelegramController({
     const rowResult = documentRef.querySelector(`[data-tg-test-status="${index}"]`);
     const editorResult = editingIndex === index ? element('tg-test-result') : null;
     const results = [rowResult, editorResult].filter(Boolean);
-    await sendTelegramTest({ subscription, results, save, api, toast, kind });
+    await sendTelegramTest({ subscription, results, save, api, kind });
   }
 
   function deleteSubscription(index) {
@@ -252,7 +250,7 @@ export function createTelegramController({
     if (editingIndex === index) closeEditor();
     else if (editingIndex !== null && editingIndex > index) editingIndex--;
     renderSubscriptions();
-    toast('Subscription removed from draft');
+    toast('Subscription removed from draft', 'info');
   }
 
   element('tg-new-btn').addEventListener('click', () => openEditor());
@@ -270,9 +268,9 @@ export function createTelegramController({
     event.preventDefault();
     try {
       applyEditor();
-      toast('Subscription applied to draft');
+      toast('Subscription applied to draft', 'success');
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   });
   element('tg-test-btn').addEventListener('click', async () => {
@@ -281,7 +279,7 @@ export function createTelegramController({
       applyEditor({ close: false });
       await testSubscription(index);
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   });
   element('tg-daily-test-btn').addEventListener('click', async () => {
@@ -290,7 +288,7 @@ export function createTelegramController({
       applyEditor({ close: false });
       await testSubscription(index, 'daily');
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   });
   element('tg-save-btn').addEventListener('click', async () => {
@@ -298,7 +296,7 @@ export function createTelegramController({
       if (!element('tg-editor').classList.contains('hidden')) applyEditor();
       await save();
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
     }
   });
 

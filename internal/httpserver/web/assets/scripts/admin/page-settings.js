@@ -29,13 +29,18 @@ export function readPageForm(documentRef) {
 }
 
 export function createPageSettingsController({ document: documentRef, api, toast } = {}) {
+  const loadStatus = documentRef.getElementById('page-load-status');
+
   async function load() {
     try {
       const page = await api('/api/admin/page');
       fillPageForm(documentRef, page);
+      loadStatus.className = 'section-feedback hidden';
+      loadStatus.textContent = '';
       return page;
     } catch (error) {
-      toast(error.message);
+      loadStatus.className = 'section-feedback bad feedback-in';
+      loadStatus.textContent = error.message;
       return null;
     }
   }
@@ -49,10 +54,10 @@ export function createPageSettingsController({ document: documentRef, api, toast
       });
       // Normalize/default rules live on the server; reflect its authoritative result.
       fillPageForm(documentRef, page);
-      toast('显示配置已保存');
+      toast('Display settings saved', 'success');
       return page;
     } catch (error) {
-      toast(error.message);
+      toast(error.message, 'error');
       return null;
     }
   }

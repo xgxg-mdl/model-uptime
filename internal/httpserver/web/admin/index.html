@@ -22,41 +22,62 @@
   </div>
 
   <div class="admin-surface">
-    <header>
-      <div>
-        <h1><span class="prompt">~ $</span> model-uptime <span class="sub">manage</span></h1>
+    <header class="admin-header">
+      <div class="product-lockup">
+        <span class="product-mark" aria-hidden="true">MU</span>
+        <div class="product-copy">
+          <span class="product-kicker">operations console</span>
+          <h1>model-uptime <span class="sub">/ admin</span></h1>
+        </div>
       </div>
       <div class="actions">
-        <a class="btn" href="/">← status</a>
+        <a class="btn" href="/">status</a>
         <button class="btn bad" id="logout-btn" hidden>logout</button>
       </div>
     </header>
 
     <div class="admin-content">
       <!-- 登录视图 -->
-      <section class="panel login-card page-reveal" id="login-view" hidden aria-labelledby="login-title">
-        <h2 id="login-title">authentication required</h2>
-        <div class="panel-body">
+      <section class="auth-view page-reveal" id="login-view" hidden aria-labelledby="login-title">
+        <div class="auth-identity" aria-hidden="true">
+          <div class="auth-signal"><span></span><span></span><span></span></div>
+          <span class="auth-monogram">MU</span>
+          <p>MODEL UPTIME</p>
+        </div>
+        <div class="auth-card">
+          <span class="auth-eyebrow">restricted access</span>
+          <h2 id="login-title">Welcome back</h2>
           <p class="auth-command"><span class="prompt">~ $</span> admin login <span class="flag">--session</span></p>
           <form id="login-form">
-            <input type="password" id="login-token" aria-label="Admin password" placeholder="admin password" autocomplete="current-password" />
-            <button class="btn primary" type="submit">enter</button>
+            <label for="login-token">Admin password</label>
+            <div class="auth-input-row">
+              <input type="password" id="login-token" placeholder="Enter password" autocomplete="current-password" />
+              <button class="btn primary" type="submit">sign in</button>
+            </div>
           </form>
-          <p class="hint auth-hint">令牌在会话中生效（关闭标签页后失效）。</p>
+          <p class="hint auth-hint">Stored for this tab session only.</p>
         </div>
       </section>
 
       <!-- 首次设置密码视图（仅当服务未配置管理密码时显示） -->
-      <section class="panel login-card page-reveal" id="setup-view" hidden aria-labelledby="setup-title">
-        <h2 id="setup-title">initialize administrator</h2>
-        <div class="panel-body">
+      <section class="auth-view page-reveal" id="setup-view" hidden aria-labelledby="setup-title">
+        <div class="auth-identity" aria-hidden="true">
+          <div class="auth-signal"><span></span><span></span><span></span></div>
+          <span class="auth-monogram">MU</span>
+          <p>MODEL UPTIME</p>
+        </div>
+        <div class="auth-card">
+          <span class="auth-eyebrow">first run</span>
+          <h2 id="setup-title">Create administrator</h2>
           <p class="auth-command"><span class="prompt">~ $</span> admin setup <span class="flag">--persist</span></p>
           <form class="vertical" id="setup-form">
-            <input type="password" id="setup-token" aria-label="New admin password" placeholder="new admin password（至少 8 位）" autocomplete="new-password" />
-            <input type="password" id="setup-confirm" aria-label="Confirm admin password" placeholder="confirm password" autocomplete="new-password" />
-            <button class="btn primary" type="submit">set password</button>
+            <label for="setup-token">New admin password</label>
+            <input type="password" id="setup-token" placeholder="At least 8 characters" autocomplete="new-password" />
+            <label for="setup-confirm">Confirm password</label>
+            <input type="password" id="setup-confirm" placeholder="Repeat password" autocomplete="new-password" />
+            <button class="btn primary" type="submit">create account</button>
           </form>
-          <p class="hint auth-hint">首次部署：设置后将写入配置文件持久化，之后用该密码登录。</p>
+          <p class="hint auth-hint">The password is persisted to the server configuration.</p>
         </div>
       </section>
 
@@ -66,21 +87,23 @@
     <section class="panel">
       <h2>system update</h2>
       <div class="panel-body">
-        <div class="update-grid">
-          <div class="update-value">
-            <span class="update-label">Current</span>
-            <strong id="update-current">checking…</strong>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <div class="update-grid">
+            <div class="update-value">
+              <span class="update-label">Current</span>
+              <strong id="update-current">checking…</strong>
+            </div>
+            <div class="update-value">
+              <span class="update-label">Latest</span>
+              <strong id="update-latest">checking…</strong>
+            </div>
+            <div class="update-value">
+              <span class="update-label">Status</span>
+              <strong id="update-status">Checking releases…</strong>
+            </div>
           </div>
-          <div class="update-value">
-            <span class="update-label">Latest</span>
-            <strong id="update-latest">checking…</strong>
-          </div>
-          <div class="update-value">
-            <span class="update-label">Status</span>
-            <strong id="update-status">Checking releases…</strong>
-          </div>
+          <p class="update-detail" id="update-detail">Version checks confirm that the release image is available before updating.</p>
         </div>
-        <p class="update-detail" id="update-detail">Version checks confirm that the release image is available before updating.</p>
         <div class="form-actions" style="margin-top:12px;">
           <button class="btn" type="button" id="update-check-btn">check again</button>
           <button class="btn primary" type="button" id="update-start-btn" disabled>update now</button>
@@ -205,7 +228,7 @@
               <button class="btn primary" type="submit" id="save-btn">save</button>
               <button class="btn" type="button" id="cancel-btn">cancel</button>
               <button class="btn" type="button" id="test-btn">test connection</button>
-              <span class="test-result feedback-in hidden" id="test-result"></span>
+              <span class="test-result feedback-in hidden" id="test-result" role="status" aria-live="polite" aria-atomic="true"></span>
             </div>
           </form>
         </div>
@@ -319,7 +342,7 @@
               <button class="btn" type="button" id="tg-editor-cancel">cancel</button>
               <button class="btn" type="button" id="tg-test-btn">send test</button>
               <button class="btn" type="button" id="tg-daily-test-btn">send daily test</button>
-              <span class="test-result feedback-in hidden" id="tg-test-result"></span>
+              <span class="test-result feedback-in hidden" id="tg-test-result" role="status" aria-live="polite" aria-atomic="true"></span>
             </div>
           </form>
         </div>
@@ -334,6 +357,7 @@
     <section class="panel">
       <h2>page display</h2>
       <div class="panel-body">
+        <p class="section-feedback hidden" id="page-load-status" role="alert" aria-live="assertive" aria-atomic="true"></p>
         <form id="page-form">
           <div class="field">
             <label>Title</label>
@@ -388,7 +412,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true"></div>
 <script type="module" src="/assets/scripts/admin/app.js"></script>
 </body>
 </html>
