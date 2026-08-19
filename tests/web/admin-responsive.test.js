@@ -71,6 +71,28 @@ test('登录密码自动填充保持暗色主题', () => {
   assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px #15151a inset/);
 });
 
+test('桌面端滚动收进管理窗口内容区', () => {
+  const desktopOffset = adminCSS.indexOf('@media (min-width: 960px)');
+  assert.ok(desktopOffset >= 0, 'missing desktop admin layout');
+  const desktopCSS = adminCSS.slice(desktopOffset);
+
+  for (const marker of [
+    'height: 100dvh;',
+    'overflow: hidden;',
+    'height: calc(100dvh - 80px);',
+    'display: flex;',
+    'height: calc(100% - 30px);',
+    'flex: 1 1 auto;',
+    'overflow-y: auto;',
+    'overscroll-behavior: contain;',
+    'scrollbar-color: #55555e transparent;',
+    '.admin-content::-webkit-scrollbar { width: 10px; }',
+  ]) {
+    assert.ok(desktopCSS.includes(marker), `missing desktop scrolling style: ${marker}`);
+  }
+  assert.doesNotMatch(desktopCSS, /scrollbar-gutter/);
+});
+
 test('桌面和移动服务渲染器保持相同操作能力并转义字段', () => {
   const service = {
     id: 'openai-main',
