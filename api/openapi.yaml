@@ -76,7 +76,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenRequest'
+              $ref: '#/components/schemas/SetupTokenRequest'
       responses:
         '200':
           $ref: '#/components/responses/OK'
@@ -94,7 +94,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenRequest'
+              $ref: '#/components/schemas/LoginTokenRequest'
       responses:
         '200':
           $ref: '#/components/responses/OK'
@@ -123,7 +123,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Service'
+              $ref: '#/components/schemas/ServiceInput'
       responses:
         '201':
           description: Created service with its API key masked.
@@ -170,7 +170,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Service'
+              $ref: '#/components/schemas/ServiceInput'
       responses:
         '200':
           description: Updated service with its API key masked.
@@ -451,7 +451,7 @@ components:
         ok:
           type: boolean
           const: true
-    TokenRequest:
+    LoginTokenRequest:
       type: object
       additionalProperties: false
       required: [token]
@@ -459,6 +459,14 @@ components:
         token:
           type: string
           minLength: 1
+    SetupTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 8
     SetupStatus:
       type: object
       additionalProperties: false
@@ -466,10 +474,10 @@ components:
       properties:
         token_configured:
           type: boolean
-    Service:
+    ServiceInput:
       type: object
       additionalProperties: false
-      required: [id, name, protocol, base_url]
+      required: [name, protocol, base_url]
       properties:
         id:
           type: string
@@ -520,6 +528,11 @@ components:
           type: integer
           minimum: 100
           maximum: 599
+    Service:
+      allOf:
+        - $ref: '#/components/schemas/ServiceInput'
+        - type: object
+          required: [id]
     ServiceEnvelope:
       type: object
       additionalProperties: false

@@ -69,3 +69,24 @@ test('OpenAPI document passes schema and reference validation', async () => {
   const validated = await SwaggerParser.validate(contractPath);
   assert.equal(validated.openapi, '3.1.0');
 });
+
+test('OpenAPI preserves server-generated service identifiers', () => {
+  const createSchema = contract.paths['/api/admin/services'].post.requestBody.content['application/json'].schema;
+  const updateSchema = contract.paths['/api/admin/services/{id}'].put.requestBody.content['application/json'].schema;
+  const responseSchema = contract.components.schemas.Service;
+
+  assert.equal(createSchema.$ref, '#/components/schemas/ServiceInput');
+  assert.equal(updateSchema.$ref, '#/components/schemas/ServiceInput');
+  assert.ok(!contract.components.schemas.ServiceInput.required.includes('id'));
+  assert.deepEqual(responseSchema.allOf.at(-1).required, ['id']);
+});
+
+test('OpenAPI distinguishes setup validation from login authentication', () => {
+  const setupSchema = contract.paths['/api/admin/setup'].post.requestBody.content['application/json'].schema;
+  const loginSchema = contract.paths['/api/admin/login'].post.requestBody.content['application/json'].schema;
+
+  assert.equal(setupSchema.$ref, '#/components/schemas/SetupTokenRequest');
+  assert.equal(loginSchema.$ref, '#/components/schemas/LoginTokenRequest');
+  assert.equal(contract.components.schemas.SetupTokenRequest.properties.token.minLength, 8);
+  assert.equal(contract.components.schemas.LoginTokenRequest.properties.token.minLength, 1);
+});
