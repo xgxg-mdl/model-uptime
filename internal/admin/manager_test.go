@@ -199,6 +199,9 @@ func TestManagerAuthenticationAndSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := empty.SetupToken("密码密码"); err == nil || admin.KindOf(err) != admin.ErrorInvalid {
+		t.Fatalf("四个 Unicode 字符的密码应无效: %v", err)
+	}
 	if err := empty.SetupToken("new-password"); err != nil {
 		t.Fatal(err)
 	}

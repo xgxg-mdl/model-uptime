@@ -6,6 +6,10 @@ import { createPageSettingsController } from './page-settings.js';
 
 export const TOKEN_KEY = 'admin_token';
 
+export function passwordCharacterCount(value) {
+  return Array.from(String(value)).length;
+}
+
 export function startAdminApp({
   document: documentRef = globalThis.document,
   window: windowRef = globalThis.window,
@@ -114,7 +118,7 @@ export function startAdminApp({
     event.preventDefault();
     const value = documentRef.getElementById('setup-token').value.trim();
     const confirmation = documentRef.getElementById('setup-confirm').value.trim();
-    if (value.length < 8) {
+    if (passwordCharacterCount(value) < 8) {
       toast('密码至少 8 个字符');
       return;
     }

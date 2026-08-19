@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/xgxg-mdl/model-uptime/internal/model"
 	"github.com/xgxg-mdl/model-uptime/internal/notification"
@@ -107,7 +108,7 @@ func (m *Manager) Authenticate(token string) bool {
 
 func (m *Manager) SetupToken(token string) error {
 	token = strings.TrimSpace(token)
-	if len(token) < 8 {
+	if utf8.RuneCountInString(token) < 8 {
 		return invalid("管理密码至少需要 8 个字符")
 	}
 	m.mu.Lock()

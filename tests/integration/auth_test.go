@@ -53,7 +53,7 @@ func TestSetupFlow(t *testing.T) {
 	}
 
 	// 空密码 / 过短密码 → 400
-	for _, tk := range []string{"", "short"} {
+	for _, tk := range []string{"", "short", "密码密码"} {
 		code, _ = doJSON(t, ts, http.MethodPost, "/api/admin/setup", "", map[string]string{"token": tk})
 		if code != http.StatusBadRequest {
 			t.Errorf("密码 %q 应 400，got %d", tk, code)

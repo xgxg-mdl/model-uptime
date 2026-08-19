@@ -8,6 +8,7 @@ import {
   renderServiceListItem,
   renderServiceTableRow,
 } from '../../internal/httpserver/web/assets/scripts/admin/services.js';
+import { passwordCharacterCount } from '../../internal/httpserver/web/assets/scripts/admin/app.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'internal/httpserver/web/admin/index.html'), 'utf8');
@@ -69,6 +70,12 @@ test('登录密码自动填充保持暗色主题', () => {
   assert.match(adminCSS, /\.login-card input:-webkit-autofill/);
   assert.match(adminCSS, /-webkit-text-fill-color:\s*var\(--fg\)/);
   assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px #15151a inset/);
+});
+
+test('管理密码长度按 Unicode 字符而非编码单元计算', () => {
+  assert.equal(passwordCharacterCount('密码密码'), 4);
+  assert.equal(passwordCharacterCount('密码密码密码密码'), 8);
+  assert.equal(passwordCharacterCount('🔐🔐🔐🔐🔐🔐🔐🔐'), 8);
 });
 
 test('桌面端滚动收进管理窗口内容区', () => {
