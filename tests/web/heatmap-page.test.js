@@ -288,6 +288,11 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.match(output.textContent, /99\.50%/);
   assert.doesNotMatch(output.textContent, /OpenAI/);
   assert.ok(findAll(output, element => element.classList.contains('heatmap-uptime-value'))[0].classList.contains('ok'));
+  const heading = findAll(output, element => element.classList.contains('heatmap-panel-heading'))[0];
+  const current = findAll(heading, element => element.classList.contains('heatmap-current'))[0];
+  assert.equal(heading.childNodes.at(-2).textContent, ' · ');
+  assert.equal(heading.childNodes.at(-2).nodeType, 3);
+  assert.equal(current.textContent, '● slow');
   assert.equal(document.getElementById('probe-comment').textContent, '# Monitoring production models');
   const commandModels = document.getElementById('cmd-models');
   assert.equal(commandModels.textContent, ' gpt-5');

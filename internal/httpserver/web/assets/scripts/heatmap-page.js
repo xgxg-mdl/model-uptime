@@ -394,12 +394,13 @@ export function createHeatmapRenderer({
     heading.append(createElement(documentRef, 'span', 'mute', '→'));
     appendText(documentRef, heading, ' ');
     heading.append(createElement(documentRef, 'span', 'cmd bold heatmap-model-name', service.model));
+    appendText(documentRef, heading, ' · ');
     heading.append(
       createElement(
         documentRef,
         'span',
         `heatmap-current ${service.status}`,
-        ` · ● ${currentStatusLabel(service.status)}`,
+        `● ${currentStatusLabel(service.status)}`,
       ),
     );
 
@@ -474,7 +475,7 @@ export function createHeatmapRenderer({
     panel.querySelector('.heatmap-model-name').textContent = service.model;
     const current = panel.querySelector('.heatmap-current');
     current.className = `heatmap-current ${service.status}`;
-    current.textContent = ` · ● ${currentStatusLabel(service.status)}`;
+    current.textContent = `● ${currentStatusLabel(service.status)}`;
     const uptimeValue = panel.querySelector('.heatmap-uptime-value');
     uptimeValue.textContent = service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—';
     uptimeValue.className = `heatmap-uptime-value ${service.samples ? uptimeStatusClass(service.uptime_pct) : 'dim'}`;
