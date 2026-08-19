@@ -58,7 +58,8 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   }
   assert.match(adminCSS, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(statusCSS, /@media \(prefers-reduced-motion: reduce\)/);
-  for (const marker of ['.panel-reveal', '.feedback-in', '@keyframes surface-in', '@keyframes feedback-in']) {
+  assert.ok(foundationCSS.includes('@keyframes surface-in'), '基础层缺少终端窗口进入动效');
+  for (const marker of ['.panel-reveal', '.feedback-in', '@keyframes feedback-in']) {
     assert.ok(adminCSS.includes(marker), `管理页缺少交互动效: ${marker}`);
   }
   for (const marker of ['.status-change', '@keyframes status-change']) {
@@ -90,18 +91,20 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.doesNotMatch(statusCSS, /\.term\s*{[^}]*\n\s*height:\s*100%;/);
   assert.match(
     statusCSS,
-    /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-color:\s*rgba\(138, 138, 148, 0\.42\) transparent;[^}]*scrollbar-width:\s*thin;/,
+    /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-color:\s*var\(--scroll-thumb\) transparent;[^}]*scrollbar-width:\s*thin;/,
   );
   assert.doesNotMatch(statusCSS, /scrollbar-gutter:/);
   assert.match(statusCSS, /\.body::-webkit-scrollbar\s*{\s*width:\s*8px;/);
-  assert.match(statusCSS, /\.body::-webkit-scrollbar-thumb\s*{[^}]*background:\s*rgba\(138, 138, 148, 0\.42\);/);
+  assert.match(statusCSS, /\.body::-webkit-scrollbar-thumb\s*{[^}]*background:\s*var\(--scroll-thumb\);/);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 
-test('管理页背景固定且不重复，避免内容高度变化时出现渐变拼接', () => {
-  assert.match(adminCSS, /background-attachment:\s*fixed;/);
-  assert.match(adminCSS, /background-repeat:\s*no-repeat;/);
-  assert.match(adminCSS, /background-size:\s*100%\s+100%;/);
+test('页面背景由基础层统一提供且不会随内容高度拼接', () => {
+  assert.match(foundationCSS, /background-attachment:\s*fixed;/);
+  assert.match(foundationCSS, /background-repeat:\s*no-repeat;/);
+  assert.match(foundationCSS, /background-size:\s*100%\s+100%;/);
+  assert.doesNotMatch(adminCSS, /background-(?:attachment|repeat|size):/);
+  assert.doesNotMatch(statusCSS, /background-(?:attachment|repeat|size):/);
 });
 
 test('三页终端窗口不叠加 CRT 扫描线', () => {

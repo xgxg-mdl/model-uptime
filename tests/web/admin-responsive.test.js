@@ -14,6 +14,7 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'internal/httpserver/web/admin/index.html'), 'utf8');
 const adminCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/admin.css'), 'utf8');
 const foundationCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/foundation.css'), 'utf8');
+const statusCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/status.css'), 'utf8');
 
 function cssRule(source, selector, offset = 0) {
   const start = source.indexOf(`${selector} {`, offset);
@@ -62,24 +63,24 @@ test('管理页使用外置资源并保留响应式结构', () => {
     '.update-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
     '.metric-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));',
     '.admin-window {',
-    '.light.close { background: var(--btn-close); }',
   ]) {
     assert.ok(adminCSS.includes(marker), `missing responsive admin style: ${marker}`);
   }
+  assert.ok(foundationCSS.includes('.light.close { background: var(--btn-close); }'));
   assert.doesNotMatch(adminCSS, /@media \(max-width: 960px\)|content:\s*attr\(data-label\)/);
   assert.doesNotMatch(adminCSS, /\.admin-surface::before|repeating-linear-gradient/);
-  assert.match(adminCSS, /\.btn\.primary:disabled\s*{[^}]*background:\s*#15151a;/s);
+  assert.match(adminCSS, /\.btn\.primary:disabled\s*{[^}]*background:\s*var\(--surface-raised\);/s);
 });
 
 test('登录密码自动填充保持暗色主题', () => {
   assert.match(adminCSS, /\.auth-card input:-webkit-autofill/);
   assert.match(adminCSS, /-webkit-text-fill-color:\s*var\(--fg\)/);
-  assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px #0d0d10 inset/);
+  assert.match(adminCSS, /-webkit-box-shadow:\s*0 0 0 1000px var\(--term-bg\) inset/);
 });
 
 test('认证页和管理页保持清晰的视觉层级', () => {
   for (const marker of [
-    'grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.2fr)',
+    'grid-template-columns: 190px minmax(320px, 1fr)',
     '.auth-identity {',
     '.auth-card {',
     '.product-mark {',
@@ -127,7 +128,7 @@ test('桌面端滚动收进管理窗口内容区', () => {
     'flex: 1 1 auto;',
     'overflow-y: auto;',
     'overscroll-behavior: contain;',
-    'scrollbar-color: rgba(138, 138, 148, 0.42) transparent;',
+    'scrollbar-color: var(--scroll-thumb) transparent;',
     '.admin-content::-webkit-scrollbar { width: 8px; }',
   ]) {
     assert.ok(desktopCSS.includes(marker), `missing desktop scrolling style: ${marker}`);
@@ -168,13 +169,15 @@ test('桌面和移动服务渲染器保持相同操作能力并转义字段', ()
 
 test('移动服务行在窄视口内保持紧凑且操作按钮不溢出', () => {
   const mobileOffset = adminCSS.indexOf('@media (max-width: 559px)');
-  const bodyRule = cssRule(adminCSS, 'body');
+  const foundationMobileOffset = foundationCSS.indexOf('@media (max-width: 640px)');
+  const foundationBodyOffset = foundationCSS.indexOf('\nbody {\n  padding:');
+  const bodyRule = cssRule(foundationCSS, 'body', foundationBodyOffset);
   const itemRule = cssRule(adminCSS, '.service-item');
   const metadataRule = cssRule(adminCSS, '.service-item-meta');
   const itemActionsRule = cssRule(adminCSS, '.service-item-actions');
   const iconRule = cssRule(adminCSS, '.service-item-actions .icon-btn');
   const actionsRule = cssRule(adminCSS, '.service-item-actions .actions');
-  const mobileBodyRule = cssRule(adminCSS, 'body', mobileOffset);
+  const mobileRootRule = cssRule(foundationCSS, ':root', foundationMobileOffset);
   const mobilePanelBodyRule = cssRule(adminCSS, '.panel-body', mobileOffset);
   const panelRule = cssRule(adminCSS, '.panel');
 
@@ -193,8 +196,8 @@ test('移动服务行在窄视口内保持紧凑且操作按钮不溢出', () =>
     4 * cssNumber(iconRule, /width:\s*(\d+)px/, 'action width') +
     3 * cssNumber(actionsRule, /gap:\s*(\d+)px/, 'action gap');
   const bodyHorizontalPadding = cssNumber(
-    mobileBodyRule,
-    /padding:\s*\d+px\s+(\d+)px/,
+    mobileRootRule,
+    /--page-padding:\s*\d+px\s+(\d+)px/,
     'mobile body horizontal padding',
   );
   const panelBorder = cssNumber(panelRule, /border:\s*(\d+)px/, 'panel border');
@@ -236,4 +239,18 @@ test('管理页颜色只来自已审核的共享色板', () => {
     color => !allowedColors.has(color.toLowerCase()),
   );
   assert.deepEqual(unexpected, []);
+});
+
+test('公共终端样式集中在基础层，页面样式只消费颜色变量', () => {
+  assert.doesNotMatch(adminCSS, /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/);
+
+  for (const selector of ['.titlebar', '.lights', '.light', '.prompt', '.flag']) {
+    assert.ok(foundationCSS.includes(`${selector} {`), `基础层缺少公共规则: ${selector}`);
+    assert.ok(!adminCSS.includes(`${selector} {`), `管理页重复声明公共规则: ${selector}`);
+    assert.ok(!statusCSS.includes(`${selector} {`), `状态页重复声明公共规则: ${selector}`);
+  }
+
+  assert.match(foundationCSS, /@keyframes surface-in/);
+  assert.doesNotMatch(adminCSS, /@keyframes surface-in/);
+  assert.doesNotMatch(statusCSS, /@keyframes surface-in/);
 });
