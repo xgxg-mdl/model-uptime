@@ -55,6 +55,8 @@ export function createPageSettingsController({ document: documentRef, api, toast
     }
   }
 
-  documentRef.getElementById('page-form').addEventListener('submit', event => { void save(event); });
+  documentRef.getElementById('page-form').addEventListener('submit', event => {
+    void save(event);
+  });
   return { load, save };
 }

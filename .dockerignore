@@ -1,6 +1,7 @@
 # 构建上下文排除项
 data/
 bin/
+node_modules/
 .git/
 *.db
 *.db-wal

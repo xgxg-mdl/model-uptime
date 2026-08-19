@@ -139,19 +139,19 @@ test('移动服务行在窄视口内保持紧凑且操作按钮不溢出', () =>
   const panelRule = cssRule(adminCSS, '.panel');
 
   const estimatedRowHeight =
-    cssNumber(bodyRule, /font-size:\s*(\d+)px/, 'body font size')
-      * cssNumber(bodyRule, /line-height:\s*([\d.]+)/, 'body line height')
-    + cssNumber(metadataRule, /font-size:\s*(\d+)px/, 'metadata font size')
-      * cssNumber(metadataRule, /line-height:\s*([\d.]+)/, 'metadata line height')
-    + cssNumber(itemRule, /padding:\s*(\d+)px\s+0/, 'service row padding') * 2
-    + cssNumber(itemRule, /row-gap:\s*(\d+)px/, 'service row gap') * 2
-    + cssNumber(itemActionsRule, /padding-top:\s*(\d+)px/, 'action top padding')
-    + cssNumber(iconRule, /height:\s*(\d+)px/, 'action height');
+    cssNumber(bodyRule, /font-size:\s*(\d+)px/, 'body font size') *
+      cssNumber(bodyRule, /line-height:\s*([\d.]+)/, 'body line height') +
+    cssNumber(metadataRule, /font-size:\s*(\d+)px/, 'metadata font size') *
+      cssNumber(metadataRule, /line-height:\s*([\d.]+)/, 'metadata line height') +
+    cssNumber(itemRule, /padding:\s*(\d+)px\s+0/, 'service row padding') * 2 +
+    cssNumber(itemRule, /row-gap:\s*(\d+)px/, 'service row gap') * 2 +
+    cssNumber(itemActionsRule, /padding-top:\s*(\d+)px/, 'action top padding') +
+    cssNumber(iconRule, /height:\s*(\d+)px/, 'action height');
   assert.ok(estimatedRowHeight <= 110, `mobile service row density regressed to ${estimatedRowHeight}px`);
 
   const actionGroupWidth =
-    4 * cssNumber(iconRule, /width:\s*(\d+)px/, 'action width')
-    + 3 * cssNumber(actionsRule, /gap:\s*(\d+)px/, 'action gap');
+    4 * cssNumber(iconRule, /width:\s*(\d+)px/, 'action width') +
+    3 * cssNumber(actionsRule, /gap:\s*(\d+)px/, 'action gap');
   const bodyHorizontalPadding = cssNumber(
     mobileBodyRule,
     /padding:\s*\d+px\s+(\d+)px/,
@@ -163,22 +163,37 @@ test('移动服务行在窄视口内保持紧凑且操作按钮不溢出', () =>
   const columnGap = cssNumber(itemRule, /column-gap:\s*(\d+)px/, 'service column gap');
 
   for (const viewportWidth of [320, 390]) {
-    const panelContentWidth = viewportWidth
-      - 2 * bodyHorizontalPadding
-      - 2 * panelBorder
-      - 2 * panelBodyPadding;
+    const panelContentWidth = viewportWidth - 2 * bodyHorizontalPadding - 2 * panelBorder - 2 * panelBodyPadding;
     assert.ok(actionGroupWidth <= panelContentWidth - selectionColumn - columnGap);
   }
 });
 
 test('管理页颜色只来自已审核的共享色板', () => {
   const allowedColors = new Set([
-    '#000', '#0d0d10', '#141418', '#15151a', '#1a1a1e', '#222228', '#24242a',
-    '#26262d', '#2a2a30', '#3a3a42', '#55555e', '#5eff9c', '#7afcff', '#8a8a94',
-    '#d4d4d4', '#febc2e', '#ff5e7a', '#ff5f57', '#ffc857', '#28c840',
+    '#000',
+    '#0d0d10',
+    '#141418',
+    '#15151a',
+    '#1a1a1e',
+    '#222228',
+    '#24242a',
+    '#26262d',
+    '#2a2a30',
+    '#3a3a42',
+    '#55555e',
+    '#5eff9c',
+    '#7afcff',
+    '#8a8a94',
+    '#d4d4d4',
+    '#febc2e',
+    '#ff5e7a',
+    '#ff5f57',
+    '#ffc857',
+    '#28c840',
   ]);
   const source = `${foundationCSS}\n${adminCSS}`;
-  const unexpected = [...new Set(source.match(/#[0-9a-fA-F]{3,8}\b/g) || [])]
-    .filter(color => !allowedColors.has(color.toLowerCase()));
+  const unexpected = [...new Set(source.match(/#[0-9a-fA-F]{3,8}\b/g) || [])].filter(
+    color => !allowedColors.has(color.toLowerCase()),
+  );
   assert.deepEqual(unexpected, []);
 });

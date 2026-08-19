@@ -23,7 +23,11 @@ export function startAdminApp({
     storage.removeItem(TOKEN_KEY);
     locationRef.reload();
   };
-  const api = createAdminClient({ fetch: fetchImpl, token, onUnauthorized: logout });
+  const api = createAdminClient({
+    fetch: fetchImpl,
+    token,
+    onUnauthorized: logout,
+  });
 
   const telegram = createTelegramController({
     document: documentRef,
@@ -41,7 +45,11 @@ export function startAdminApp({
     onServicesChanged: nextServices => telegram.setServices(nextServices),
     onServiceDeleted: () => telegram.load(),
   });
-  const pageSettings = createPageSettingsController({ document: documentRef, api, toast });
+  const pageSettings = createPageSettingsController({
+    document: documentRef,
+    api,
+    toast,
+  });
   const updater = createUpdateController({
     document: documentRef,
     api,
@@ -69,9 +77,11 @@ export function startAdminApp({
       enterApp();
       return;
     }
-    let configured = true;
+    let configured;
     try {
-      const response = await fetchImpl('/api/admin/setup-status', { cache: 'no-store' });
+      const response = await fetchImpl('/api/admin/setup-status', {
+        cache: 'no-store',
+      });
       const data = await response.json();
       configured = Boolean(data.token_configured);
     } catch {
@@ -104,8 +114,14 @@ export function startAdminApp({
     event.preventDefault();
     const value = documentRef.getElementById('setup-token').value.trim();
     const confirmation = documentRef.getElementById('setup-confirm').value.trim();
-    if (value.length < 8) { toast('密码至少 8 个字符'); return; }
-    if (value !== confirmation) { toast('两次输入的密码不一致'); return; }
+    if (value.length < 8) {
+      toast('密码至少 8 个字符');
+      return;
+    }
+    if (value !== confirmation) {
+      toast('两次输入的密码不一致');
+      return;
+    }
     try {
       const response = await fetchImpl('/api/admin/setup', {
         method: 'POST',

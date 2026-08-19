@@ -131,9 +131,7 @@ export function createTerminalIntro({
     stage.command.classList.add('terminal-command-complete');
     for (const element of stage.reveal || []) element.classList.add('terminal-reveal-visible');
 
-    const nextDelay = stageIndex + 1 < stages.length
-      ? revealDuration + (stage.pause || 0)
-      : revealDuration;
+    const nextDelay = stageIndex + 1 < stages.length ? revealDuration + (stage.pause || 0) : revealDuration;
     schedule(() => startStage(stageIndex + 1), nextDelay);
   }
 
@@ -155,6 +153,8 @@ export function createTerminalIntro({
   return {
     start,
     setDataReady,
-    get complete() { return complete; },
+    get complete() {
+      return complete;
+    },
   };
 }

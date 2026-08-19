@@ -2,19 +2,27 @@ import { escapeHTML, revealPanel } from './shared.js';
 
 export const SERVICE_ACTIONS = [
   {
-    id: 'edit', label: 'Edit service', destructive: false,
+    id: 'edit',
+    label: 'Edit service',
+    destructive: false,
     icon: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
   },
   {
-    id: 'copy', label: 'Duplicate service', destructive: false,
+    id: 'copy',
+    label: 'Duplicate service',
+    destructive: false,
     icon: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   },
   {
-    id: 'test', label: 'Test connection', destructive: false,
+    id: 'test',
+    label: 'Test connection',
+    destructive: false,
     icon: '<path d="m6 3 14 9-14 9Z"/>',
   },
   {
-    id: 'del', label: 'Delete service', destructive: true,
+    id: 'del',
+    label: 'Delete service',
+    destructive: true,
     icon: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   },
 ];
@@ -32,11 +40,12 @@ export function serviceActionsMarkup(service) {
 }
 
 export function compareServiceOrder(left, right) {
-  const orderDifference = (left.sort_order || Number.MAX_SAFE_INTEGER)
-    - (right.sort_order || Number.MAX_SAFE_INTEGER);
+  const orderDifference = (left.sort_order || Number.MAX_SAFE_INTEGER) - (right.sort_order || Number.MAX_SAFE_INTEGER);
   if (orderDifference) return orderDifference;
-  return String(left.name || '').localeCompare(String(right.name || ''))
-    || String(left.id || '').localeCompare(String(right.id || ''));
+  return (
+    String(left.name || '').localeCompare(String(right.name || '')) ||
+    String(left.id || '').localeCompare(String(right.id || ''))
+  );
 }
 
 export function renderServiceTableRow(service) {
@@ -54,7 +63,9 @@ export function renderServiceTableRow(service) {
 }
 
 export function renderServiceListItem(service) {
-  const metadata = [service.protocol, service.model, service.provider, `order ${service.sort_order || '—'}`].filter(Boolean).join(' · ');
+  const metadata = [service.protocol, service.model, service.provider, `order ${service.sort_order || '—'}`]
+    .filter(Boolean)
+    .join(' · ');
   return `<li class="service-item" data-service-row>
     <label class="service-item-select">
       <input type="checkbox" class="row-check" data-id="${escapeHTML(service.id)}" aria-label="select ${escapeHTML(service.name)}" />
@@ -91,10 +102,18 @@ export function createEditorSessionState() {
     finishSave(sessionVersion) {
       if (savingVersion === sessionVersion) savingVersion = null;
     },
-    isCurrent(sessionVersion) { return version === sessionVersion; },
-    get version() { return version; },
-    get editingID() { return editingID; },
-    get saving() { return savingVersion === version; },
+    isCurrent(sessionVersion) {
+      return version === sessionVersion;
+    },
+    get version() {
+      return version;
+    },
+    get editingID() {
+      return editingID;
+    },
+    get saving() {
+      return savingVersion === version;
+    },
   };
 }
 
@@ -135,9 +154,9 @@ export function createServicesController({
   const element = id => documentRef.getElementById(id);
 
   function selectedIDs() {
-    return Array.from(new Set(
-      Array.from(documentRef.querySelectorAll('.row-check:checked')).map(checkbox => checkbox.dataset.id),
-    ));
+    return Array.from(
+      new Set(Array.from(documentRef.querySelectorAll('.row-check:checked')).map(checkbox => checkbox.dataset.id)),
+    );
   }
 
   function updateBulkBar() {
@@ -235,7 +254,10 @@ export function createServicesController({
   async function applyBulkSettings(event) {
     event.preventDefault();
     const ids = selectedIDs();
-    if (!ids.length) { toast('请先选择服务'); return; }
+    if (!ids.length) {
+      toast('请先选择服务');
+      return;
+    }
     const patch = {};
     const interval = element('b-interval').value.trim();
     if (interval) patch.interval_sec = Number.parseInt(interval, 10);
@@ -246,7 +268,10 @@ export function createServicesController({
     const stream = element('b-stream').value;
     if (stream === 'true') patch.stream = true;
     else if (stream === 'false') patch.stream = false;
-    if (!Object.keys(patch).length) { toast('请至少填写一项要批量修改的字段'); return; }
+    if (!Object.keys(patch).length) {
+      toast('请至少填写一项要批量修改的字段');
+      return;
+    }
     try {
       await bulkUpdate(ids, patch);
       toast(`已批量更新 ${ids.length} 个服务`);
@@ -260,7 +285,9 @@ export function createServicesController({
   async function deleteService(id) {
     if (!confirmAction(`删除服务 ${id}？此操作不可恢复。`)) return;
     try {
-      await api(`/api/admin/services/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await api(`/api/admin/services/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
       if (editorState.editingID === id) closeEditor();
       toast('已删除');
       await Promise.all([load(), onServiceDeleted()]);
@@ -271,7 +298,9 @@ export function createServicesController({
 
   async function duplicateService(id) {
     try {
-      await api(`/api/admin/services/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
+      await api(`/api/admin/services/${encodeURIComponent(id)}/duplicate`, {
+        method: 'POST',
+      });
       toast('已复制');
       await load();
     } catch (error) {
@@ -328,8 +357,9 @@ export function createServicesController({
     element('editor-title').textContent = 'new service';
     element('f-id-input').value = '';
     element('f-id-input').disabled = false;
-    ['f-name', 'f-provider', 'f-model', 'f-base', 'f-key', 'f-path', 'f-headers', 'f-body']
-      .forEach(id => { element(id).value = ''; });
+    ['f-name', 'f-provider', 'f-model', 'f-base', 'f-key', 'f-path', 'f-headers', 'f-body'].forEach(id => {
+      element(id).value = '';
+    });
     element('f-protocol').value = 'chat';
     element('f-interval').value = 60;
     element('f-timeout').value = 60;
@@ -348,8 +378,11 @@ export function createServicesController({
     const headersRaw = element('f-headers').value.trim();
     let headers;
     if (headersRaw) {
-      try { headers = JSON.parse(headersRaw); }
-      catch { throw new Error('Headers 不是合法 JSON'); }
+      try {
+        headers = JSON.parse(headersRaw);
+      } catch {
+        throw new Error('Headers 不是合法 JSON');
+      }
     }
     const protocol = element('f-protocol').value;
     return {
@@ -368,7 +401,7 @@ export function createServicesController({
       enabled: element('f-enabled').checked,
       stream: protocol === 'http' ? undefined : element('f-stream').checked,
       method: protocol === 'http' ? element('f-method').value : '',
-      expect_status: protocol === 'http' ? (Number.parseInt(element('f-expect').value, 10) || 200) : 0,
+      expect_status: protocol === 'http' ? Number.parseInt(element('f-expect').value, 10) || 200 : 0,
       headers: protocol === 'http' ? headers : undefined,
       body: protocol === 'http' ? element('f-body').value : '',
     };
@@ -377,8 +410,12 @@ export function createServicesController({
   async function saveService(event) {
     event.preventDefault();
     let service;
-    try { service = collectService(); }
-    catch (error) { toast(error.message); return; }
+    try {
+      service = collectService();
+    } catch (error) {
+      toast(error.message);
+      return;
+    }
     const session = editorState.beginSave();
     if (!session) return;
     const saveButton = element('save-btn');
@@ -386,11 +423,15 @@ export function createServicesController({
     try {
       if (session.serviceID) {
         await api(`/api/admin/services/${encodeURIComponent(session.serviceID)}`, {
-          method: 'PUT', body: JSON.stringify(service),
+          method: 'PUT',
+          body: JSON.stringify(service),
         });
         toast('已保存');
       } else {
-        await api('/api/admin/services', { method: 'POST', body: JSON.stringify(service) });
+        await api('/api/admin/services', {
+          method: 'POST',
+          body: JSON.stringify(service),
+        });
         toast('已创建');
       }
       if (editorState.isCurrent(session.version)) closeEditor();
@@ -404,28 +445,48 @@ export function createServicesController({
   }
 
   element('select-all').addEventListener('change', event => {
-    documentRef.querySelectorAll('.row-check').forEach(checkbox => { checkbox.checked = event.target.checked; });
+    documentRef.querySelectorAll('.row-check').forEach(checkbox => {
+      checkbox.checked = event.target.checked;
+    });
     updateBulkBar();
   });
-  element('bulk-enable').addEventListener('click', () => { void bulkSetEnabled(true); });
-  element('bulk-disable').addEventListener('click', () => { void bulkSetEnabled(false); });
+  element('bulk-enable').addEventListener('click', () => {
+    void bulkSetEnabled(true);
+  });
+  element('bulk-disable').addEventListener('click', () => {
+    void bulkSetEnabled(false);
+  });
   element('bulk-settings').addEventListener('click', () => {
-    ['b-interval', 'b-timeout', 'b-warning'].forEach(id => { element(id).value = ''; });
+    ['b-interval', 'b-timeout', 'b-warning'].forEach(id => {
+      element(id).value = '';
+    });
     element('b-stream').value = '';
     element('bulk-editor-count').textContent = selectedIDs().length;
     revealPanel(element('bulk-editor'), windowRef, 'start');
   });
   element('bulk-cancel').addEventListener('click', () => element('bulk-editor').classList.add('hidden'));
-  element('bulk-form').addEventListener('submit', event => { void applyBulkSettings(event); });
+  element('bulk-form').addEventListener('submit', event => {
+    void applyBulkSettings(event);
+  });
   element('f-protocol').addEventListener('change', event => showHttpFields(event.target.value));
   element('new-btn').addEventListener('click', openNew);
   element('cancel-btn').addEventListener('click', closeEditor);
   element('test-btn').addEventListener('click', () => {
     const id = editorState.editingID;
-    if (!id) { toast('先保存服务再测试'); return; }
-    void showServiceTestResult({ api, id, result: element('test-result'), button: element('test-btn') });
+    if (!id) {
+      toast('先保存服务再测试');
+      return;
+    }
+    void showServiceTestResult({
+      api,
+      id,
+      result: element('test-result'),
+      button: element('test-btn'),
+    });
   });
-  element('svc-form').addEventListener('submit', event => { void saveService(event); });
+  element('svc-form').addEventListener('submit', event => {
+    void saveService(event);
+  });
 
   return {
     load,
@@ -435,7 +496,9 @@ export function createServicesController({
     saveService,
     selectedIDs,
     updateBulkBar,
-    get services() { return services.slice(); },
+    get services() {
+      return services.slice();
+    },
     editorState,
   };
 }

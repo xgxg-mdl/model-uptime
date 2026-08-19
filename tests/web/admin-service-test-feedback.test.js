@@ -11,9 +11,17 @@ test('服务测试立即显示进度并保留成功结果', async () => {
   const result = resultElement();
   const button = { disabled: false };
   let resolveAPI;
-  const api = () => new Promise(resolve => { resolveAPI = resolve; });
+  const api = () =>
+    new Promise(resolve => {
+      resolveAPI = resolve;
+    });
 
-  const request = showServiceTestResult({ api, id: 'service-1', result, button });
+  const request = showServiceTestResult({
+    api,
+    id: 'service-1',
+    result,
+    button,
+  });
   assert.equal(button.disabled, true);
   assert.equal(result.hidden, false);
   assert.equal(result.textContent, 'probing…');
@@ -31,7 +39,11 @@ test('服务测试转义探测错误并保留失败反馈', async () => {
   const button = { disabled: false };
 
   await showServiceTestResult({
-    api: async () => ({ ok: false, latency_ms: 25, error: '<img src=x onerror=alert(1)>' }),
+    api: async () => ({
+      ok: false,
+      latency_ms: 25,
+      error: '<img src=x onerror=alert(1)>',
+    }),
     id: 'service-1',
     result,
     button,
@@ -41,7 +53,9 @@ test('服务测试转义探测错误并保留失败反馈', async () => {
   assert.doesNotMatch(result.innerHTML, /<img/);
 
   await showServiceTestResult({
-    api: async () => { throw new Error('connection refused'); },
+    api: async () => {
+      throw new Error('connection refused');
+    },
     id: 'service-1',
     result,
     button,

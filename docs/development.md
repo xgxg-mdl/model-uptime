@@ -15,6 +15,7 @@
 GOTOOLCHAIN=auto go version
 node --version
 go mod download
+npm ci
 ```
 
 不要提交本地数据目录、`.env`、数据库文件或任何真实凭据。
@@ -22,6 +23,7 @@ go mod download
 ## Project Layout
 
 ```text
+api/openapi.yaml            OpenAPI 3.1 contract for public and admin HTTP APIs
 cmd/model-uptime/           Process entry point: flags, signals, and app startup
 internal/app/               Dependency wiring and lifecycle management
 internal/admin/             Configuration transactions and admin operations
@@ -39,7 +41,7 @@ tests/web/                  Cross-module Node.js web regression tests
 tests/deployment/           Deployment and release contract tests
 ```
 
-依赖方向应保持从 `cmd/model-uptime` 经 `internal/app` 到各职责包；`internal` 包之间通过明确类型和消费方定义的小接口协作。配置文件是运行时配置的可信来源，SQLite 保存探测历史、状态变化 ledger 和可靠通知 outbox。前端 HTML、CSS 和 JavaScript 位于 `internal/httpserver/web` 并嵌入二进制，因此不需要独立前端构建步骤。
+依赖方向应保持从 `cmd/model-uptime` 经 `internal/app` 到各职责包；`internal` 包之间通过明确类型和消费方定义的小接口协作。配置文件是运行时配置的可信来源，SQLite 保存探测历史、状态变化 ledger 和可靠通知 outbox。前端 HTML、CSS 和 JavaScript 位于 `internal/httpserver/web` 并嵌入二进制，因此不需要独立前端构建步骤。npm 依赖只用于 ESLint、Prettier、OpenAPI 校验和测试，不进入最终镜像。
 
 通知 outbox 以订阅 ID 保持 FIFO。临时投递错误保留原退避时间；连续永久错误进入持久化隔离，不阻塞同订阅后续项。每条永久失败只保存实际投递配置的 SHA-256 指纹，不保存额外凭据副本；相关订阅配置发生变化时才恢复并使用持久化领域 payload 重渲染，因而运行时热更新与停机修改配置后重启具有相同语义。
 
@@ -56,6 +58,7 @@ make fmt       # Format repository Go files
 make check     # Check formatting, modules, and go vet
 make test      # Run Go tests
 make race      # Run Go tests with the race detector
+make js-check  # Run JavaScript lint and formatting checks
 make web-test  # Run Node.js web regression tests
 make deployment-test # Run deployment and release contract tests
 make vuln      # Run the pinned govulncheck version
@@ -81,7 +84,7 @@ make ci
 git diff --check
 ```
 
-前端没有依赖安装与打包阶段。修改嵌入页面后运行 `make web-test`，并确认相关 Go API 测试仍通过。
+前端没有打包阶段。首次检出或 `package-lock.json` 更新后运行 `npm ci`；修改嵌入页面后运行 `make js-check` 和 `make web-test`，并确认相关 Go API 测试仍通过。API 路由或响应结构变化时同步更新 `api/openapi.yaml`，部署契约测试会核对 OpenAPI 与 Go 路由注册的一致性。
 
 ## Configuration and Data Safety
 

@@ -211,6 +211,8 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 
 ## HTTP API
 
+机器可读契约见 [`api/openapi.yaml`](api/openapi.yaml)。CI 会校验 OpenAPI 结构、引用、认证声明及其与 Go 路由注册的一致性。
+
 | 端点 | 方法 | 认证 | 说明 |
 |---|---|---|---|
 | `/healthz` | GET | 公开 | 轻量进程健康检查（`204 No Content`） |
@@ -244,6 +246,7 @@ mkdir -p data && sudo chown -R 65534:65534 data
 ## 项目结构
 
 ```text
+api/                    HTTP API 的 OpenAPI 3.1 契约
 cmd/model-uptime/       进程入口：参数、信号与应用启动
 internal/
   app/                  依赖装配与生命周期管理

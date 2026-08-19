@@ -42,9 +42,7 @@ class FakeNode {
 
   append(...nodes) {
     for (const input of nodes) {
-      const node = typeof input === 'string'
-        ? this.ownerDocument.createTextNode(input)
-        : input;
+      const node = typeof input === 'string' ? this.ownerDocument.createTextNode(input) : input;
       if (node.nodeType === 11) {
         this.append(...node.childNodes.slice());
         node.childNodes = [];
@@ -247,9 +245,7 @@ export function findFirst(root, predicate) {
 
 export function createStatusDocument() {
   const document = new FakeDocument();
-  for (const id of [
-    'banner-out', 'svc-out', 'cmd-models', 'term-subtitle', 'probe-comment', 'updated', 'login-time',
-  ]) {
+  for (const id of ['banner-out', 'svc-out', 'cmd-models', 'term-subtitle', 'probe-comment', 'updated', 'login-time']) {
     document.registerElement(id);
   }
   document.registerElement('tip', 'div', 'tip');

@@ -3,8 +3,9 @@
 GO ?= go
 GOFMT ?= gofmt
 NODE ?= node
+NPM ?= npm
 GOVULNCHECK_VERSION ?= v1.7.0
-GO_PACKAGES ?= ./...
+GO_PACKAGES ?= $(shell $(GO) list ./... | sed '/\/node_modules\//d')
 GO_FILES := $(shell git ls-files --cached --others --exclude-standard -- '*.go' | while IFS= read -r file; do test ! -f "$$file" || printf '%s\n' "$$file"; done)
 
 .PHONY: ci check deployment-test fmt fmt-check js-check mod-check race test vet vuln web-test
@@ -44,8 +45,7 @@ deployment-test:
 	$(NODE) --test tests/deployment/*.test.js
 
 js-check:
-	@for file in internal/httpserver/web/assets/scripts/terminal-intro.js internal/httpserver/web/assets/scripts/status-page.js internal/httpserver/web/assets/scripts/heatmap-page.js internal/httpserver/web/assets/scripts/admin/*.js; do \
-		$(NODE) --check "$$file"; \
-	done
+	$(NPM) run lint
+	$(NPM) run format:check
 
 ci: check race js-check web-test deployment-test vuln

@@ -32,7 +32,7 @@ export function axisLabels(historyLength, intervalSeconds) {
     if (seconds >= 3600) return `-${(seconds / 3600).toFixed(1)}h`;
     return `-${Math.round(seconds / 60)}m`;
   };
-  return [0, 1, 2, 3, 4].map(index => formatAgo(Math.round(windowSeconds * (4 - index) / 4)));
+  return [0, 1, 2, 3, 4].map(index => formatAgo(Math.round((windowSeconds * (4 - index)) / 4)));
 }
 
 export function resultStatus(result, warningSeconds = 30) {
@@ -68,8 +68,9 @@ export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) 
     }
   }
 
-  const history = [...(service.history || [])].sort((left, right) =>
-    resultTime(left) - resultTime(right) || Number(left.ts) - Number(right.ts));
+  const history = [...(service.history || [])].sort(
+    (left, right) => resultTime(left) - resultTime(right) || Number(left.ts) - Number(right.ts),
+  );
   for (const [resultIndex, result] of history.entries()) {
     const coverageStart = resultTime(result);
     let coverageEnd = Math.max(coverageStart + intervalSeconds, Number(result.ts) || coverageStart);
@@ -84,8 +85,11 @@ export function buildTimeBuckets(service = {}, historyLength = 60, generatedAt) 
     for (const bucket of buckets) {
       if (bucket.kind === 'paused' || coverageStart >= bucket.to || coverageEnd <= bucket.from) continue;
       bucket.results.push(result);
-      if (!bucket.result || severity[kind] > severity[bucket.kind] ||
-          (severity[kind] === severity[bucket.kind] && Number(result.ts) >= Number(bucket.result.ts))) {
+      if (
+        !bucket.result ||
+        severity[kind] > severity[bucket.kind] ||
+        (severity[kind] === severity[bucket.kind] && Number(result.ts) >= Number(bucket.result.ts))
+      ) {
         bucket.kind = kind;
         bucket.result = result;
       }
@@ -177,8 +181,8 @@ function tooltipModel(event) {
   ];
   if (result.error) fields.push(['err', String(result.error).slice(0, 80)]);
   return {
-    status: event.kind === 'warning' ? 'WARNING' : (result.ok ? 'OK' : 'FAIL'),
-    statusClass: event.kind === 'warning' ? 'warn' : (result.ok ? 'ok' : 'bad'),
+    status: event.kind === 'warning' ? 'WARNING' : result.ok ? 'OK' : 'FAIL',
+    statusClass: event.kind === 'warning' ? 'warn' : result.ok ? 'ok' : 'bad',
     fields,
   };
 }
@@ -239,11 +243,12 @@ export function createStatusRenderer({
     const count = services.length;
     const down = services.filter(service => service.last && !service.last.ok).length;
     const warning = services.filter(service => resultStatus(service.last, service.warning_sec) === 'warning').length;
-    const overallStatus = down > 0 ? 'bad' : (warning > 0 ? 'warning' : 'ok');
+    const overallStatus = down > 0 ? 'bad' : warning > 0 ? 'warning' : 'ok';
     const statusChanged = previousOverallStatus !== null && previousOverallStatus !== overallStatus;
-    const averageUptime = count > 0
-      ? (services.reduce((sum, service) => sum + Number(service.uptime_pct || 0), 0) / count).toFixed(2)
-      : '100.00';
+    const averageUptime =
+      count > 0
+        ? (services.reduce((sum, service) => sum + Number(service.uptime_pct || 0), 0) / count).toFixed(2)
+        : '100.00';
 
     const summary = createElement(documentRef, 'div', 'line');
     appendSpan(documentRef, summary, formatTimeShort(data.generated_at), 'dim');
@@ -337,7 +342,7 @@ export function createStatusRenderer({
       if (last) {
         const status = resultStatus(last, service.warning_sec);
         statusClass = status === 'warning' ? 'warn' : status;
-        statusText = status === 'warning' ? 'slow' : (status === 'ok' ? 'online' : 'failing');
+        statusText = status === 'warning' ? 'slow' : status === 'ok' ? 'online' : 'failing';
       }
       const serviceStatus = last ? resultStatus(last, service.warning_sec) : 'pending';
       const key = serviceIdentity(service, index);
@@ -353,16 +358,19 @@ export function createStatusRenderer({
 
       const metadata = createElement(documentRef, 'div', 'svc-meta service-indent');
       const uptime = Number(service.uptime_pct || 0);
-      const uptimeClass = uptime >= 99 ? 'ok' : (uptime >= 95 ? 'warn' : 'bad');
+      const uptimeClass = uptime >= 99 ? 'ok' : uptime >= 95 ? 'warn' : 'bad';
       if (page.show_uptime) metadata.append(metric(documentRef, 'uptime', `${uptime.toFixed(2)}%`, uptimeClass));
       if (page.show_samples) {
         const observedBuckets = buckets.filter(bucket =>
-          ['ok', 'warning', 'bad', 'probing'].includes(bucket.kind)).length;
+          ['ok', 'warning', 'bad', 'probing'].includes(bucket.kind),
+        ).length;
         metadata.append(metric(documentRef, 'coverage', `${observedBuckets}/${historyLength}`));
       }
       if (page.show_latency && last) {
         const latencyStatus = resultStatus(last, service.warning_sec);
-        metadata.append(metric(documentRef, 'latency', `${last.latency_ms}ms`, latencyStatus === 'warning' ? 'warn' : latencyStatus));
+        metadata.append(
+          metric(documentRef, 'latency', `${last.latency_ms}ms`, latencyStatus === 'warning' ? 'warn' : latencyStatus),
+        );
       }
 
       const barsWrapper = createElement(documentRef, 'div', 'service-indent service-bars');
@@ -381,7 +389,8 @@ export function createStatusRenderer({
     const page = data.page || {};
     documentRef.title = page.title || 'model-uptime // status';
     documentRef.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
-    documentRef.getElementById('probe-comment').textContent = `# ${page.probe_comment || 'model-uptime · service health and performance'}`;
+    documentRef.getElementById('probe-comment').textContent =
+      `# ${page.probe_comment || 'model-uptime · service health and performance'}`;
     renderBanner(data, page);
     renderServices(data.services || [], page, data.generated_at);
     documentRef.getElementById('updated').textContent = formatTimeShort(data.generated_at);
@@ -426,7 +435,9 @@ export function createStatusPoller({
       renderError(error);
     } finally {
       if (active && currentEpoch === epoch && sequence === requestSequence) {
-        timer = schedule(() => { void request(currentEpoch); }, refreshSeconds * 1000);
+        timer = schedule(() => {
+          void request(currentEpoch);
+        }, refreshSeconds * 1000);
       }
     }
   }
@@ -463,11 +474,19 @@ export function startStatusPage({
   now = () => Date.now(),
 } = {}) {
   documentRef.getElementById('login-time').textContent = formatTime(Math.floor(now() / 1000));
-  const renderer = createStatusRenderer({ document: documentRef, window: windowRef, schedule, cancel });
+  const renderer = createStatusRenderer({
+    document: documentRef,
+    window: windowRef,
+    schedule,
+    cancel,
+  });
   const intro = createTerminalIntro({
     root: documentRef.getElementById('terminal'),
     schedule,
-    disabled: terminalMotionDisabled({ document: documentRef, window: windowRef }),
+    disabled: terminalMotionDisabled({
+      document: documentRef,
+      window: windowRef,
+    }),
     stages: [
       {
         command: documentRef.getElementById('command-uptime'),

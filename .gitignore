@@ -6,6 +6,7 @@ data/
 
 # 构建产物
 bin/
+node_modules/
 *.exe
 
 # 系统文件

@@ -4,6 +4,17 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/web/*.test.js tests/deployment/*.test.js",
-    "check:js": "for file in internal/httpserver/web/assets/scripts/terminal-intro.js internal/httpserver/web/assets/scripts/status-page.js internal/httpserver/web/assets/scripts/heatmap-page.js internal/httpserver/web/assets/scripts/admin/*.js; do node --check \"$file\"; done"
+    "check:js": "npm run lint",
+    "lint": "eslint \"internal/httpserver/web/assets/scripts/**/*.js\" \"tests/**/*.js\" eslint.config.js",
+    "format": "prettier --write \"internal/httpserver/web/assets/scripts/**/*.js\" \"tests/**/*.js\" eslint.config.js package.json api/openapi.yaml .prettierrc.json",
+    "format:check": "prettier --check \"internal/httpserver/web/assets/scripts/**/*.js\" \"tests/**/*.js\" eslint.config.js package.json api/openapi.yaml .prettierrc.json"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "12.1.0",
+    "@eslint/js": "10.0.1",
+    "eslint": "10.8.1",
+    "globals": "17.11.0",
+    "prettier": "3.9.6",
+    "yaml": "2.9.0"
   }
 }

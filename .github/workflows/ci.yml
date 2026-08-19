@@ -38,6 +38,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install JavaScript tooling
+        run: npm ci
 
       - name: Check formatting, modules, and vet
         run: make check

@@ -49,14 +49,16 @@ function appendMetric(documentRef, parent, label, value, valueClass = '') {
 }
 
 function statusLabel(status) {
-  return {
-    healthy: 'HEALTHY',
-    warning: 'WARNING',
-    failing: 'FAILING',
-    insufficient: 'INSUFFICIENT DATA',
-    unobserved: 'NO DATA',
-    pending: 'PENDING',
-  }[status] || String(status).toUpperCase();
+  return (
+    {
+      healthy: 'HEALTHY',
+      warning: 'WARNING',
+      failing: 'FAILING',
+      insufficient: 'INSUFFICIENT DATA',
+      unobserved: 'NO DATA',
+      pending: 'PENDING',
+    }[status] || String(status).toUpperCase()
+  );
 }
 
 function statusTone(status) {
@@ -67,11 +69,12 @@ function statusTone(status) {
 }
 
 export function cellTooltipModel(cell) {
-  const fields = [
-    ['period', `${formatBeijingTime(cell.start_ts)} – ${formatBeijingTime(cell.end_ts)}`],
-  ];
+  const fields = [['period', `${formatBeijingTime(cell.start_ts)} – ${formatBeijingTime(cell.end_ts)}`]];
   if (cell.expected_samples > 0) {
-    fields.push(['coverage', `${Number(cell.coverage_pct || 0).toFixed(1)}% (${cell.actual_samples}/${cell.expected_samples})`]);
+    fields.push([
+      'coverage',
+      `${Number(cell.coverage_pct || 0).toFixed(1)}% (${cell.actual_samples}/${cell.expected_samples})`,
+    ]);
   }
   if (cell.actual_samples > 0) {
     fields.push(
@@ -84,15 +87,26 @@ export function cellTooltipModel(cell) {
       fields.push(['avg / p95', `${formatLatency(cell.avg_latency_ms)} / ${formatLatency(cell.p95_latency_ms)}`]);
     }
   }
-  return { status: statusLabel(cell.status), statusClass: statusTone(cell.status), fields };
+  return {
+    status: statusLabel(cell.status),
+    statusClass: statusTone(cell.status),
+    fields,
+  };
 }
 
 function percentage(count, total) {
-  return `${(Number(count || 0) / Number(total || 1) * 100).toFixed(1)}%`;
+  return `${((Number(count || 0) / Number(total || 1)) * 100).toFixed(1)}%`;
 }
 
 function currentStatusLabel(status) {
-  return { healthy: 'online', warning: 'slow', failing: 'failing', pending: 'pending' }[status] || status;
+  return (
+    {
+      healthy: 'online',
+      warning: 'slow',
+      failing: 'failing',
+      pending: 'pending',
+    }[status] || status
+  );
 }
 
 export function gridLayout(range, rows = [], columns = [], cells = []) {
@@ -100,20 +114,22 @@ export function gridLayout(range, rows = [], columns = [], cells = []) {
   if (range === '30d') {
     return {
       columnCount: rows.length,
-      rows: Array.from({ length: sourceColumnCount }, (_, columnIndex) => (
+      rows: Array.from({ length: sourceColumnCount }, (_, columnIndex) =>
         rows.map((_, rowIndex) => {
           const sourceIndex = rowIndex * sourceColumnCount + columnIndex;
           return { cell: cells[sourceIndex], sourceIndex };
-        })
-      )),
+        }),
+      ),
     };
   }
   return {
     columnCount: sourceColumnCount,
-    rows: rows.map((_, rowIndex) => (
-      cells.slice(rowIndex * sourceColumnCount, (rowIndex + 1) * sourceColumnCount)
-        .map((cell, columnIndex) => ({ cell, sourceIndex: rowIndex * sourceColumnCount + columnIndex }))
-    )),
+    rows: rows.map((_, rowIndex) =>
+      cells.slice(rowIndex * sourceColumnCount, (rowIndex + 1) * sourceColumnCount).map((cell, columnIndex) => ({
+        cell,
+        sourceIndex: rowIndex * sourceColumnCount + columnIndex,
+      })),
+    ),
   };
 }
 
@@ -130,24 +146,26 @@ function isDescendant(root, node) {
   return false;
 }
 
-export function createHeatmapRenderer({
-  document: documentRef,
-  window: windowRef,
-  scheduleFrame,
-  cancelFrame,
-} = {}) {
+export function createHeatmapRenderer({ document: documentRef, window: windowRef, scheduleFrame, cancelFrame } = {}) {
   if (!documentRef) throw new Error('document is required');
   const output = documentRef.getElementById('heatmap-out');
   const tip = documentRef.getElementById('tip');
   const cellModels = new WeakMap();
   const cellSignatures = new WeakMap();
   const cellPeriodLabels = new Map();
-  const schedule = scheduleFrame || (typeof windowRef?.requestAnimationFrame === 'function'
-    ? callback => windowRef.requestAnimationFrame(callback)
-    : callback => { callback(); return null; });
-  const cancel = cancelFrame || (typeof windowRef?.cancelAnimationFrame === 'function'
-    ? handle => windowRef.cancelAnimationFrame(handle)
-    : () => {});
+  const schedule =
+    scheduleFrame ||
+    (typeof windowRef?.requestAnimationFrame === 'function'
+      ? callback => windowRef.requestAnimationFrame(callback)
+      : callback => {
+          callback();
+          return null;
+        });
+  const cancel =
+    cancelFrame ||
+    (typeof windowRef?.cancelAnimationFrame === 'function'
+      ? handle => windowRef.cancelAnimationFrame(handle)
+      : () => {});
   let pendingFrame = null;
   let renderVersion = 0;
   let renderedLayoutKey = '';
@@ -189,10 +207,19 @@ export function createHeatmapRenderer({
 
   function cellSignature(cell) {
     return [
-      cell.start_ts, cell.end_ts, cell.status, cell.intensity, cell.coverage_pct,
-      cell.actual_samples, cell.expected_samples, cell.healthy_samples,
-      cell.warning_samples, cell.failed_samples, cell.uptime_pct,
-      cell.avg_latency_ms, cell.p95_latency_ms,
+      cell.start_ts,
+      cell.end_ts,
+      cell.status,
+      cell.intensity,
+      cell.coverage_pct,
+      cell.actual_samples,
+      cell.expected_samples,
+      cell.healthy_samples,
+      cell.warning_samples,
+      cell.failed_samples,
+      cell.uptime_pct,
+      cell.avg_latency_ms,
+      cell.p95_latency_ms,
     ].join('|');
   }
 
@@ -261,7 +288,7 @@ export function createHeatmapRenderer({
     const rowCount = Number(grid.getAttribute('data-row-count')) || 1;
     const row = Math.floor(index / columnCount);
     const column = index % columnCount;
-    let nextIndex = index;
+    let nextIndex;
     switch (event.key) {
       case 'ArrowLeft':
         nextIndex = column > 0 ? index - 1 : index;
@@ -337,12 +364,33 @@ export function createHeatmapRenderer({
     heading.append(createElement(documentRef, 'span', 'mute', '→'));
     appendText(documentRef, heading, ' ');
     heading.append(createElement(documentRef, 'span', 'cmd bold heatmap-model-name', service.model));
-    heading.append(createElement(documentRef, 'span', 'heatmap-provider', service.provider ? ` · ${service.provider}` : ''));
-    heading.append(createElement(documentRef, 'span', `heatmap-current ${service.status}`, ` · ● ${currentStatusLabel(service.status)}`));
+    heading.append(
+      createElement(documentRef, 'span', 'heatmap-provider', service.provider ? ` · ${service.provider}` : ''),
+    );
+    heading.append(
+      createElement(
+        documentRef,
+        'span',
+        `heatmap-current ${service.status}`,
+        ` · ● ${currentStatusLabel(service.status)}`,
+      ),
+    );
 
     const summary = createElement(documentRef, 'div', 'svc-meta service-indent heatmap-summary');
-    appendMetric(documentRef, summary, 'uptime', service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—', 'heatmap-uptime-value');
-    appendMetric(documentRef, summary, 'p95', service.latency_samples ? formatLatency(service.p95_latency_ms) : '—', 'heatmap-p95-value');
+    appendMetric(
+      documentRef,
+      summary,
+      'uptime',
+      service.samples ? `${Number(service.uptime_pct || 0).toFixed(2)}%` : '—',
+      'heatmap-uptime-value',
+    );
+    appendMetric(
+      documentRef,
+      summary,
+      'p95',
+      service.latency_samples ? formatLatency(service.p95_latency_ms) : '—',
+      'heatmap-p95-value',
+    );
 
     const grid = createElement(documentRef, 'div', 'heat-grid service-indent');
     grid.setAttribute('role', 'grid');
@@ -422,9 +470,9 @@ export function createHeatmapRenderer({
 
   function restoreFocusedCell(panel, focusedCell) {
     if (!focusedCell || panel.getAttribute('data-service-id') !== focusedCell.serviceID) return;
-    const replacement = [...panel.querySelectorAll('.heat-cell')].find(cell => (
-      cell.getAttribute('data-cell-index') === focusedCell.cellIndex
-    ));
+    const replacement = [...panel.querySelectorAll('.heat-cell')].find(
+      cell => cell.getAttribute('data-cell-index') === focusedCell.cellIndex,
+    );
     replacement?.focus();
   }
 
@@ -432,16 +480,18 @@ export function createHeatmapRenderer({
     const version = ++renderVersion;
     cancelPendingRender();
     const activeElement = documentRef.activeElement;
-    const focusedCell = activeElement?.classList?.contains('heat-cell') && isDescendant(output, activeElement)
-      ? {
-          serviceID: activeElement.getAttribute('data-service-id'),
-          cellIndex: activeElement.getAttribute('data-cell-index'),
-        }
-      : null;
+    const focusedCell =
+      activeElement?.classList?.contains('heat-cell') && isDescendant(output, activeElement)
+        ? {
+            serviceID: activeElement.getAttribute('data-service-id'),
+            cellIndex: activeElement.getAttribute('data-cell-index'),
+          }
+        : null;
     hideTooltip();
     documentRef.title = `${data.page?.title || 'model-uptime'} // heatmap`;
     documentRef.getElementById('term-subtitle').textContent = data.page?.subtitle || 'model-uptime';
-    documentRef.getElementById('probe-comment').textContent = `# ${data.page?.probe_comment || 'model-uptime · service health and performance'}`;
+    documentRef.getElementById('probe-comment').textContent =
+      `# ${data.page?.probe_comment || 'model-uptime · service health and performance'}`;
     const rangeChanged = previousRange !== null && previousRange !== data.range;
     activeRange.textContent = rangeLabel(data.range);
     if (rangeChanged) {
@@ -461,9 +511,13 @@ export function createHeatmapRenderer({
     const layoutKey = `${data.range}|${(data.rows || []).length}|${(data.columns || []).length}`;
     const serviceKey = JSON.stringify(services.map(service => service.id));
     const panels = [...output.querySelectorAll('.heatmap-panel')];
-    if (renderedComplete && renderedLayoutKey === layoutKey && renderedServiceKey === serviceKey
-      && panels.length === services.length
-      && panels.every((panel, index) => updatePanel(panel, services[index], data))) {
+    if (
+      renderedComplete &&
+      renderedLayoutKey === layoutKey &&
+      renderedServiceKey === serviceKey &&
+      panels.length === services.length &&
+      panels.every((panel, index) => updatePanel(panel, services[index], data))
+    ) {
       return;
     }
 
@@ -552,7 +606,9 @@ export function createHeatmapPoller({
       renderError(error);
     } finally {
       if (active && visible && currentSequence === sequence) {
-        timer = schedule(() => { void request(); }, refreshMS);
+        timer = schedule(() => {
+          void request();
+        }, refreshMS);
       }
     }
   }
@@ -604,11 +660,17 @@ export function startHeatmapPage({
   documentRef.getElementById('login-time').textContent = formatBeijingTime(Math.floor(now() / 1000));
   documentRef.getElementById('active-range').textContent = rangeLabel(initialRange);
   const heatmapCommand = documentRef.getElementById('command-heatmap');
-  const renderer = createHeatmapRenderer({ document: documentRef, window: windowRef });
+  const renderer = createHeatmapRenderer({
+    document: documentRef,
+    window: windowRef,
+  });
   const intro = createTerminalIntro({
     root: documentRef.getElementById('terminal'),
     schedule,
-    disabled: terminalMotionDisabled({ document: documentRef, window: windowRef }),
+    disabled: terminalMotionDisabled({
+      document: documentRef,
+      window: windowRef,
+    }),
     stages: [
       {
         command: heatmapCommand,

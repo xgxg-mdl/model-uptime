@@ -86,7 +86,10 @@ export function createUpdateController({
       }
       if (now() >= deadline) {
         storage.removeItem(UPDATE_TARGET_KEY);
-        renderUpdateError(documentRef, `The service did not return with ${target} within 11 minutes. Check Docker logs on the host.`);
+        renderUpdateError(
+          documentRef,
+          `The service did not return with ${target} within 11 minutes. Check Docker logs on the host.`,
+        );
         return;
       }
       pollTimer = schedule(run, 2000);
@@ -98,10 +101,7 @@ export function createUpdateController({
     const check = element('update-check-btn');
     check.disabled = true;
     try {
-      const data = await api(
-        force ? '/api/admin/update/check' : '/api/admin/update',
-        force ? { method: 'POST' } : {},
-      );
+      const data = await api(force ? '/api/admin/update/check' : '/api/admin/update', force ? { method: 'POST' } : {});
       render(data);
       const target = storage.getItem(UPDATE_TARGET_KEY);
       if (target && data.current_version === target) {
@@ -137,14 +137,20 @@ export function createUpdateController({
     }
   }
 
-  element('update-check-btn').addEventListener('click', () => { void load(true); });
-  element('update-start-btn').addEventListener('click', () => { void startUpdate(); });
+  element('update-check-btn').addEventListener('click', () => {
+    void load(true);
+  });
+  element('update-start-btn').addEventListener('click', () => {
+    void startUpdate();
+  });
 
   return {
     load,
     poll,
     startUpdate,
     stop: clearPollTimer,
-    get status() { return status; },
+    get status() {
+      return status;
+    },
   };
 }

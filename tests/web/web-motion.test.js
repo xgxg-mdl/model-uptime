@@ -70,20 +70,29 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.match(statusHTML, /class="term terminal-intro"/);
   assert.match(statusHTML, /id="command-uptime"/);
   assert.match(statusHTML, /id="command-monitor"/);
-  assert.match(statusHTML, /class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/);
+  assert.match(
+    statusHTML,
+    /class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/,
+  );
   assert.match(heatmapHTML, /class="term heatmap-term terminal-intro"/);
   assert.match(heatmapHTML, /id="command-heatmap-monitor"/);
   assert.match(heatmapHTML, /id="command-heatmap"/);
-  assert.match(heatmapHTML, /id="command-heatmap-monitor"[^>]*>[\s\S]*?class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/);
+  assert.match(
+    heatmapHTML,
+    /id="command-heatmap-monitor"[^>]*>[\s\S]*?class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/,
+  );
   assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*normal;/s);
   assert.match(statusCSS, /\.terminal-command-text\s*{[^}]*display:\s*inline;[^}]*white-space:\s*normal;/s);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?body\s*{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.term\s*{[^}]*height:\s*auto;[^}]*max-height:\s*100%;/);
   assert.doesNotMatch(statusCSS, /\.term\s*{[^}]*\n\s*height:\s*100%;/);
-  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-color:\s*rgba\(138, 138, 148, 0\.42\) transparent;[^}]*scrollbar-width:\s*thin;/);
+  assert.match(
+    statusCSS,
+    /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-color:\s*rgba\(138, 138, 148, 0\.42\) transparent;[^}]*scrollbar-width:\s*thin;/,
+  );
   assert.doesNotMatch(statusCSS, /scrollbar-gutter:/);
-  assert.match(statusCSS, /\.body::\-webkit-scrollbar\s*{\s*width:\s*8px;/);
-  assert.match(statusCSS, /\.body::\-webkit-scrollbar-thumb\s*{[^}]*background:\s*rgba\(138, 138, 148, 0\.42\);/);
+  assert.match(statusCSS, /\.body::-webkit-scrollbar\s*{\s*width:\s*8px;/);
+  assert.match(statusCSS, /\.body::-webkit-scrollbar-thumb\s*{[^}]*background:\s*rgba\(138, 138, 148, 0\.42\);/);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 
@@ -95,7 +104,10 @@ test('管理页背景固定且不重复，避免内容高度变化时出现渐�
 
 test('首次渲染不播放变化动效，整体状态实际变化时才播放', () => {
   const document = createStatusDocument();
-  const renderer = createStatusRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createStatusRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   const banner = document.getElementById('banner-out');
 
   renderer.render(statusData([service('a', true)]));
@@ -116,7 +128,10 @@ test('首次渲染不播放变化动效，整体状态实际变化时才播放',
 
 test('同名服务重排后仍按稳定 ID 标记真正变化的服务', () => {
   const document = createStatusDocument();
-  const renderer = createStatusRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createStatusRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   const output = document.getElementById('svc-out');
 
   renderer.render(statusData([service('a', true), service('b', false)]));

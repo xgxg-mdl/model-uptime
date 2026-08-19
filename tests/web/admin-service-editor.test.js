@@ -38,7 +38,10 @@ test('服务列表按通知排序字段排列，缺失值放在末尾', () => {
     { id: 'first', name: 'First', sort_order: 10 },
   ];
   services.sort(compareServiceOrder);
-  assert.deepEqual(services.map(service => service.id), ['first', 'later', 'missing']);
+  assert.deepEqual(
+    services.map(service => service.id),
+    ['first', 'later', 'missing'],
+  );
 });
 
 test('编辑会话拒绝重复保存', () => {
@@ -68,7 +71,10 @@ test('旧保存完成后不能关闭或锁定新编辑草稿', () => {
 
   state.finishSave(staleSave.version);
   assert.equal(state.editingID, 'service-2');
-  assert.deepEqual(state.beginSave(), { version: currentVersion, serviceID: 'service-2' });
+  assert.deepEqual(state.beginSave(), {
+    version: currentVersion,
+    serviceID: 'service-2',
+  });
 });
 
 test('编辑器展开遵守 reduced-motion 设置', () => {

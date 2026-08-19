@@ -10,7 +10,12 @@ import { createElementDocument } from './helpers/fake-dom.js';
 
 function introElements() {
   const document = createElementDocument([
-    'terminal', 'command-one', 'command-two', 'output-one', 'args-two', 'output-two',
+    'terminal',
+    'command-one',
+    'command-two',
+    'output-one',
+    'args-two',
+    'output-two',
   ]);
   document.getElementById('terminal').className = 'term terminal-intro';
   return document;
@@ -44,7 +49,10 @@ test('命令依次输入并等待首批数据后显示输出', () => {
 
   intro.start();
   intro.start();
-  assert.deepEqual(scheduled.map(task => task.delay), [10]);
+  assert.deepEqual(
+    scheduled.map(task => task.delay),
+    [10],
+  );
 
   scheduled.shift().callback();
   assert.ok(document.getElementById('command-one').classList.contains('terminal-command-active'));
@@ -85,11 +93,13 @@ test('数据先返回时在命令输入完成后立即继续', () => {
       scheduled.push({ callback, delay });
       return scheduled.length;
     },
-    stages: [{
-      command: document.getElementById('command-one'),
-      duration: 100,
-      reveal: [document.getElementById('output-one')],
-    }],
+    stages: [
+      {
+        command: document.getElementById('command-one'),
+        duration: 100,
+        reveal: [document.getElementById('output-one')],
+      },
+    ],
     initialDelay: 0,
     revealDuration: 30,
   });
@@ -126,10 +136,10 @@ test('动态模型属于命令文本并决定完整输入时长', () => {
     },
   });
 
-  assert.deepEqual(
-    commandTypingMetrics(fullCommand),
-    { characters: 83, duration: 1660 },
-  );
+  assert.deepEqual(commandTypingMetrics(fullCommand), {
+    characters: 83,
+    duration: 1660,
+  });
   intro.setDataReady();
   intro.start();
   scheduled.shift().callback();
@@ -149,20 +159,28 @@ test('动态模型属于命令文本并决定完整输入时长', () => {
 });
 
 test('reduced-motion 和后台页面直接显示最终状态', () => {
-  assert.equal(terminalMotionDisabled({
-    document: { visibilityState: 'visible' },
-    window: { matchMedia: () => ({ matches: true }) },
-  }), true);
-  assert.equal(terminalMotionDisabled({
-    document: { visibilityState: 'hidden' },
-    window: { matchMedia: () => ({ matches: false }) },
-  }), true);
+  assert.equal(
+    terminalMotionDisabled({
+      document: { visibilityState: 'visible' },
+      window: { matchMedia: () => ({ matches: true }) },
+    }),
+    true,
+  );
+  assert.equal(
+    terminalMotionDisabled({
+      document: { visibilityState: 'hidden' },
+      window: { matchMedia: () => ({ matches: false }) },
+    }),
+    true,
+  );
 
   const document = introElements();
   const intro = createTerminalIntro({
     root: document.getElementById('terminal'),
     stages: [{ command: document.getElementById('command-one'), duration: 100 }],
-    schedule() { throw new Error('关闭动效后不应创建定时任务'); },
+    schedule() {
+      throw new Error('关闭动效后不应创建定时任务');
+    },
     disabled: true,
   });
   intro.start();

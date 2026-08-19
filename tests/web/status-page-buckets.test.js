@@ -49,23 +49,43 @@ function service(overrides = {}) {
 
 function render(data) {
   const document = createStatusDocument();
-  const renderer = createStatusRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createStatusRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   renderer.render(data);
   return { document, renderer };
 }
 
 test('完整时间桶使用固定边界并接收不同启动相位的观测周期', () => {
-  const buckets = buildTimeBuckets(service({
-    observed_since: 145,
-    history: [145, 205, 265, 325, 385].map(startedAt => ({
-      ts: startedAt + 5, started_at: startedAt, ok: true, latency_ms: 10,
-    })),
-  }), 5, 420);
+  const buckets = buildTimeBuckets(
+    service({
+      observed_since: 145,
+      history: [145, 205, 265, 325, 385].map(startedAt => ({
+        ts: startedAt + 5,
+        started_at: startedAt,
+        ok: true,
+        latency_ms: 10,
+      })),
+    }),
+    5,
+    420,
+  );
 
-  assert.deepEqual(buckets.map(bucket => bucket.kind), ['ok', 'ok', 'ok', 'ok', 'ok']);
-  assert.deepEqual(buckets.map(bucket => [bucket.from, bucket.to]), [
-    [120, 180], [180, 240], [240, 300], [300, 360], [360, 420],
-  ]);
+  assert.deepEqual(
+    buckets.map(bucket => bucket.kind),
+    ['ok', 'ok', 'ok', 'ok', 'ok'],
+  );
+  assert.deepEqual(
+    buckets.map(bucket => [bucket.from, bucket.to]),
+    [
+      [120, 180],
+      [180, 240],
+      [240, 300],
+      [300, 360],
+      [360, 420],
+    ],
+  );
 });
 
 test('当前 interval 内刷新时保持完整时间桶边界固定', () => {
@@ -78,28 +98,37 @@ test('当前 interval 内刷新时保持完整时间桶边界固定', () => {
 });
 
 test('完整时间桶区分启动前、暂停、缺失并聚合同桶最严重结果', () => {
-  const buckets = buildTimeBuckets(service({
-    observed_since: 170,
-    history: [
-      { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
-      { ts: 255, started_at: 250, ok: true, latency_ms: 20 },
-      { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
-    ],
-    pauses: [{ from: 300, to: 360 }],
-  }), 5, 420);
+  const buckets = buildTimeBuckets(
+    service({
+      observed_since: 170,
+      history: [
+        { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
+        { ts: 255, started_at: 250, ok: true, latency_ms: 20 },
+        { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
+      ],
+      pauses: [{ from: 300, to: 360 }],
+    }),
+    5,
+    420,
+  );
 
-  assert.deepEqual(buckets.map(bucket => bucket.kind), [
-    'not-started', 'ok', 'bad', 'paused', 'unobserved',
-  ]);
+  assert.deepEqual(
+    buckets.map(bucket => bucket.kind),
+    ['not-started', 'ok', 'bad', 'paused', 'unobserved'],
+  );
   assert.equal(buckets[2].results.length, 3);
   assert.equal(buckets[2].result.ok, false);
 });
 
 test('跨过完整桶的在途请求覆盖上一结果的尾部并显示 probing', () => {
-  const buckets = buildTimeBuckets(service({
-    history: [{ ts: 421, started_at: 359, ok: true, latency_ms: 62_000 }],
-    current_probe_started_at: 421,
-  }), 5, 480);
+  const buckets = buildTimeBuckets(
+    service({
+      history: [{ ts: 421, started_at: 359, ok: true, latency_ms: 62_000 }],
+      current_probe_started_at: 421,
+    }),
+    5,
+    480,
+  );
 
   assert.equal(buckets.at(-1).results.length, 1);
   assert.equal(buckets.at(-1).kind, 'probing');
@@ -107,31 +136,40 @@ test('跨过完整桶的在途请求覆盖上一结果的尾部并显示 probing
 });
 
 test('已完成探测覆盖请求耗时和正常调度间隔，不制造空桶', () => {
-  const buckets = buildTimeBuckets(service({
-    observed_since: 120,
-    history: [
-      { ts: 190, started_at: 120, ok: true, latency_ms: 70_000 },
-      { ts: 260, started_at: 191, ok: true, latency_ms: 69_000 },
-      { ts: 330, started_at: 261, ok: true, latency_ms: 69_000 },
-      { ts: 400, started_at: 331, ok: true, latency_ms: 69_000 },
-    ],
-  }), 5, 420);
+  const buckets = buildTimeBuckets(
+    service({
+      observed_since: 120,
+      history: [
+        { ts: 190, started_at: 120, ok: true, latency_ms: 70_000 },
+        { ts: 260, started_at: 191, ok: true, latency_ms: 69_000 },
+        { ts: 330, started_at: 261, ok: true, latency_ms: 69_000 },
+        { ts: 400, started_at: 331, ok: true, latency_ms: 69_000 },
+      ],
+    }),
+    5,
+    420,
+  );
 
   assert.ok(buckets.every(bucket => bucket.kind !== 'unobserved'));
 });
 
 test('完整 interval 没有观测覆盖时仍保留真正的 no data', () => {
-  const buckets = buildTimeBuckets(service({
-    observed_since: 120,
-    history: [
-      { ts: 130, started_at: 120, ok: true, latency_ms: 10_000 },
-      { ts: 310, started_at: 300, ok: true, latency_ms: 10_000 },
-    ],
-  }), 5, 420);
+  const buckets = buildTimeBuckets(
+    service({
+      observed_since: 120,
+      history: [
+        { ts: 130, started_at: 120, ok: true, latency_ms: 10_000 },
+        { ts: 310, started_at: 300, ok: true, latency_ms: 10_000 },
+      ],
+    }),
+    5,
+    420,
+  );
 
-  assert.deepEqual(buckets.map(bucket => bucket.kind), [
-    'ok', 'unobserved', 'unobserved', 'ok', 'unobserved',
-  ]);
+  assert.deepEqual(
+    buckets.map(bucket => bucket.kind),
+    ['ok', 'unobserved', 'unobserved', 'ok', 'unobserved'],
+  );
 });
 
 test('底部刻度按固定 60 个时间桶显示相对分钟或小时', () => {
@@ -143,7 +181,6 @@ test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
   assert.equal(resultStatus({ ok: true, latency_ms: 30_000 }, 30), 'ok');
   assert.equal(resultStatus({ ok: true, latency_ms: 30_001 }, 30), 'warning');
   assert.equal(resultStatus({ ok: false, latency_ms: 31_000 }, 30), 'bad');
-
 });
 
 test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
@@ -159,12 +196,18 @@ test('监控命令的模型统一使用参数色，不映射服务可用性', ()
     history: [{ ts: 355, started_at: 350, ok: false, latency_ms: 12 }],
     last: { ts: 355, started_at: 350, ok: false, latency_ms: 12 },
   });
-  const { document } = render({ ...statusData(healthy), services: [healthy, failing] });
+  const { document } = render({
+    ...statusData(healthy),
+    services: [healthy, failing],
+  });
   const commandModels = document.getElementById('cmd-models');
 
   assert.equal(commandModels.textContent, ' gpt-5.6 gpt-5.4-mini');
   assert.ok(commandModels.children.every(model => model.classList.contains('str')));
-  assert.equal(commandModels.children.some(model => model.classList.contains('ok') || model.classList.contains('bad')), false);
+  assert.equal(
+    commandModels.children.some(model => model.classList.contains('ok') || model.classList.contains('bad')),
+    false,
+  );
 });
 
 test('慢响应在服务状态、历史条、耗时和总览中显示 warning', () => {
@@ -179,7 +222,9 @@ test('慢响应在服务状态、历史条、耗时和总览中显示 warning', 
   assert.ok(warningBar);
   assert.match(output.textContent, /slow/);
   assert.match(document.getElementById('banner-out').textContent, /warning/);
-  assert.ok(findAll(output, element => element.classList.contains('warn') && element.textContent === '30001ms').length > 0);
+  assert.ok(
+    findAll(output, element => element.classList.contains('warn') && element.textContent === '30001ms').length > 0,
+  );
 
   warningBar.dispatchEvent({ type: 'focus' });
   assert.match(document.getElementById('tip').textContent, /WARNING/);
@@ -197,9 +242,10 @@ test('状态页严格渲染完整时间桶并按观测覆盖统计 coverage', ()
   });
   const { document } = render(statusData(partial));
   const bars = findAll(document.getElementById('svc-out'), element => element.classList.contains('bar'));
-  assert.deepEqual(bars.map(bar => bar.className), [
-    'bar not-started', 'bar ok', 'bar bad', 'bar paused', 'bar unobserved',
-  ]);
+  assert.deepEqual(
+    bars.map(bar => bar.className),
+    ['bar not-started', 'bar ok', 'bar bad', 'bar paused', 'bar unobserved'],
+  );
   assert.match(document.getElementById('svc-out').textContent, /coverage 2\/5/);
 
   bars[4].dispatchEvent({ type: 'focus' });
@@ -223,8 +269,22 @@ test('状态页把服务字段和错误详情作为纯文本渲染', () => {
   const failing = service({
     name: injectedName,
     model: injectedName,
-    history: [{ ts: 355, started_at: 350, ok: false, latency_ms: 18, error: injectedError }],
-    last: { ts: 355, started_at: 350, ok: false, latency_ms: 18, error: injectedError },
+    history: [
+      {
+        ts: 355,
+        started_at: 350,
+        ok: false,
+        latency_ms: 18,
+        error: injectedError,
+      },
+    ],
+    last: {
+      ts: 355,
+      started_at: 350,
+      ok: false,
+      latency_ms: 18,
+      error: injectedError,
+    },
   });
   const { document } = render(statusData(failing));
   const output = document.getElementById('svc-out');
@@ -249,14 +309,13 @@ test('状态页把服务字段和错误详情作为纯文本渲染', () => {
 
 test('轮询采用服务端 refresh_sec 并在每次响应后更新间隔', async () => {
   const scheduled = [];
-  const responses = [
-    { page: { refresh_sec: 7 } },
-    { page: { refresh_sec: 2 } },
-  ];
+  const responses = [{ page: { refresh_sec: 7 } }, { page: { refresh_sec: 2 } }];
   const poller = createStatusPoller({
     fetchStatus: async () => responses.shift(),
     render() {},
-    renderError(error) { throw error; },
+    renderError(error) {
+      throw error;
+    },
     schedule(callback, delay) {
       scheduled.push({ callback, delay });
       return scheduled.length;
@@ -276,9 +335,15 @@ test('较慢的旧请求不能覆盖较新的刷新结果', async () => {
   const rendered = [];
   const poller = createStatusPoller({
     fetchStatus: () => new Promise(resolve => pending.push(resolve)),
-    render(data) { rendered.push(data.version); },
-    renderError(error) { throw error; },
-    schedule() { return 1; },
+    render(data) {
+      rendered.push(data.version);
+    },
+    renderError(error) {
+      throw error;
+    },
+    schedule() {
+      return 1;
+    },
     cancel() {},
   });
 

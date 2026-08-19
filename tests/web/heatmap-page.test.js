@@ -18,7 +18,14 @@ const css = readFileSync(new URL('../../internal/httpserver/web/assets/styles/he
 
 function heatmapDocument() {
   const document = createElementDocument([
-    'heatmap-out', 'tip', 'term-subtitle', 'probe-comment', 'active-range', 'cmd-models', 'updated', 'login-time',
+    'heatmap-out',
+    'tip',
+    'term-subtitle',
+    'probe-comment',
+    'active-range',
+    'cmd-models',
+    'updated',
+    'login-time',
   ]);
   document.getElementById('tip').className = 'tip';
   return document;
@@ -50,21 +57,40 @@ function data(overrides = {}) {
     timezone: 'Asia/Shanghai',
     rows: ['08-18'],
     columns: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
-    page: { title: 'Status', subtitle: 'model-uptime', probe_comment: 'Monitoring production models' },
-    services: [{
-      id: 'service-1',
-      model: 'gpt-5',
-      provider: 'OpenAI',
-      status: 'warning',
-      samples: 60,
-      latency_samples: 60,
-      uptime_pct: 99.5,
-      p95_latency_ms: 1500,
-      cells: [
-        cell({ status: 'warning', intensity: 2, warning_samples: 12, healthy_samples: 48 }),
-        ...Array.from({ length: 23 }, () => cell({ status: 'unobserved', intensity: 0, actual_samples: 0, expected_samples: 0, healthy_samples: 0 })),
-      ],
-    }],
+    page: {
+      title: 'Status',
+      subtitle: 'model-uptime',
+      probe_comment: 'Monitoring production models',
+    },
+    services: [
+      {
+        id: 'service-1',
+        model: 'gpt-5',
+        provider: 'OpenAI',
+        status: 'warning',
+        samples: 60,
+        latency_samples: 60,
+        uptime_pct: 99.5,
+        p95_latency_ms: 1500,
+        cells: [
+          cell({
+            status: 'warning',
+            intensity: 2,
+            warning_samples: 12,
+            healthy_samples: 48,
+          }),
+          ...Array.from({ length: 23 }, () =>
+            cell({
+              status: 'unobserved',
+              intensity: 0,
+              actual_samples: 0,
+              expected_samples: 0,
+              healthy_samples: 0,
+            }),
+          ),
+        ],
+      },
+    ],
     ...overrides,
   };
 }
@@ -74,7 +100,10 @@ test('热力图页面保留公开导航和响应式终端结构', () => {
   assert.match(html, /data-range="7d">7d<\/button>/);
   assert.match(html, /data-range="30d">30d<\/button>/);
   assert.match(html, /id="cmd-models"/);
-  assert.match(html, /id="command-heatmap-monitor"[^>]*>[\s\S]*?<span class="cmd">monitor<\/span>[\s\S]*?<span class="flag">--watch<\/span>[\s\S]*?id="cmd-models"/);
+  assert.match(
+    html,
+    /id="command-heatmap-monitor"[^>]*>[\s\S]*?<span class="cmd">monitor<\/span>[\s\S]*?<span class="flag">--watch<\/span>[\s\S]*?id="cmd-models"/,
+  );
   assert.match(html, /id="command-heatmap"[^>]*>[\s\S]*?<span class="cmd">heatmap<\/span>[\s\S]*?id="active-range"/);
   assert.ok(html.indexOf('id="command-heatmap"') < html.indexOf('id="command-heatmap-monitor"'));
   assert.match(html, /id="probe-comment"># …<\/span>/);
@@ -106,14 +135,20 @@ test('范围和北京时间格式采用稳定默认值', () => {
 
 test('热力图缺少顶部注释配置时使用两页共享默认值', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   renderer.render(data({ page: {} }));
   assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
 });
 
 test('范围切换只强调命令参数且首次渲染不播放', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   const activeRange = document.getElementById('active-range');
 
   renderer.render(data());
@@ -145,22 +180,37 @@ test('三种范围都形成无结构空位的完整二维矩阵', () => {
     { range: '30d', rowCount: 24, columnCount: 30, cells: 720 },
   ];
   for (const item of cases) {
-    const rows = Array.from({ length: item.range === '1d' ? 4 : Number.parseInt(item.range, 10) }, (_, index) => String(index));
-    const cells = Array.from({ length: item.cells }, (_, sourceIndex) => ({ sourceIndex }));
+    const rows = Array.from({ length: item.range === '1d' ? 4 : Number.parseInt(item.range, 10) }, (_, index) =>
+      String(index),
+    );
+    const cells = Array.from({ length: item.cells }, (_, sourceIndex) => ({
+      sourceIndex,
+    }));
     const layout = gridLayout(item.range, rows, columns, cells);
     assert.equal(layout.rows.length, item.rowCount);
     assert.equal(layout.columnCount, item.columnCount);
     assert.ok(layout.rows.every(row => row.length === item.columnCount));
     assert.equal(layout.rows.flat().length, item.cells);
   }
-  const transposed = gridLayout('30d', Array.from({ length: 30 }, (_, index) => String(index)), columns, Array.from({ length: 720 }, (_, sourceIndex) => ({ sourceIndex })));
-  assert.deepEqual(transposed.rows[0].slice(0, 3).map(item => item.sourceIndex), [0, 24, 48]);
+  const transposed = gridLayout(
+    '30d',
+    Array.from({ length: 30 }, (_, index) => String(index)),
+    columns,
+    Array.from({ length: 720 }, (_, sourceIndex) => ({ sourceIndex })),
+  );
+  assert.deepEqual(
+    transposed.rows[0].slice(0, 3).map(item => item.sourceIndex),
+    [0, 24, 48],
+  );
   assert.equal(transposed.rows[1][0].sourceIndex, 1);
 });
 
 test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   renderer.render(data());
 
   const output = document.getElementById('heatmap-out');
@@ -196,12 +246,17 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
 
 test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   const service = data().services[0];
-  renderer.render(data({
-    rows: ['08-17', '08-18'],
-    services: [{ ...service, cells: [...service.cells, ...service.cells] }],
-  }));
+  renderer.render(
+    data({
+      rows: ['08-17', '08-18'],
+      services: [{ ...service, cells: [...service.cells, ...service.cells] }],
+    }),
+  );
 
   const cells = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heat-cell'));
   assert.equal(cells.length, 48);
@@ -209,7 +264,14 @@ test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
 
   const keydown = (target, key) => {
     let prevented = false;
-    target.dispatchEvent({ type: 'keydown', key, bubbles: true, preventDefault() { prevented = true; } });
+    target.dispatchEvent({
+      type: 'keydown',
+      key,
+      bubbles: true,
+      preventDefault() {
+        prevented = true;
+      },
+    });
     assert.equal(prevented, true);
   };
   cells[0].focus();
@@ -228,18 +290,25 @@ test('二维网格使用单一 Tab 入口并支持方向键导航', () => {
 
 test('30d 将日期转为列并按源索引刷新单元格', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1280 } });
-  const sourceCells = Array.from({ length: 720 }, (_, index) => cell({
-    start_ts: 1_776_500_400 + index * 3600,
-    end_ts: 1_776_504_000 + index * 3600,
-    status: index === 24 ? 'warning' : 'healthy',
-  }));
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1280 },
+  });
+  const sourceCells = Array.from({ length: 720 }, (_, index) =>
+    cell({
+      start_ts: 1_776_500_400 + index * 3600,
+      end_ts: 1_776_504_000 + index * 3600,
+      status: index === 24 ? 'warning' : 'healthy',
+    }),
+  );
   const service = { ...data().services[0], cells: sourceCells };
-  renderer.render(data({
-    range: '30d',
-    rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
-    services: [service],
-  }));
+  renderer.render(
+    data({
+      range: '30d',
+      rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+      services: [service],
+    }),
+  );
 
   const output = document.getElementById('heatmap-out');
   const grid = findAll(output, element => element.getAttribute('role') === 'grid')[0];
@@ -253,33 +322,54 @@ test('30d 将日期转为列并按源索引刷新单元格', () => {
   assert.equal(cells[1].getAttribute('data-cell-index'), '24');
   assert.ok(cells[1].classList.contains('warning'));
 
-  const updatedCells = sourceCells.map((item, index) => index === 24 ? { ...item, status: 'failing' } : item);
-  renderer.render(data({
-    range: '30d',
-    rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
-    services: [{ ...service, cells: updatedCells }],
-  }));
+  const updatedCells = sourceCells.map((item, index) => (index === 24 ? { ...item, status: 'failing' } : item));
+  renderer.render(
+    data({
+      range: '30d',
+      rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+      services: [{ ...service, cells: updatedCells }],
+    }),
+  );
   assert.equal(findAll(output, element => element.classList.contains('heat-cell'))[1], cells[1]);
   assert.ok(cells[1].classList.contains('failing'));
 });
 
 test('相同网格的数据刷新复用节点并保留焦点', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   renderer.render(data());
-  const firstRenderCells = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heat-cell'));
+  const firstRenderCells = findAll(document.getElementById('heatmap-out'), element =>
+    element.classList.contains('heat-cell'),
+  );
   firstRenderCells[7].focus();
 
   const service = data().services[0];
-  renderer.render(data({
-    generated_at: 1_776_504_060,
-    services: [{
-      ...service,
-      status: 'failing',
-      cells: [cell({ status: 'failing', intensity: 5, failed_samples: 60, healthy_samples: 0 }), ...service.cells.slice(1)],
-    }],
-  }));
-  const secondRenderCells = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heat-cell'));
+  renderer.render(
+    data({
+      generated_at: 1_776_504_060,
+      services: [
+        {
+          ...service,
+          status: 'failing',
+          cells: [
+            cell({
+              status: 'failing',
+              intensity: 5,
+              failed_samples: 60,
+              healthy_samples: 0,
+            }),
+            ...service.cells.slice(1),
+          ],
+        },
+      ],
+    }),
+  );
+  const secondRenderCells = findAll(document.getElementById('heatmap-out'), element =>
+    element.classList.contains('heat-cell'),
+  );
   assert.equal(secondRenderCells[7], firstRenderCells[7]);
   assert.equal(document.activeElement, secondRenderCells[7]);
   assert.ok(secondRenderCells[0].classList.contains('failing'));
@@ -289,7 +379,10 @@ test('相同网格的数据刷新复用节点并保留焦点', () => {
 
 test('格子交互由输出容器统一委托', () => {
   const document = heatmapDocument();
-  const renderer = createHeatmapRenderer({ document, window: { innerWidth: 1024 } });
+  const renderer = createHeatmapRenderer({
+    document,
+    window: { innerWidth: 1024 },
+  });
   renderer.render(data());
 
   const output = document.getElementById('heatmap-out');
@@ -317,13 +410,15 @@ test('首次渲染先提交一个模型并逐帧追加其余模型', () => {
     cancelFrame() {},
   });
   const service = data().services[0];
-  renderer.render(data({
-    services: [
-      service,
-      { ...service, id: 'service-2', model: 'gpt-5-mini' },
-      { ...service, id: 'service-3', model: 'gpt-5-nano' },
-    ],
-  }));
+  renderer.render(
+    data({
+      services: [
+        service,
+        { ...service, id: 'service-2', model: 'gpt-5-mini' },
+        { ...service, id: 'service-3', model: 'gpt-5-nano' },
+      ],
+    }),
+  );
 
   const output = document.getElementById('heatmap-out');
   const panelCount = () => findAll(output, element => element.classList.contains('heatmap-panel')).length;
@@ -348,11 +443,13 @@ test('30d 单模型按固定格子预算渐进渲染，避免一次创建全部�
     cancelFrame() {},
   });
   const service = data().services[0];
-  renderer.render(data({
-    range: '30d',
-    rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
-    services: [{ ...service, cells: Array.from({ length: 720 }, () => cell()) }],
-  }));
+  renderer.render(
+    data({
+      range: '30d',
+      rows: Array.from({ length: 30 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+      services: [{ ...service, cells: Array.from({ length: 720 }, () => cell()) }],
+    }),
+  );
 
   const output = document.getElementById('heatmap-out');
   const cellCount = () => findAll(output, element => element.classList.contains('heat-cell')).length;
@@ -380,10 +477,12 @@ test('7d 单模型拆成两帧渲染，避免多模型时连续长任务', () =>
     cancelFrame() {},
   });
   const service = data().services[0];
-  renderer.render(data({
-    rows: Array.from({ length: 7 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
-    services: [{ ...service, cells: Array.from({ length: 168 }, () => cell()) }],
-  }));
+  renderer.render(
+    data({
+      rows: Array.from({ length: 7 }, (_, index) => `08-${String(index + 1).padStart(2, '0')}`),
+      services: [{ ...service, cells: Array.from({ length: 168 }, () => cell()) }],
+    }),
+  );
 
   const output = document.getElementById('heatmap-out');
   const cellCount = () => findAll(output, element => element.classList.contains('heat-cell')).length;
@@ -404,29 +503,42 @@ test('结构变化取消尚未提交的旧模型', () => {
       scheduled.push(task);
       return task;
     },
-    cancelFrame(task) { task.cancelled = true; },
+    cancelFrame(task) {
+      task.cancelled = true;
+    },
   });
   const service = data().services[0];
-  renderer.render(data({
-    services: [service, { ...service, id: 'stale-service', model: 'stale-model' }],
-  }));
-  renderer.render(data({
-    range: '1d',
-    services: [{ ...service, id: 'fresh-service', model: 'fresh-model' }],
-  }));
+  renderer.render(
+    data({
+      services: [service, { ...service, id: 'stale-service', model: 'stale-model' }],
+    }),
+  );
+  renderer.render(
+    data({
+      range: '1d',
+      services: [{ ...service, id: 'fresh-service', model: 'fresh-model' }],
+    }),
+  );
 
   assert.equal(scheduled[0].cancelled, true);
   scheduled[0].callback();
-  const panels = findAll(document.getElementById('heatmap-out'), element => element.classList.contains('heatmap-panel'));
+  const panels = findAll(document.getElementById('heatmap-out'), element =>
+    element.classList.contains('heatmap-panel'),
+  );
   assert.equal(panels.length, 1);
   assert.equal(panels[0].getAttribute('data-service-id'), 'fresh-service');
 });
 
 test('低覆盖率 tooltip 明确显示 insufficient data', () => {
-  const model = cellTooltipModel(cell({
-    status: 'insufficient', coverage_pct: 25, actual_samples: 1, expected_samples: 4,
-    healthy_samples: 1,
-  }));
+  const model = cellTooltipModel(
+    cell({
+      status: 'insufficient',
+      coverage_pct: 25,
+      actual_samples: 1,
+      expected_samples: 4,
+      healthy_samples: 1,
+    }),
+  );
   assert.equal(model.status, 'INSUFFICIENT DATA');
   assert.deepEqual(model.fields[1], ['coverage', '25.0% (1/4)']);
 });
@@ -437,10 +549,18 @@ test('轮询切换范围、隐藏暂停、恢复后立即刷新', async () => {
   const scheduled = [];
   const poller = createHeatmapPoller({
     initialRange: '7d',
-    fetchRange: async range => { requested.push(range); return { range }; },
+    fetchRange: async range => {
+      requested.push(range);
+      return { range };
+    },
     render: response => rendered.push(response.range),
-    renderError: error => { throw error; },
-    schedule(callback, delay) { scheduled.push({ callback, delay }); return scheduled.length; },
+    renderError: error => {
+      throw error;
+    },
+    schedule(callback, delay) {
+      scheduled.push({ callback, delay });
+      return scheduled.length;
+    },
     cancel() {},
   });
 

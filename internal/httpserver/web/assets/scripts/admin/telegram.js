@@ -10,9 +10,7 @@ export function normalizeTelegramTemplates(templates = {}) {
 }
 
 export function normalizeTelegramSubscription(subscription, templates = {}) {
-  const language = templates[subscription.language]
-    ? subscription.language
-    : DEFAULT_TELEGRAM_LANGUAGE;
+  const language = templates[subscription.language] ? subscription.language : DEFAULT_TELEGRAM_LANGUAGE;
   return {
     id: subscription.id || '',
     name: subscription.name || '',
@@ -25,22 +23,21 @@ export function normalizeTelegramSubscription(subscription, templates = {}) {
 }
 
 export async function sendTelegramTest({ subscription, results, save, api, toast, kind = 'event' }) {
-  const setResult = (state, text) => results.forEach(result => {
-    const base = result.id === 'tg-test-result'
-      ? 'test-result feedback-in'
-      : 'subscription-test-result feedback-in';
-    result.className = `${base} ${state}`.trim();
-    result.textContent = text;
-  });
+  const setResult = (state, text) =>
+    results.forEach(result => {
+      const base = result.id === 'tg-test-result' ? 'test-result feedback-in' : 'subscription-test-result feedback-in';
+      result.className = `${base} ${state}`.trim();
+      result.textContent = text;
+    });
   setResult('', 'saving config…');
   try {
     await save({ quiet: true });
     setResult('', kind === 'daily' ? 'sending daily test…' : 'sending test message…');
     await api('/api/admin/telegram/test', {
       method: 'POST',
-      body: JSON.stringify(kind === 'daily'
-        ? { subscription_id: subscription.id, kind }
-        : { subscription_id: subscription.id }),
+      body: JSON.stringify(
+        kind === 'daily' ? { subscription_id: subscription.id, kind } : { subscription_id: subscription.id },
+      ),
     });
     setResult('ok', 'test message sent');
     toast(`${kind === 'daily' ? 'Daily test' : 'Test message'} sent for ${subscription.name || subscription.id}`);
@@ -83,15 +80,17 @@ export function createTelegramController({
       picker.innerHTML = '<div class="empty" style="grid-column:1/-1;">no models available</div>';
       return;
     }
-    picker.innerHTML = services.map(service => {
-      const displayModel = service.model || service.name || service.id;
-      const detail = service.name && service.name !== displayModel ? ` · ${service.name}` : '';
-      const disabled = service.enabled ? '' : ' · disabled';
-      return `<label class="check-row ${service.enabled ? '' : 'disabled-label'}">
+    picker.innerHTML = services
+      .map(service => {
+        const displayModel = service.model || service.name || service.id;
+        const detail = service.name && service.name !== displayModel ? ` · ${service.name}` : '';
+        const disabled = service.enabled ? '' : ' · disabled';
+        return `<label class="check-row ${service.enabled ? '' : 'disabled-label'}">
         <input type="checkbox" value="${escapeHTML(service.id)}" ${selected.has(service.id) ? 'checked' : ''} />
         <span class="model-label"><b>${escapeHTML(displayModel)}</b>${escapeHTML(detail)} <span class="tag">#${escapeHTML(service.id)}</span>${disabled}</span>
       </label>`;
-    }).join('');
+      })
+      .join('');
   }
 
   function setServices(nextServices) {
@@ -106,9 +105,10 @@ export function createTelegramController({
       list.innerHTML = '<div class="empty">no subscriptions yet</div>';
       return;
     }
-    list.innerHTML = config.subscriptions.map((subscription, index) => {
-      const serviceCount = subscription.service_ids ? subscription.service_ids.length : 0;
-      return `<div class="subscription-row">
+    list.innerHTML = config.subscriptions
+      .map((subscription, index) => {
+        const serviceCount = subscription.service_ids ? subscription.service_ids.length : 0;
+        return `<div class="subscription-row">
         <div class="subscription-meta">
           <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${escapeHTML(subscription.name || subscription.id)}</b>
           <div class="subscription-summary">#${escapeHTML(subscription.id)} · chat ${escapeHTML(subscription.chat_id)} · ${escapeHTML(subscription.language)} · ${serviceCount} model${serviceCount === 1 ? '' : 's'}</div>
@@ -120,7 +120,8 @@ export function createTelegramController({
           <button class="btn bad" type="button" data-tg-action="delete" data-index="${index}">del</button>
         </div>
       </div>`;
-    }).join('');
+      })
+      .join('');
     list.querySelectorAll('[data-tg-action]').forEach(button => {
       button.addEventListener('click', () => {
         const index = Number(button.dataset.index);
@@ -141,13 +142,13 @@ export function createTelegramController({
       }
       config = {
         bot_token: '',
-        subscriptions: (next.subscriptions || []).map(subscription => normalizeTelegramSubscription(subscription, templates)),
+        subscriptions: (next.subscriptions || []).map(subscription =>
+          normalizeTelegramSubscription(subscription, templates),
+        ),
       };
       tokenConfigured = Boolean(next.bot_token || next.token_configured);
       element('tg-bot-token').value = '';
-      element('tg-bot-token').placeholder = tokenConfigured
-        ? 'configured — leave blank to keep'
-        : 'not configured';
+      element('tg-bot-token').placeholder = tokenConfigured ? 'configured — leave blank to keep' : 'not configured';
       renderSubscriptions();
       if (editingIndex !== null) {
         if (config.subscriptions[editingIndex]) openEditor(editingIndex);
@@ -162,9 +163,7 @@ export function createTelegramController({
 
   function openEditor(index = null) {
     editingIndex = index;
-    const subscription = index === null
-      ? normalizeTelegramSubscription({}, templates)
-      : config.subscriptions[index];
+    const subscription = index === null ? normalizeTelegramSubscription({}, templates) : config.subscriptions[index];
     element('tg-id').value = subscription.id;
     element('tg-id').disabled = index !== null;
     element('tg-name').value = subscription.name;
@@ -185,15 +184,18 @@ export function createTelegramController({
   }
 
   function collectSubscription() {
-    const subscription = normalizeTelegramSubscription({
-      id: element('tg-id').value.trim(),
-      name: element('tg-name').value.trim(),
-      enabled: element('tg-enabled').checked,
-      chat_id: element('tg-chat-id').value.trim(),
-      language: element('tg-language').value,
-      service_ids: selectedServiceIDs(),
-      template: element('tg-template').value.trim(),
-    }, templates);
+    const subscription = normalizeTelegramSubscription(
+      {
+        id: element('tg-id').value.trim(),
+        name: element('tg-name').value.trim(),
+        enabled: element('tg-enabled').checked,
+        chat_id: element('tg-chat-id').value.trim(),
+        language: element('tg-language').value,
+        service_ids: selectedServiceIDs(),
+        template: element('tg-template').value.trim(),
+      },
+      templates,
+    );
     if (!subscription.id || !subscription.name || !subscription.chat_id || !subscription.template) {
       throw new Error('ID, name, chat ID, and template are required');
     }
@@ -224,7 +226,10 @@ export function createTelegramController({
       bot_token: tokenInput.value.trim(),
       subscriptions: config.subscriptions,
     };
-    await api('/api/admin/telegram', { method: 'PUT', body: JSON.stringify(body) });
+    await api('/api/admin/telegram', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
     if (body.bot_token) tokenConfigured = true;
     tokenInput.value = '';
     tokenInput.placeholder = tokenConfigured ? 'configured — leave blank to keep' : 'not configured';
