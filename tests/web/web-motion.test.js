@@ -78,9 +78,12 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*normal;/s);
   assert.match(statusCSS, /\.terminal-command-text\s*{[^}]*display:\s*inline;[^}]*white-space:\s*normal;/s);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?body\s*{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
-  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-width:\s*thin;/);
+  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.term\s*{[^}]*height:\s*auto;[^}]*max-height:\s*100%;/);
+  assert.doesNotMatch(statusCSS, /\.term\s*{[^}]*\n\s*height:\s*100%;/);
+  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-color:\s*rgba\(138, 138, 148, 0\.42\) transparent;[^}]*scrollbar-width:\s*thin;/);
   assert.doesNotMatch(statusCSS, /scrollbar-gutter:/);
-  assert.match(statusCSS, /\.body::\-webkit-scrollbar-thumb\s*{[^}]*background:\s*#3a3a42;/);
+  assert.match(statusCSS, /\.body::\-webkit-scrollbar\s*{\s*width:\s*8px;/);
+  assert.match(statusCSS, /\.body::\-webkit-scrollbar-thumb\s*{[^}]*background:\s*rgba\(138, 138, 148, 0\.42\);/);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 

@@ -79,17 +79,21 @@ test('桌面端滚动收进管理窗口内容区', () => {
   for (const marker of [
     'height: 100dvh;',
     'overflow: hidden;',
-    'height: calc(100dvh - 80px);',
     'display: flex;',
-    'height: calc(100% - 30px);',
+    'flex-direction: column;',
+    'height: auto;',
+    'max-height: calc(100dvh - 80px);',
+    'flex: 0 1 auto;',
     'flex: 1 1 auto;',
     'overflow-y: auto;',
     'overscroll-behavior: contain;',
-    'scrollbar-color: #55555e transparent;',
-    '.admin-content::-webkit-scrollbar { width: 10px; }',
+    'scrollbar-color: rgba(138, 138, 148, 0.42) transparent;',
+    '.admin-content::-webkit-scrollbar { width: 8px; }',
   ]) {
     assert.ok(desktopCSS.includes(marker), `missing desktop scrolling style: ${marker}`);
   }
+  assert.doesNotMatch(desktopCSS, /\.admin-window\s*{[^}]*\n\s*height:\s*calc\(100dvh - 80px\);/);
+  assert.doesNotMatch(desktopCSS, /\.admin-surface\s*{[^}]*\n\s*height:\s*calc\(100% - 30px\);/);
   assert.doesNotMatch(desktopCSS, /scrollbar-gutter/);
 });
 

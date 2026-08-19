@@ -364,34 +364,39 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   }
 
   .admin-window {
-    height: calc(100dvh - 80px);
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    max-height: calc(100dvh - 80px);
   }
 
   .admin-surface {
     display: flex;
     flex-direction: column;
-    height: calc(100% - 30px);
+    flex: 0 1 auto;
     min-height: 0;
   }
+
+  .admin-surface > header { flex: 0 0 auto; }
 
   .admin-content {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-color: #55555e transparent;
+    scrollbar-color: rgba(138, 138, 148, 0.42) transparent;
     scrollbar-width: thin;
   }
 
-  .admin-content::-webkit-scrollbar { width: 10px; }
+  .admin-content::-webkit-scrollbar { width: 8px; }
   .admin-content::-webkit-scrollbar-track { background: transparent; }
   .admin-content::-webkit-scrollbar-thumb {
-    background: #3a3a42;
+    background: rgba(138, 138, 148, 0.42);
     background-clip: padding-box;
-    border: 3px solid transparent;
-    border-radius: 5px;
+    border: 2px solid transparent;
+    border-radius: 4px;
   }
-  .admin-content::-webkit-scrollbar-thumb:hover { background-color: #55555e; }
+  .admin-content::-webkit-scrollbar-thumb:hover { background-color: rgba(138, 138, 148, 0.68); }
 }
 
 @keyframes surface-in {
