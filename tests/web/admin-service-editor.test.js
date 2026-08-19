@@ -22,7 +22,7 @@ test('服务编辑器在列表之后原地展开且 ID 唯一', () => {
 
   assert.ok(servicePanelStart >= 0 && serviceListStart >= 0 && editorStart >= 0 && bulkEditorStart >= 0);
   assert.ok(editorStart > serviceListStart && editorStart < bulkEditorStart);
-  assert.match(html, /class="service-editor panel-reveal hidden" id="editor"/);
+  assert.match(html, /class="service-editor subwindow panel-reveal hidden" id="editor"/);
   assert.match(html, /role="region" aria-labelledby="editor-title"/);
   assert.doesNotMatch(html, /<section class="panel hidden" id="editor">/);
 

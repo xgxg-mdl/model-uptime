@@ -44,7 +44,7 @@ test('管理页使用外置资源并保留响应式结构', () => {
     'class="wrap admin-window"',
     'class="titlebar"',
     'class="lights" aria-hidden="true"',
-    'class="auth-view page-reveal" id="login-view"',
+    'class="auth-view subwindow page-reveal" id="login-view"',
     'id="login-title">Welcome back',
     'class="auth-input-row"',
     'class="product-lockup"',
@@ -91,7 +91,7 @@ test('认证页和管理页保持清晰的视觉层级', () => {
 
   const mobileOffset = adminCSS.indexOf('@media (max-width: 559px)');
   const mobileCSS = adminCSS.slice(mobileOffset);
-  assert.match(mobileCSS, /\.auth-view \{ grid-template-columns: 1fr;/);
+  assert.match(mobileCSS, /\.auth-window-body \{ grid-template-columns: 1fr;/);
   assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
 });
 
@@ -253,4 +253,28 @@ test('公共终端样式集中在基础层，页面样式只消费颜色变量',
   assert.match(foundationCSS, /@keyframes surface-in/);
   assert.doesNotMatch(adminCSS, /@keyframes surface-in/);
   assert.doesNotMatch(statusCSS, /@keyframes surface-in/);
+});
+
+test('登录与临时编辑任务共用一套子窗口结构', () => {
+  for (const marker of [
+    '.subwindow {',
+    '.subwindow-titlebar {',
+    '.subwindow-controls {',
+    '.subwindow-title {',
+    '.subwindow-body {',
+  ]) {
+    assert.ok(foundationCSS.includes(marker), '基础层缺少子窗口组件: ' + marker);
+  }
+
+  assert.equal((html.match(/class="subwindow-titlebar"/g) || []).length, 5);
+  assert.equal((html.match(/class="subwindow-controls"/g) || []).length, 5);
+  for (const marker of [
+    'class="auth-view subwindow page-reveal" id="login-view"',
+    'class="auth-view subwindow page-reveal" id="setup-view"',
+    'class="service-editor subwindow panel-reveal hidden" id="editor"',
+    'class="bulk-editor subwindow panel-reveal hidden" id="bulk-editor"',
+    'class="subscription-editor subwindow panel-reveal hidden" id="tg-editor"',
+  ]) {
+    assert.ok(html.includes(marker), '缺少统一子窗口结构: ' + marker);
+  }
 });

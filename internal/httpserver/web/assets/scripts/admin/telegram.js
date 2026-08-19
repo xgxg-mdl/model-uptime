@@ -162,6 +162,8 @@ export function createTelegramController({
   function openEditor(index = null) {
     editingIndex = index;
     const subscription = index === null ? normalizeTelegramSubscription({}, templates) : config.subscriptions[index];
+    element('tg-editor-title').textContent =
+      index === null ? 'new subscription' : `edit subscription · ${subscription.id}`;
     element('tg-id').value = subscription.id;
     element('tg-id').disabled = index !== null;
     element('tg-name').value = subscription.name;

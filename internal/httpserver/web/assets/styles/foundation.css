@@ -136,6 +136,55 @@ body {
   flex-shrink: 0;
 }
 
+.subwindow {
+  overflow: hidden;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  box-shadow: 0 16px 34px -24px var(--panel-shadow);
+}
+
+.subwindow-titlebar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+}
+
+.subwindow-controls {
+  width: 8px;
+  height: 8px;
+  margin-left: 1px;
+  background: var(--btn-close);
+  border-radius: 50%;
+  box-shadow:
+    14px 0 var(--btn-min),
+    28px 0 var(--btn-max);
+}
+
+.subwindow-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--titlebar-t);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subwindow-body {
+  padding: 14px;
+  background: var(--term-bg);
+}
+
 .lights { display: flex; gap: 8px; }
 
 .light {
@@ -175,6 +224,8 @@ body {
   body { font-size: 12px; }
   :where(.term, .admin-window) { border-radius: 8px; }
   .titlebar { height: 26px; padding: 0 10px; }
+  .subwindow-titlebar { height: 26px; padding: 0 9px; }
+  .subwindow-body { padding: 10px; }
   .light { width: 10px; height: 10px; }
   .title-text { font-size: 10px; }
 }
