@@ -35,15 +35,16 @@ function statusData(services) {
     generated_at: 1_700_000_000,
     all_ok: services.every(item => item.last.ok),
     services,
-    page: {
-      history_len: 2,
-      show_uptime: true,
-      show_samples: true,
-      show_latency: true,
-      show_avg_load: true,
-    },
   };
 }
+
+const pageConfig = {
+  history_len: 2,
+  show_uptime: true,
+  show_samples: true,
+  show_latency: true,
+  show_avg_load: true,
+};
 
 test('两页共享动效变量并尊重 reduced-motion', () => {
   for (const token of [
@@ -115,6 +116,7 @@ test('首次渲染不播放变化动效，整体状态实际变化时才播放',
     document,
     window: { innerWidth: 1024 },
   });
+  renderer.renderPage(pageConfig);
   const banner = document.getElementById('banner-out');
 
   renderer.render(statusData([service('a', true)]));
@@ -139,6 +141,7 @@ test('同名服务重排后仍按稳定 ID 标记真正变化的服务', () => {
     document,
     window: { innerWidth: 1024 },
   });
+  renderer.renderPage(pageConfig);
   const output = document.getElementById('svc-out');
 
   renderer.render(statusData([service('a', true), service('b', false)]));

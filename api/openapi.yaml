@@ -25,11 +25,23 @@ paths:
       security: []
       responses:
         '200':
-          description: Current service status and page configuration.
+          description: Current service status data.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+  /api/page:
+    get:
+      operationId: getPublicPageConfig
+      summary: Read the public page configuration
+      security: []
+      responses:
+        '200':
+          description: Public status and heatmap page configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageConfig'
   /api/heatmap:
     get:
       operationId: getHeatmap
@@ -793,8 +805,6 @@ components:
           format: int64
         all_ok:
           type: boolean
-        page:
-          $ref: '#/components/schemas/PageConfig'
         services:
           type: array
           items:
@@ -908,8 +918,6 @@ components:
           type: array
           items:
             type: string
-        page:
-          $ref: '#/components/schemas/PageConfig'
         services:
           type: array
           items:

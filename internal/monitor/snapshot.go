@@ -12,7 +12,7 @@ func (s *Scheduler) Snapshot() model.StatusResponse {
 	defer s.mu.RUnlock()
 	page := s.page
 	now := time.Now().Unix()
-	resp := model.StatusResponse{GeneratedAt: now, AllOK: true, Page: &page, Services: make([]model.ServiceView, 0, len(s.order))}
+	resp := model.StatusResponse{GeneratedAt: now, AllOK: true, Services: make([]model.ServiceView, 0, len(s.order))}
 	for _, id := range s.order {
 		st := s.states[id]
 		if st == nil || !st.svc.IsEnabled() {

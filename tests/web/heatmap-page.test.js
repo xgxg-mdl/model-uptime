@@ -10,6 +10,7 @@ import {
   formatBeijingTime,
   gridLayout,
   normalizeRange,
+  startHeatmapPage,
   uptimeStatusClass,
 } from '../../internal/httpserver/web/assets/scripts/heatmap-page.js';
 import { createElementDocument, findAll } from './helpers/fake-dom.js';
@@ -58,11 +59,6 @@ function data(overrides = {}) {
     timezone: 'Asia/Shanghai',
     rows: ['08-18'],
     columns: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
-    page: {
-      title: 'Status',
-      subtitle: 'model-uptime',
-      probe_comment: 'Monitoring production models',
-    },
     services: [
       {
         id: 'service-1',
@@ -92,6 +88,16 @@ function data(overrides = {}) {
         ],
       },
     ],
+    ...overrides,
+  };
+}
+
+function pageConfig(overrides = {}) {
+  return {
+    title: 'Status',
+    subtitle: 'model-uptime',
+    probe_comment: 'Monitoring production models',
+    enable_command_animation: true,
     ...overrides,
   };
 }
@@ -146,8 +152,60 @@ test('热力图缺少顶部注释配置时使用两页共享默认值', () => {
     document,
     window: { innerWidth: 1024 },
   });
-  renderer.render(data({ page: {} }));
+  renderer.renderPage({});
   assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
+});
+
+test('热力图聚合完成前立即显示已取得的公开页面配置', async () => {
+  const document = heatmapDocument();
+  for (const id of ['terminal', 'command-heatmap', 'heatmap-toolbar', 'command-heatmap-monitor']) {
+    document.registerElement(id);
+  }
+  document.querySelectorAll = () => [];
+  document.addEventListener = () => {};
+  document.getElementById('terminal').className = 'term terminal-intro';
+  const requested = [];
+  const poller = startHeatmapPage({
+    document,
+    window: {
+      location: { href: 'https://status.example/heatmap?range=1d' },
+      history: { replaceState() {} },
+      matchMedia: () => ({ matches: false }),
+      innerWidth: 1024,
+    },
+    fetch: async url => {
+      requested.push(url);
+      if (url === '/api/page') {
+        return {
+          ok: true,
+          async json() {
+            return {
+              title: 'Production status',
+              subtitle: 'Primary monitor',
+              probe_comment: 'Checking production models',
+              enable_command_animation: true,
+            };
+          },
+        };
+      }
+      return new Promise(() => {});
+    },
+    schedule() {
+      return 1;
+    },
+    cancel() {},
+    now: () => 1_776_504_000_000,
+  });
+
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(requested, ['/api/page', '/api/heatmap?range=1d']);
+  assert.equal(document.getElementById('probe-comment').textContent, '# Checking production models');
+  assert.equal(document.getElementById('term-subtitle').textContent, 'Primary monitor');
+  void poller.setRange('7d');
+  assert.deepEqual(requested, ['/api/page', '/api/heatmap?range=1d', '/api/heatmap?range=7d']);
+  poller.stop();
 });
 
 test('范围切换只强调命令参数且首次渲染不播放', () => {
@@ -218,6 +276,7 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
     document,
     window: { innerWidth: 1024 },
   });
+  renderer.renderPage(pageConfig());
   renderer.render(data());
 
   const output = document.getElementById('heatmap-out');

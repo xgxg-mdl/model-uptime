@@ -14,6 +14,9 @@ func TestPublicHeatmapEndpoint(t *testing.T) {
 	if output["range"] != "30d" || output["timezone"] != "Asia/Shanghai" {
 		t.Fatalf("热力图范围或时区错误: %v", output)
 	}
+	if _, ok := output["page"]; ok {
+		t.Fatalf("热力图数据不应混入 page 配置: %v", output["page"])
+	}
 	rows, ok := output["rows"].([]any)
 	if !ok || len(rows) != 30 {
 		t.Fatalf("30d 视图行数 = %v", output["rows"])

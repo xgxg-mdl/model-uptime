@@ -515,10 +515,6 @@ export function createHeatmapRenderer({
           }
         : null;
     hideTooltip();
-    documentRef.title = `${data.page?.title || 'model-uptime'} // heatmap`;
-    documentRef.getElementById('term-subtitle').textContent = data.page?.subtitle || 'model-uptime';
-    documentRef.getElementById('probe-comment').textContent =
-      `# ${data.page?.probe_comment || 'model-uptime · service health and performance'}`;
     const rangeChanged = previousRange !== null && previousRange !== data.range;
     activeRange.textContent = rangeLabel(data.range);
     if (rangeChanged) {
@@ -598,7 +594,14 @@ export function createHeatmapRenderer({
     output.replaceChildren(createElement(documentRef, 'div', 'heatmap-error', '● heatmap unavailable'));
   }
 
-  return { render, renderError, hideTooltip, resume };
+  function renderPage(page = {}) {
+    documentRef.title = `${page.title || 'model-uptime'} // heatmap`;
+    documentRef.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
+    documentRef.getElementById('probe-comment').textContent =
+      `# ${page.probe_comment || 'model-uptime · service health and performance'}`;
+  }
+
+  return { render, renderError, renderPage, hideTooltip, resume };
 }
 
 export function createHeatmapPoller({
@@ -716,6 +719,19 @@ export function startHeatmapPage({
       },
     ],
   });
+  async function loadPage() {
+    try {
+      const response = await fetchImpl('/api/page', { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const page = await response.json();
+      commandAnimationEnabled = page.enable_command_animation !== false;
+      renderer.renderPage(page);
+    } catch {
+      renderer.renderPage();
+    } finally {
+      intro.start();
+    }
+  }
   const poller = createHeatmapPoller({
     initialRange,
     schedule,
@@ -726,15 +742,12 @@ export function startHeatmapPage({
       return response.json();
     },
     render(data) {
-      commandAnimationEnabled = data.page?.enable_command_animation !== false;
       renderer.render(data);
       intro.setDataReady();
-      intro.start();
     },
     renderError(error) {
       renderer.renderError(error);
       intro.setDataReady();
-      intro.start();
     },
   });
   for (const button of documentRef.querySelectorAll('[data-range]')) {
@@ -748,6 +761,7 @@ export function startHeatmapPage({
   documentRef.addEventListener('visibilitychange', () => {
     void poller.setVisible(documentRef.visibilityState !== 'hidden');
   });
+  void loadPage();
   void poller.start();
   return poller;
 }

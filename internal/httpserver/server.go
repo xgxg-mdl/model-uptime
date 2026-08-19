@@ -80,6 +80,7 @@ func New(options Options) (*Server, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
+	mux.HandleFunc("GET /api/page", s.handlePublicPage)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.Handle("GET /api/heatmap", gzipJSON(http.HandlerFunc(s.handleHeatmap)))
 	mux.HandleFunc("POST /api/admin/login", s.handleLogin)

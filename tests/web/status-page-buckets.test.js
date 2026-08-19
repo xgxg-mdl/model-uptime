@@ -7,26 +7,30 @@ import {
   createStatusPoller,
   createStatusRenderer,
   resultStatus,
+  startStatusPage,
 } from '../../internal/httpserver/web/assets/scripts/status-page.js';
 import { createStatusDocument, findAll } from './helpers/fake-dom.js';
 
-function statusData(service, page = {}) {
+function pageConfig(overrides = {}) {
+  return {
+    title: 'Status',
+    subtitle: 'model-uptime',
+    probe_comment: 'checking services',
+    history_len: 5,
+    refresh_sec: 5,
+    show_uptime: true,
+    show_samples: true,
+    show_latency: true,
+    show_avg_load: true,
+    ...overrides,
+  };
+}
+
+function statusData(service) {
   return {
     generated_at: 420,
     all_ok: service.last?.ok !== false,
     services: [service],
-    page: {
-      title: 'Status',
-      subtitle: 'model-uptime',
-      probe_comment: 'checking services',
-      history_len: 5,
-      refresh_sec: 5,
-      show_uptime: true,
-      show_samples: true,
-      show_latency: true,
-      show_avg_load: true,
-      ...page,
-    },
   };
 }
 
@@ -47,12 +51,13 @@ function service(overrides = {}) {
   };
 }
 
-function render(data) {
+function render(data, page = pageConfig()) {
   const document = createStatusDocument();
   const renderer = createStatusRenderer({
     document,
     window: { innerWidth: 1024 },
   });
+  renderer.renderPage(page);
   renderer.render(data);
   return { document, renderer };
 }
@@ -184,8 +189,49 @@ test('成功探测仅在耗时严格超过阈值时进入 warning', () => {
 });
 
 test('状态页缺少顶部注释配置时使用两页共享默认值', () => {
-  const { document } = render(statusData(service(), { probe_comment: '' }));
+  const { document } = render(statusData(service()), pageConfig({ probe_comment: '' }));
   assert.equal(document.getElementById('probe-comment').textContent, '# model-uptime · service health and performance');
+});
+
+test('状态数据返回前立即显示独立取得的页面配置', async () => {
+  const document = createStatusDocument();
+  for (const id of ['terminal', 'command-uptime', 'command-monitor']) document.registerElement(id);
+  document.getElementById('terminal').className = 'term terminal-intro';
+  const requested = [];
+  const poller = startStatusPage({
+    document,
+    window: { matchMedia: () => ({ matches: false }), innerWidth: 1024 },
+    fetch: async url => {
+      requested.push(url);
+      if (url === '/api/page') {
+        return {
+          ok: true,
+          async json() {
+            return pageConfig({
+              subtitle: 'Primary monitor',
+              probe_comment: 'Checking production models',
+            });
+          },
+        };
+      }
+      return new Promise(() => {});
+    },
+    schedule() {
+      return 1;
+    },
+    cancel() {},
+    now: () => 420_000,
+  });
+
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(requested, ['/api/page', '/api/status']);
+  assert.equal(document.getElementById('probe-comment').textContent, '# Checking production models');
+  assert.equal(document.getElementById('term-subtitle').textContent, 'Primary monitor');
+  void poller.refresh();
+  assert.deepEqual(requested, ['/api/page', '/api/status', '/api/status']);
+  poller.stop();
 });
 
 test('监控命令的模型统一使用参数色，不映射服务可用性', () => {
@@ -307,11 +353,10 @@ test('状态页把服务字段和错误详情作为纯文本渲染', () => {
   assert.equal(badBar.blurred, true);
 });
 
-test('轮询采用服务端 refresh_sec 并在每次响应后更新间隔', async () => {
+test('数据轮询采用独立页面配置提供的刷新间隔', async () => {
   const scheduled = [];
-  const responses = [{ page: { refresh_sec: 7 } }, { page: { refresh_sec: 2 } }];
   const poller = createStatusPoller({
-    fetchStatus: async () => responses.shift(),
+    fetchStatus: async () => ({}),
     render() {},
     renderError(error) {
       throw error;
@@ -323,9 +368,10 @@ test('轮询采用服务端 refresh_sec 并在每次响应后更新间隔', asyn
     cancel() {},
   });
 
+  poller.setRefreshSeconds(7);
   await poller.start();
   assert.equal(scheduled.shift().delay, 7000);
-  await poller.refresh();
+  poller.setRefreshSeconds(2);
   assert.equal(scheduled.at(-1).delay, 2000);
   poller.stop();
 });
@@ -349,9 +395,9 @@ test('较慢的旧请求不能覆盖较新的刷新结果', async () => {
 
   const oldRequest = poller.start();
   const newRequest = poller.refresh();
-  pending[1]({ version: 'new', page: { refresh_sec: 5 } });
+  pending[1]({ version: 'new' });
   await newRequest;
-  pending[0]({ version: 'old', page: { refresh_sec: 5 } });
+  pending[0]({ version: 'old' });
   await oldRequest;
 
   assert.deepEqual(rendered, ['new']);

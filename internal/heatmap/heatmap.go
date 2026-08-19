@@ -3,7 +3,6 @@ package heatmap
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -72,14 +71,13 @@ func New(repository Repository, status StatusProvider) (*Service, error) {
 }
 
 type Response struct {
-	GeneratedAt int64             `json:"generated_at"`
-	Range       string            `json:"range"`
-	Timezone    string            `json:"timezone"`
-	BucketSec   int64             `json:"bucket_sec"`
-	Rows        []string          `json:"rows"`
-	Columns     []string          `json:"columns"`
-	Page        *model.PageConfig `json:"page,omitempty"`
-	Services    []ServiceView     `json:"services"`
+	GeneratedAt int64         `json:"generated_at"`
+	Range       string        `json:"range"`
+	Timezone    string        `json:"timezone"`
+	BucketSec   int64         `json:"bucket_sec"`
+	Rows        []string      `json:"rows"`
+	Columns     []string      `json:"columns"`
+	Services    []ServiceView `json:"services"`
 }
 
 type ServiceView struct {
@@ -136,14 +134,14 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 	snapshot := s.status.Snapshot()
 	services := append([]model.ServiceView(nil), snapshot.Services...)
 	sort.SliceStable(services, func(i, j int) bool { return model.ServiceViewLess(services[i], services[j]) })
-	key := buildCacheKey(spec, snapshot.Page, services)
+	key := buildCacheKey(spec, services)
 	if cached, ok := s.cache[rangeName]; ok && cached.key == key && now.Sub(cached.createdAt) < cacheTTL {
 		return cached.response, nil
 	}
 	response := Response{
 		GeneratedAt: now.Unix(), Range: rangeName, Timezone: "Asia/Shanghai",
 		BucketSec: int64(spec.bucket / time.Second), Rows: spec.rows, Columns: spec.columns,
-		Page: snapshot.Page, Services: make([]ServiceView, 0, len(services)),
+		Services: make([]ServiceView, 0, len(services)),
 	}
 	views := make([]ServiceView, len(services))
 	errs := make([]error, len(services))
@@ -294,12 +292,11 @@ func slotIndex(spec gridSpec, timestamp time.Time) int {
 	return day*24 + timestamp.Hour()
 }
 
-func buildCacheKey(spec gridSpec, page *model.PageConfig, services []model.ServiceView) string {
+func buildCacheKey(spec gridSpec, services []model.ServiceView) string {
 	var key strings.Builder
 	// 自然日边界只在北京时间跨日时变化，既避免跨秒缓存失效，也不会跨天返回旧网格。
 	periodEnd := spec.slots[len(spec.slots)-1].end.Unix()
-	pageJSON, _ := json.Marshal(page)
-	fmt.Fprintf(&key, "%s|%d|%d|%d|%s", spec.rangeName, spec.queryFrom.Unix(), periodEnd, len(spec.slots), pageJSON)
+	fmt.Fprintf(&key, "%s|%d|%d|%d", spec.rangeName, spec.queryFrom.Unix(), periodEnd, len(spec.slots))
 	for _, service := range services {
 		fmt.Fprintf(&key, "|%s|%s|%s|%d|%d|%d", service.ID, service.Model, service.Provider, service.SortOrder, service.IntervalSec, service.WarningSec)
 		if service.Last != nil {

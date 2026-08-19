@@ -26,9 +26,11 @@ func TestPageConfig(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("更新 page = %d, %v", code, out)
 	}
-	// 热重载后状态 API 应反映新配置
-	code, out = doJSON(t, ts, http.MethodGet, "/api/status", "", nil)
-	page = out["page"].(map[string]any)
+	// 热重载后公开配置 API 应反映新配置
+	code, page = doJSON(t, ts, http.MethodGet, "/api/page", "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("读取公开 page = %d, %v", code, page)
+	}
 	if page["history_len"].(float64) != 90 {
 		t.Errorf("热重载后 history_len = %v", page["history_len"])
 	}

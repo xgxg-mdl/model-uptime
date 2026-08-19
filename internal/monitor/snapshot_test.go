@@ -32,17 +32,6 @@ func TestPendingAndDisabled(t *testing.T) {
 	}
 }
 
-func TestSnapshotPageCopy(t *testing.T) {
-	s := New(nil, nil)
-	page := defaultPage()
-	page.HistoryLen = 42
-	s.Reload([]model.Service{testSvc("s1", true)}, page)
-	snap := s.Snapshot()
-	if snap.Page == nil || snap.Page.HistoryLen != 42 {
-		t.Errorf("快照应携带页面配置: %+v", snap.Page)
-	}
-}
-
 func TestSnapshotIncludesStableServiceID(t *testing.T) {
 	s := New(nil, nil)
 	service := testSvc("stable-id", true)

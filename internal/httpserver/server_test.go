@@ -175,6 +175,26 @@ func TestStaticFilesHaveSecurityAndCacheHeaders(t *testing.T) {
 	}
 }
 
+func TestPublicPageEndpointReturnsNormalizedConfigWithoutAuthentication(t *testing.T) {
+	t.Parallel()
+	server := newTestServer(t, nil)
+
+	response := request(t, server.handler, http.MethodGet, "/api/page", "", false)
+	if response.Code != http.StatusOK {
+		t.Fatalf("公开页面配置 API = %d: %s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("公开页面配置 Cache-Control = %q", response.Header().Get("Cache-Control"))
+	}
+	var page model.PageConfig
+	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.ProbeComment == "" || page.EnableCommandAnimation == nil || !*page.EnableCommandAnimation {
+		t.Fatalf("公开页面配置未归一化: %+v", page)
+	}
+}
+
 func TestPublicHeatmapEndpointDefaultsTo7D(t *testing.T) {
 	t.Parallel()
 	server := newTestServer(t, nil)

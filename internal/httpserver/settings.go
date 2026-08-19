@@ -8,6 +8,10 @@ import (
 	"github.com/xgxg-mdl/model-uptime/internal/notification"
 )
 
+func (s *Server) handlePublicPage(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.admin.Snapshot().Page)
+}
+
 func (s *Server) handleGetPage(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.admin.Snapshot().Page)
 }

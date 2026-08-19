@@ -3,6 +3,18 @@ import { createTerminalIntro, terminalMotionDisabled } from './terminal-intro.js
 const DEFAULT_REFRESH_SECONDS = 5;
 const MIN_REFRESH_SECONDS = 1;
 const MAX_REFRESH_SECONDS = 60;
+const DEFAULT_PAGE = {
+  title: 'model-uptime // status',
+  subtitle: 'model-uptime',
+  probe_comment: 'model-uptime · service health and performance',
+  history_len: 60,
+  refresh_sec: DEFAULT_REFRESH_SECONDS,
+  enable_command_animation: true,
+  show_uptime: true,
+  show_samples: true,
+  show_latency: true,
+  show_avg_load: true,
+};
 
 export function pad(value) {
   return String(value).padStart(2, '0');
@@ -204,6 +216,8 @@ export function createStatusRenderer({
   let previousOverallStatus = null;
   let previousServiceStates = new Map();
   let tooltipTimer = null;
+  let pageConfig = { ...DEFAULT_PAGE };
+  let latestData = null;
 
   function hideTooltip() {
     tip.classList.remove('show');
@@ -385,15 +399,24 @@ export function createStatusRenderer({
     previousServiceStates = nextServiceStates;
   }
 
-  function render(data) {
-    const page = data.page || {};
-    documentRef.title = page.title || 'model-uptime // status';
-    documentRef.getElementById('term-subtitle').textContent = page.subtitle || 'model-uptime';
-    documentRef.getElementById('probe-comment').textContent =
-      `# ${page.probe_comment || 'model-uptime · service health and performance'}`;
-    renderBanner(data, page);
-    renderServices(data.services || [], page, data.generated_at);
+  function renderData(data) {
+    renderBanner(data, pageConfig);
+    renderServices(data.services || [], pageConfig, data.generated_at);
     documentRef.getElementById('updated').textContent = formatTimeShort(data.generated_at);
+  }
+
+  function render(data) {
+    latestData = data;
+    renderData(data);
+  }
+
+  function renderPage(page = {}) {
+    pageConfig = { ...DEFAULT_PAGE, ...page };
+    documentRef.title = pageConfig.title;
+    documentRef.getElementById('term-subtitle').textContent = pageConfig.subtitle;
+    documentRef.getElementById('probe-comment').textContent =
+      `# ${pageConfig.probe_comment || DEFAULT_PAGE.probe_comment}`;
+    if (latestData) renderData(latestData);
   }
 
   function renderError() {
@@ -401,7 +424,7 @@ export function createStatusRenderer({
     documentRef.getElementById('banner-out').replaceChildren(line);
   }
 
-  return { render, renderError, hideTooltip };
+  return { render, renderError, renderPage, hideTooltip };
 }
 
 export function createStatusPoller({
@@ -429,7 +452,6 @@ export function createStatusPoller({
       const data = await fetchStatus();
       if (!active || currentEpoch !== epoch || sequence !== requestSequence) return;
       render(data);
-      refreshSeconds = normalizeRefreshSeconds(data.page?.refresh_sec, refreshSeconds);
     } catch (error) {
       if (!active || currentEpoch !== epoch || sequence !== requestSequence) return;
       renderError(error);
@@ -455,6 +477,15 @@ export function createStatusPoller({
     return request(epoch);
   }
 
+  function setRefreshSeconds(value) {
+    refreshSeconds = normalizeRefreshSeconds(value, refreshSeconds);
+    if (!active || timer === null) return;
+    cancelTimer();
+    timer = schedule(() => {
+      void request(epoch);
+    }, refreshSeconds * 1000);
+  }
+
   function stop() {
     active = false;
     epoch++;
@@ -462,7 +493,7 @@ export function createStatusPoller({
     cancelTimer();
   }
 
-  return { start, refresh, stop };
+  return { start, refresh, setRefreshSeconds, stop };
 }
 
 export function startStatusPage({
@@ -502,26 +533,39 @@ export function startStatusPage({
       },
     ],
   });
-  const poller = createStatusPoller({
+  let poller;
+  async function loadPage() {
+    try {
+      const response = await fetchImpl('/api/page', { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const page = await response.json();
+      commandAnimationEnabled = page.enable_command_animation !== false;
+      renderer.renderPage(page);
+      poller.setRefreshSeconds(page.refresh_sec);
+    } catch {
+      renderer.renderPage();
+    } finally {
+      intro.start();
+    }
+  }
+  poller = createStatusPoller({
     async fetchStatus() {
       const response = await fetchImpl('/api/status', { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
     },
     render(data) {
-      commandAnimationEnabled = data.page?.enable_command_animation !== false;
       renderer.render(data);
       intro.setDataReady();
-      intro.start();
     },
     renderError(error) {
       renderer.renderError(error);
       intro.setDataReady();
-      intro.start();
     },
     schedule,
     cancel,
   });
+  void loadPage();
   void poller.start();
   return poller;
 }

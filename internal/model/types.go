@@ -279,11 +279,9 @@ func ServiceViewLess(left, right ServiceView) bool {
 	return left.ID < right.ID
 }
 
-// StatusResponse 是 /api/status 的响应体，结构保持稳定的公开状态 API 结构，
-// 额外携带 page 显示配置供前端渲染。
+// StatusResponse 是 /api/status 的监控数据响应体。
 type StatusResponse struct {
 	GeneratedAt int64         `json:"generated_at"` // unix 秒
 	AllOK       bool          `json:"all_ok"`
-	Page        *PageConfig   `json:"page,omitempty"`
 	Services    []ServiceView `json:"services"`
 }

@@ -34,9 +34,8 @@ func TestStatusEndpoint(t *testing.T) {
 	if got, ok := svc["warning_sec"].(float64); !ok || got != 30 {
 		t.Errorf("warning_sec = %v，期望 30", svc["warning_sec"])
 	}
-	page, ok := out["page"].(map[string]any)
-	if !ok || page["history_len"] == nil {
-		t.Errorf("缺少 page 配置: %v", out["page"])
+	if _, ok := out["page"]; ok {
+		t.Errorf("状态数据不应混入 page 配置: %v", out["page"])
 	}
 	// 默认未暂停时 services[].pauses 不出现或为空。
 	if _, hasPauses := svc["pauses"]; hasPauses {

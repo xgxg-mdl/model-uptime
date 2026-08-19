@@ -42,6 +42,7 @@ test('OpenAPI operations have stable identifiers and explicit authentication', (
 
   const publicRoutes = new Set([
     'GET /healthz',
+    'GET /api/page',
     'GET /api/status',
     'GET /api/heatmap',
     'GET /api/admin/setup-status',
