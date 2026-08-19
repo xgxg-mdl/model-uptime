@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  commandTypingMetrics,
   createTerminalIntro,
   terminalMotionDisabled,
 } from '../../internal/httpserver/web/assets/scripts/terminal-intro.js';
@@ -100,6 +101,48 @@ test('数据先返回时在命令输入完成后立即继续', () => {
 
   assert.ok(document.getElementById('output-one').classList.contains('terminal-reveal-visible'));
   assert.equal(scheduled[0].delay, 30);
+});
+
+test('动态模型属于命令文本并决定完整输入时长', () => {
+  const command = introElements().getElementById('command-one');
+  const commandText = command.ownerDocument.createElement('span');
+  const fullCommand = 'monitor --watch gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.4 gpt-5.4-mini';
+  commandText.className = 'terminal-command-text';
+  commandText.textContent = fullCommand;
+  command.append(commandText);
+  const scheduled = [];
+  const frames = [];
+  const intro = createTerminalIntro({
+    root: command.ownerDocument.getElementById('terminal'),
+    stages: [{ command }],
+    initialDelay: 0,
+    schedule(callback, delay) {
+      scheduled.push({ callback, delay });
+      return scheduled.length;
+    },
+    scheduleFrame(callback) {
+      frames.push(callback);
+      return frames.length;
+    },
+  });
+
+  assert.deepEqual(
+    commandTypingMetrics(fullCommand),
+    { characters: 83, duration: 2656 },
+  );
+  intro.setDataReady();
+  intro.start();
+  scheduled.shift().callback();
+  assert.equal(scheduled[0].delay, 2656);
+  assert.equal(command.style['--terminal-command-chars'], '83');
+  assert.equal(command.style['--terminal-command-duration'], '2656ms');
+  command.scrollWidth = 900;
+  frames.shift()();
+  assert.equal(command.scrollLeft, 900);
+  assert.equal(frames.length, 1);
+  scheduled.shift().callback();
+  frames.shift()();
+  assert.equal(frames.length, 0, '命令输入完成后应停止滚动跟随');
 });
 
 test('reduced-motion 和后台页面直接显示最终状态', () => {

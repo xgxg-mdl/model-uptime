@@ -474,17 +474,12 @@ export function startStatusPage({
     stages: [
       {
         command: documentRef.getElementById('command-uptime'),
-        duration: 192,
         pause: 80,
         reveal: [documentRef.getElementById('banner-out')],
       },
       {
         command: documentRef.getElementById('command-monitor'),
-        duration: 480,
-        reveal: [
-          documentRef.getElementById('cmd-models'),
-          documentRef.getElementById('svc-out'),
-        ],
+        reveal: [documentRef.getElementById('svc-out')],
       },
     ],
   });

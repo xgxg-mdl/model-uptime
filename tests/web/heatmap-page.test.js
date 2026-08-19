@@ -9,7 +9,6 @@ import {
   createHeatmapRenderer,
   formatBeijingTime,
   gridLayout,
-  heatmapCommandMetrics,
   normalizeRange,
 } from '../../internal/httpserver/web/assets/scripts/heatmap-page.js';
 import { createElementDocument, findAll } from './helpers/fake-dom.js';
@@ -103,8 +102,6 @@ test('范围和北京时间格式采用稳定默认值', () => {
   assert.equal(normalizeRange('month'), '7d');
   assert.equal(normalizeRange('year'), '7d');
   assert.equal(formatBeijingTime(0), '1970-01-01 08:00');
-  assert.deepEqual(heatmapCommandMetrics('7d'), { characters: 18, duration: 576 });
-  assert.deepEqual(heatmapCommandMetrics('30d'), { characters: 19, duration: 608 });
 });
 
 test('热力图缺少顶部注释配置时使用两页共享默认值', () => {

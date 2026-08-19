@@ -70,9 +70,12 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.match(statusHTML, /class="term terminal-intro"/);
   assert.match(statusHTML, /id="command-uptime"/);
   assert.match(statusHTML, /id="command-monitor"/);
+  assert.match(statusHTML, /class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/);
   assert.match(heatmapHTML, /class="term heatmap-term terminal-intro"/);
   assert.match(heatmapHTML, /id="command-heatmap-monitor"/);
   assert.match(heatmapHTML, /id="command-heatmap"/);
+  assert.match(heatmapHTML, /id="command-heatmap-monitor"[^>]*>[\s\S]*?class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/);
+  assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*nowrap;[^}]*overflow-x:\s*auto;/s);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 

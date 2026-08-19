@@ -15,11 +15,6 @@ export function rangeLabel(value) {
   return RANGE_LABELS[normalizeRange(value)];
 }
 
-export function heatmapCommandMetrics(value) {
-  const characters = `heatmap --range ${rangeLabel(value)}`.length;
-  return { characters, duration: characters * 32 };
-}
-
 function pad(value) {
   return String(value).padStart(2, '0');
 }
@@ -615,8 +610,6 @@ export function startHeatmapPage({
   documentRef.getElementById('login-time').textContent = formatBeijingTime(Math.floor(now() / 1000));
   documentRef.getElementById('active-range').textContent = rangeLabel(initialRange);
   const heatmapCommand = documentRef.getElementById('command-heatmap');
-  const commandMetrics = heatmapCommandMetrics(initialRange);
-  heatmapCommand.classList.toggle('terminal-command-heatmap-long', commandMetrics.characters === 19);
   const renderer = createHeatmapRenderer({ document: documentRef, window: windowRef });
   const intro = createTerminalIntro({
     root: documentRef.getElementById('terminal'),
@@ -625,17 +618,12 @@ export function startHeatmapPage({
     stages: [
       {
         command: heatmapCommand,
-        duration: commandMetrics.duration,
         pause: 80,
         reveal: [documentRef.getElementById('heatmap-toolbar')],
       },
       {
         command: documentRef.getElementById('command-heatmap-monitor'),
-        duration: 480,
-        reveal: [
-          documentRef.getElementById('cmd-models'),
-          documentRef.getElementById('heatmap-out'),
-        ],
+        reveal: [documentRef.getElementById('heatmap-out')],
       },
     ],
   });

@@ -1,4 +1,10 @@
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+const CHARACTER_DURATION_MS = 32;
+
+export function commandTypingMetrics(text) {
+  const characters = Array.from(String(text)).length;
+  return { characters, duration: characters * CHARACTER_DURATION_MS };
+}
 
 export function terminalMotionDisabled({ document: documentRef, window: windowRef } = {}) {
   if (documentRef?.visibilityState === 'hidden') return true;
@@ -10,6 +16,9 @@ export function createTerminalIntro({
   root,
   stages = [],
   schedule = globalThis.setTimeout,
+  scheduleFrame = typeof globalThis.requestAnimationFrame === 'function'
+    ? callback => globalThis.requestAnimationFrame(callback)
+    : null,
   initialDelay = 180,
   revealDuration = 160,
   disabled = false,
@@ -21,6 +30,29 @@ export function createTerminalIntro({
   let stageIndex = -1;
   let waitingForData = false;
   let complete = false;
+
+  function setCommandProperty(command, name, value) {
+    if (typeof command.style?.setProperty === 'function') command.style.setProperty(name, value);
+    else command.style[name] = value;
+  }
+
+  function prepareCommand(command) {
+    const commandText = command.querySelector('.terminal-command-text');
+    const metrics = commandTypingMetrics(commandText?.textContent || '');
+    setCommandProperty(command, '--terminal-command-chars', String(metrics.characters));
+    setCommandProperty(command, '--terminal-command-duration', `${metrics.duration}ms`);
+    return metrics.duration;
+  }
+
+  function followTyping(command) {
+    if (!scheduleFrame) return;
+    const follow = () => {
+      if (!command.classList.contains('terminal-command-active')) return;
+      command.scrollLeft = command.scrollWidth;
+      scheduleFrame(follow);
+    };
+    scheduleFrame(follow);
+  }
 
   function finish() {
     if (complete) return;
@@ -37,13 +69,16 @@ export function createTerminalIntro({
 
     stageIndex = index;
     const stage = stages[index];
+    const duration = stage.duration ?? prepareCommand(stage.command);
     stage.command.classList.add('terminal-command-active');
+    followTyping(stage.command);
     schedule(() => {
       stage.command.classList.remove('terminal-command-active');
       stage.command.classList.add('terminal-command-waiting');
+      stage.command.scrollLeft = stage.command.scrollWidth;
       waitingForData = true;
       if (dataReady) revealStage();
-    }, stage.duration);
+    }, duration);
   }
 
   function revealStage() {

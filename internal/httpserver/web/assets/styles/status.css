@@ -134,27 +134,13 @@ body {
   --terminal-command-chars: 1;
   --terminal-command-duration: 32ms;
   min-height: 1lh;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 
-.terminal-command-uptime {
-  --terminal-command-chars: 6;
-  --terminal-command-duration: 192ms;
-}
-
-.terminal-command-monitor {
-  --terminal-command-chars: 15;
-  --terminal-command-duration: 480ms;
-}
-
-.terminal-command-heatmap {
-  --terminal-command-chars: 18;
-  --terminal-command-duration: 576ms;
-}
-
-.terminal-command-heatmap-long {
-  --terminal-command-chars: 19;
-  --terminal-command-duration: 608ms;
-}
+.terminal-command::-webkit-scrollbar { display: none; }
 
 .terminal-command-text {
   display: inline-block;
@@ -198,17 +184,10 @@ body {
   animation: blink 1.1s steps(2) infinite;
 }
 
-.terminal-intro .terminal-command-args,
 .terminal-intro .terminal-reveal {
   visibility: hidden;
   opacity: 0;
 }
-
-.terminal-command-args {
-  display: inline-block;
-}
-
-.terminal-intro .terminal-command-args.terminal-reveal-visible,
 .terminal-intro .terminal-reveal.terminal-reveal-visible {
   visibility: visible;
   animation: terminal-output-in var(--motion-base) var(--motion-ease-out) forwards;
@@ -391,7 +370,6 @@ body {
   .status-change,
   .terminal-command-text,
   .terminal-typing-cursor,
-  .terminal-command-args,
   .terminal-reveal { animation: none; }
   .bar,
   .tip,
@@ -401,7 +379,6 @@ body {
   .cursor { opacity: 1; }
   .terminal-intro .terminal-command { visibility: visible; }
   .terminal-intro .terminal-command-text { width: auto; overflow: visible; }
-  .terminal-intro .terminal-command-args,
   .terminal-intro .terminal-reveal,
   .terminal-intro .terminal-idle { visibility: visible; opacity: 1; transform: none; }
   .terminal-intro .terminal-typing-cursor { display: none; }
