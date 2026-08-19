@@ -76,6 +76,10 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.match(heatmapHTML, /id="command-heatmap"/);
   assert.match(heatmapHTML, /id="command-heatmap-monitor"[^>]*>[\s\S]*?class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/);
   assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*nowrap;[^}]*overflow-x:\s*auto;/s);
+  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?body\s*{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
+  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-width:\s*thin;/);
+  assert.doesNotMatch(statusCSS, /scrollbar-gutter:/);
+  assert.match(statusCSS, /\.body::\-webkit-scrollbar-thumb\s*{[^}]*background:\s*#3a3a42;/);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 
