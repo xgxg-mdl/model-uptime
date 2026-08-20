@@ -420,6 +420,47 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   .service-list > .empty { border-bottom: 0; }
 }
 
+@media (max-width: 640px) {
+  .popup-window:is(.service-editor, .bulk-editor, .subscription-editor) {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .popup-window:is(.service-editor, .bulk-editor, .subscription-editor) > .subwindow-titlebar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .popup-window:is(.service-editor, .bulk-editor, .subscription-editor) > .subwindow-body {
+    height: calc(100dvh - 26px);
+    max-height: none;
+    padding: 12px 12px 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .popup-window:is(.service-editor, .bulk-editor, .subscription-editor) form {
+    grid-template-columns: 1fr;
+  }
+  .popup-window:is(.service-editor, .bulk-editor, .subscription-editor) .form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 4px -12px 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: var(--term-bg);
+    border-top: 1px solid var(--line);
+  }
+  .popup-window:is(.service-editor, .bulk-editor, .subscription-editor) .window-control:is(.minimize, .maximize) {
+    display: none;
+  }
+}
+
 @media (max-width: 559px) {
   form { grid-template-columns: 1fr; }
   .admin-content { padding: 10px; }

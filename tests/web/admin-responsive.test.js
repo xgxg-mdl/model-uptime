@@ -111,6 +111,26 @@ test('认证页和管理页保持清晰的视觉层级', () => {
   assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
 });
 
+test('小屏长表单切换为单列任务视图并固定操作栏，认证表单保持紧凑弹窗', () => {
+  assert.match(
+    adminCSS,
+    /@media \(max-width: 640px\)[\s\S]*?\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\)\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*height:\s*100dvh;[^}]*transform:\s*none;/,
+  );
+  assert.match(
+    adminCSS,
+    /\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\) \.window-control:is\(\.minimize, \.maximize\)\s*{[^}]*display:\s*none;/,
+  );
+  assert.match(
+    adminCSS,
+    /\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\) form\s*{[^}]*grid-template-columns:\s*1fr;/,
+  );
+  assert.match(
+    adminCSS,
+    /\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\) \.form-actions\s*{[^}]*position:\s*sticky;[^}]*bottom:\s*0;[^}]*background:\s*var\(--term-bg\);[^}]*border-top:\s*1px solid var\(--line\);/,
+  );
+  assert.doesNotMatch(adminCSS, /:is\([^)]*\.auth-view[^)]*\)[^{]*{[^}]*height:\s*100dvh;/);
+});
+
 test('toast 提供统一状态视觉和无障碍容器', () => {
   assert.match(html, /id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true"/);
   assert.match(html, /id="page-load-status" role="alert" aria-live="assertive" aria-atomic="true"/);
