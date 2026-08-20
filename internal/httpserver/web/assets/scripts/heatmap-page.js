@@ -1,4 +1,5 @@
 import { createTerminalIntro, terminalMotionDisabled } from './terminal-intro.js';
+import { createWindowManager } from './window-manager.js';
 
 const DEFAULT_RANGE = '7d';
 const REFRESH_MS = 60_000;
@@ -686,6 +687,7 @@ export function startHeatmapPage({
   cancel = globalThis.clearTimeout,
   now = () => Date.now(),
 } = {}) {
+  createWindowManager({ document: documentRef, window: windowRef, schedule });
   const url = new URL(windowRef.location.href);
   const initialRange = normalizeRange(url.searchParams.get('range'));
   documentRef.getElementById('login-time').textContent = formatBeijingTime(Math.floor(now() / 1000));

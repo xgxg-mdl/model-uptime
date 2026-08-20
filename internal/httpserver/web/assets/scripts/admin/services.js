@@ -142,6 +142,7 @@ export async function showServiceTestResult({ api, id, result, button }) {
 export function createServicesController({
   document: documentRef,
   window: windowRef = globalThis.window,
+  windows,
   api,
   toast,
   confirm: confirmAction = globalThis.confirm,
@@ -152,6 +153,14 @@ export function createServicesController({
   let services = [];
 
   const element = id => documentRef.getElementById(id);
+  const showWindow = id => {
+    if (windows) windows.open(id);
+    else revealPanel(element(id), windowRef);
+  };
+  const hideWindow = id => {
+    if (windows) windows.close(id);
+    else element(id).classList.add('hidden');
+  };
 
   function selectedIDs() {
     return Array.from(
@@ -278,7 +287,7 @@ export function createServicesController({
     try {
       await bulkUpdate(ids, patch);
       toast(`Updated ${ids.length} ${ids.length === 1 ? 'service' : 'services'}`, 'success');
-      element('bulk-editor').classList.add('hidden');
+      closeBulkEditor();
       await load();
     } catch (error) {
       toast(error.message, 'error');
@@ -323,7 +332,7 @@ export function createServicesController({
 
   function closeEditor() {
     editorState.close();
-    element('editor').classList.add('hidden');
+    hideWindow('editor');
     element('test-result').className = 'test-result feedback-in hidden';
     element('save-btn').disabled = false;
   }
@@ -352,7 +361,7 @@ export function createServicesController({
     element('f-body').value = service.body || '';
     showHttpFields(service.protocol);
     element('test-result').hidden = true;
-    revealPanel(element('editor'), windowRef);
+    showWindow('editor');
   }
 
   function openNew() {
@@ -374,7 +383,7 @@ export function createServicesController({
     element('f-expect').value = 200;
     showHttpFields('chat');
     element('test-result').hidden = true;
-    revealPanel(element('editor'), windowRef);
+    showWindow('editor');
   }
 
   function collectService() {
@@ -465,9 +474,12 @@ export function createServicesController({
     });
     element('b-stream').value = '';
     element('bulk-editor-count').textContent = selectedIDs().length;
-    revealPanel(element('bulk-editor'), windowRef, 'start');
+    showWindow('bulk-editor');
   });
-  element('bulk-cancel').addEventListener('click', () => element('bulk-editor').classList.add('hidden'));
+  function closeBulkEditor() {
+    hideWindow('bulk-editor');
+  }
+  element('bulk-cancel').addEventListener('click', closeBulkEditor);
   element('bulk-form').addEventListener('submit', event => {
     void applyBulkSettings(event);
   });
@@ -496,6 +508,7 @@ export function createServicesController({
     openEditor,
     openNew,
     closeEditor,
+    closeBulkEditor,
     saveService,
     selectedIDs,
     updateBulkBar,

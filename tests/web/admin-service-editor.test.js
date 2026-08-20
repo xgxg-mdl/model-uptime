@@ -14,7 +14,7 @@ import { FakeDocument } from './helpers/fake-dom.js';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'internal/httpserver/web/admin/index.html'), 'utf8');
 
-test('服务编辑器在列表之后原地展开且 ID 唯一', () => {
+test('服务编辑器以独立窗口声明且 ID 唯一', () => {
   const servicePanelStart = html.indexOf('<h2>monitor services</h2>');
   const serviceListStart = html.indexOf('id="svc-list"', servicePanelStart);
   const editorStart = html.indexOf('id="editor"', servicePanelStart);
@@ -22,12 +22,15 @@ test('服务编辑器在列表之后原地展开且 ID 唯一', () => {
 
   assert.ok(servicePanelStart >= 0 && serviceListStart >= 0 && editorStart >= 0 && bulkEditorStart >= 0);
   assert.ok(editorStart > serviceListStart && editorStart < bulkEditorStart);
-  assert.match(html, /class="service-editor subwindow panel-reveal hidden" id="editor"/);
-  assert.match(html, /role="region" aria-labelledby="editor-title"/);
+  assert.match(html, /class="service-editor subwindow mac-window popup-window hidden" id="editor"/);
+  assert.match(html, /id="editor" data-window-id="editor" data-window-popup data-window-mode="normal"/);
+  assert.match(html, /role="dialog" aria-modal="false" aria-labelledby="editor-title"/);
+  assert.match(html, /<div class="window-layer" id="window-layer"><\/div>/);
   assert.doesNotMatch(html, /<section class="panel hidden" id="editor">/);
 
   for (const id of ['editor', 'svc-form', 'f-id-input', 'f-name', 'f-sort-order', 'save-btn']) {
-    assert.equal(html.split(`id="${id}"`).length, 2, `服务编辑器 ID 不是唯一值: ${id}`);
+    const matches = html.match(new RegExp(`(?:^|\\s)id="${id}"`, 'g')) || [];
+    assert.equal(matches.length, 1, `服务编辑器 ID 不是唯一值: ${id}`);
   }
 });
 

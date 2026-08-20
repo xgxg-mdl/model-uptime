@@ -1,4 +1,5 @@
 import { createTerminalIntro, terminalMotionDisabled } from './terminal-intro.js';
+import { createWindowManager } from './window-manager.js';
 
 const DEFAULT_REFRESH_SECONDS = 5;
 const MIN_REFRESH_SECONDS = 1;
@@ -504,6 +505,7 @@ export function startStatusPage({
   cancel = globalThis.clearTimeout,
   now = () => Date.now(),
 } = {}) {
+  createWindowManager({ document: documentRef, window: windowRef, schedule });
   documentRef.getElementById('login-time').textContent = formatTime(Math.floor(now() / 1000));
   const renderer = createStatusRenderer({
     document: documentRef,

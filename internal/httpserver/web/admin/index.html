@@ -8,12 +8,12 @@
 <link rel="stylesheet" href="/assets/styles/admin.css" />
 </head>
 <body>
-<div class="wrap admin-window">
-  <div class="titlebar">
-    <div class="lights" aria-hidden="true">
-      <span class="light close"></span>
-      <span class="light min"></span>
-      <span class="light max"></span>
+<div class="wrap admin-window mac-window is-active" data-window-id="admin" data-window-main data-window-mode="normal" data-window-dock-label="manage">
+  <div class="titlebar window-titlebar" data-window-titlebar>
+    <div class="window-controls">
+      <button class="window-control close" type="button" data-window-action="close" aria-label="Close admin window"></button>
+      <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize admin window"></button>
+      <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize admin window"></button>
     </div>
     <div class="title-text">
       <span class="mute">—</span> model-uptime · manage <span class="mute">—</span>
@@ -23,36 +23,33 @@
 
   <div class="admin-surface">
     <header class="admin-header">
-      <div class="product-lockup">
-        <span class="product-mark" aria-hidden="true">MU</span>
-        <div class="product-copy">
-          <span class="product-kicker">operations console</span>
-          <h1>model-uptime <span class="sub">/ admin</span></h1>
-        </div>
+      <div class="product-copy">
+        <span class="product-kicker">operations console</span>
+        <h1>model-uptime <span class="sub">/ admin</span></h1>
       </div>
       <div class="actions">
-        <a class="btn" href="/">status</a>
+        <nav class="admin-nav" aria-label="Public pages">
+          <a href="/">status</a>
+          <a href="/heatmap/">heatmap</a>
+        </nav>
         <button class="btn bad" id="logout-btn" hidden>logout</button>
       </div>
     </header>
 
     <div class="admin-content">
       <!-- 登录视图 -->
-      <section class="auth-view subwindow page-reveal" id="login-view" hidden aria-labelledby="login-title">
-        <div class="subwindow-titlebar" aria-hidden="true">
-          <span class="subwindow-controls"></span>
-          <span class="subwindow-title">authenticate · model-uptime</span>
+      <section class="auth-view subwindow mac-window popup-window hidden" id="login-view" data-window-id="login-view" data-window-popup data-window-mode="normal" aria-labelledby="login-title">
+        <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
+          <div class="window-controls">
+            <button class="window-control close" type="button" data-window-action="close" aria-label="Close login window"></button>
+            <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize login window"></button>
+            <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize login window"></button>
+          </div>
+          <span class="subwindow-title" id="login-title">authenticate · model-uptime</span>
           <span></span>
         </div>
         <div class="auth-window-body">
-          <div class="auth-identity" aria-hidden="true">
-            <div class="auth-signal"><span></span><span></span><span></span></div>
-            <span class="auth-monogram">MU</span>
-            <p>MODEL UPTIME</p>
-          </div>
           <div class="auth-card">
-            <span class="auth-eyebrow">restricted access</span>
-            <h2 id="login-title">Welcome back</h2>
             <p class="auth-command"><span class="prompt">~ $</span> admin login <span class="flag">--session</span></p>
             <form id="login-form">
               <label for="login-token">Admin password</label>
@@ -61,28 +58,24 @@
                 <button class="btn primary" type="submit">sign in</button>
               </div>
             </form>
-            <p class="hint auth-hint">Stored for this tab session only.</p>
           </div>
         </div>
       </section>
 
       <!-- 首次设置密码视图（仅当服务未配置管理密码时显示） -->
-      <section class="auth-view subwindow page-reveal" id="setup-view" hidden aria-labelledby="setup-title">
-        <div class="subwindow-titlebar" aria-hidden="true">
-          <span class="subwindow-controls"></span>
+      <section class="auth-view subwindow mac-window popup-window hidden" id="setup-view" data-window-id="setup-view" data-window-popup data-window-mode="normal" aria-labelledby="setup-title">
+        <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
+          <div class="window-controls">
+            <button class="window-control close" type="button" data-window-action="close" aria-label="Close setup window"></button>
+            <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize setup window"></button>
+            <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize setup window"></button>
+          </div>
           <span class="subwindow-title">setup · model-uptime</span>
           <span></span>
         </div>
         <div class="auth-window-body">
-          <div class="auth-identity" aria-hidden="true">
-            <div class="auth-signal"><span></span><span></span><span></span></div>
-            <span class="auth-monogram">MU</span>
-            <p>MODEL UPTIME</p>
-          </div>
           <div class="auth-card">
-            <span class="auth-eyebrow">first run</span>
             <h2 id="setup-title">Create administrator</h2>
-            <p class="auth-command"><span class="prompt">~ $</span> admin setup <span class="flag">--persist</span></p>
             <form class="vertical" id="setup-form">
               <label for="setup-token">New admin password</label>
               <input type="password" id="setup-token" placeholder="At least 8 characters" autocomplete="new-password" />
@@ -90,7 +83,6 @@
               <input type="password" id="setup-confirm" placeholder="Repeat password" autocomplete="new-password" />
               <button class="btn primary" type="submit">create account</button>
             </form>
-            <p class="hint auth-hint">The password is persisted to the server configuration.</p>
           </div>
         </div>
       </section>
@@ -150,9 +142,13 @@
         <ul class="service-list" id="svc-list" aria-label="monitor services">
           <li class="empty">loading…</li>
         </ul>
-        <div class="service-editor subwindow panel-reveal hidden" id="editor" role="region" aria-labelledby="editor-title">
-          <div class="subwindow-titlebar">
-            <span class="subwindow-controls" aria-hidden="true"></span>
+        <div class="service-editor subwindow mac-window popup-window hidden" id="editor" data-window-id="editor" data-window-popup data-window-mode="normal" role="dialog" aria-modal="false" aria-labelledby="editor-title">
+          <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
+            <div class="window-controls">
+              <button class="window-control close" type="button" data-window-action="close" aria-label="Close service editor"></button>
+              <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize service editor"></button>
+              <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize service editor"></button>
+            </div>
             <h3 class="subwindow-title" id="editor-title">new service</h3>
             <span></span>
           </div>
@@ -256,9 +252,13 @@
     </section>
 
     <!-- 批量设置 -->
-    <section class="bulk-editor subwindow panel-reveal hidden" id="bulk-editor" aria-labelledby="bulk-editor-title">
-      <div class="subwindow-titlebar">
-        <span class="subwindow-controls" aria-hidden="true"></span>
+    <section class="bulk-editor subwindow mac-window popup-window hidden" id="bulk-editor" data-window-id="bulk-editor" data-window-popup data-window-mode="normal" role="dialog" aria-modal="false" aria-labelledby="bulk-editor-title">
+      <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
+        <div class="window-controls">
+          <button class="window-control close" type="button" data-window-action="close" aria-label="Close bulk settings"></button>
+          <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize bulk settings"></button>
+          <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize bulk settings"></button>
+        </div>
         <h2 class="subwindow-title" id="bulk-editor-title">bulk settings</h2>
         <span></span>
       </div>
@@ -315,9 +315,13 @@
           <div class="empty">loading…</div>
         </div>
 
-        <div class="subscription-editor subwindow panel-reveal hidden" id="tg-editor" role="region" aria-labelledby="tg-editor-title">
-          <div class="subwindow-titlebar">
-            <span class="subwindow-controls" aria-hidden="true"></span>
+        <div class="subscription-editor subwindow mac-window popup-window hidden" id="tg-editor" data-window-id="tg-editor" data-window-popup data-window-mode="normal" role="dialog" aria-modal="false" aria-labelledby="tg-editor-title">
+          <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
+            <div class="window-controls">
+              <button class="window-control close" type="button" data-window-action="close" aria-label="Close subscription editor"></button>
+              <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize subscription editor"></button>
+              <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize subscription editor"></button>
+            </div>
             <h3 class="subwindow-title" id="tg-editor-title">subscription settings</h3>
             <span></span>
           </div>
@@ -443,6 +447,8 @@
   </div>
 </div>
 
+<div class="window-layer" id="window-layer"></div>
+<div class="window-dock" id="window-dock" aria-label="Minimized windows"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true"></div>
 <script type="module" src="/assets/scripts/admin/app.js"></script>
 </body>

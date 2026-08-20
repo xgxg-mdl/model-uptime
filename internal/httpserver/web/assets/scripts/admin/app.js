@@ -3,6 +3,7 @@ import { createServicesController } from './services.js';
 import { createTelegramController } from './telegram.js';
 import { createUpdateController } from './updater.js';
 import { createPageSettingsController } from './page-settings.js';
+import { createWindowManager } from '../window-manager.js';
 
 export const TOKEN_KEY = 'admin_token';
 
@@ -22,6 +23,7 @@ export function startAdminApp({
   now = () => Date.now(),
 } = {}) {
   const toast = createToast({ document: documentRef, schedule, cancel });
+  const windows = createWindowManager({ document: documentRef, window: windowRef, schedule });
   const token = () => storage.getItem(TOKEN_KEY) || '';
   const logout = () => {
     storage.removeItem(TOKEN_KEY);
@@ -36,6 +38,7 @@ export function startAdminApp({
   const telegram = createTelegramController({
     document: documentRef,
     window: windowRef,
+    windows,
     api,
     toast,
     confirm: confirmAction,
@@ -43,6 +46,7 @@ export function startAdminApp({
   const services = createServicesController({
     document: documentRef,
     window: windowRef,
+    windows,
     api,
     toast,
     confirm: confirmAction,
@@ -66,9 +70,19 @@ export function startAdminApp({
     now,
   });
 
+  const leaveAdmin = () => {
+    if (typeof locationRef.assign === 'function') locationRef.assign('/');
+    else locationRef.href = '/';
+  };
+  windows.setCloseHandler('login-view', leaveAdmin);
+  windows.setCloseHandler('setup-view', leaveAdmin);
+  windows.setCloseHandler('editor', services.closeEditor);
+  windows.setCloseHandler('bulk-editor', services.closeBulkEditor);
+  windows.setCloseHandler('tg-editor', telegram.closeEditor);
+
   function enterApp() {
-    documentRef.getElementById('login-view').hidden = true;
-    documentRef.getElementById('setup-view').hidden = true;
+    windows.close('login-view');
+    windows.close('setup-view');
     documentRef.getElementById('app-view').hidden = false;
     documentRef.getElementById('logout-btn').hidden = false;
     void services.load();
@@ -92,7 +106,7 @@ export function startAdminApp({
     } catch {
       configured = true;
     }
-    documentRef.getElementById(configured ? 'login-view' : 'setup-view').hidden = false;
+    windows.open(configured ? 'login-view' : 'setup-view');
   }
 
   documentRef.getElementById('login-form').addEventListener('submit', async event => {
@@ -156,6 +170,7 @@ export function startAdminApp({
     telegram,
     pageSettings,
     updater,
+    windows,
   };
 }
 

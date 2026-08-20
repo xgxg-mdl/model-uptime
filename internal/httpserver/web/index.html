@@ -8,12 +8,12 @@
 <link rel="stylesheet" href="/assets/styles/status.css" />
 </head>
 <body>
-  <div class="term terminal-intro" id="terminal" role="region" aria-label="model-uptime status terminal">
-    <div class="titlebar">
-      <div class="lights" aria-hidden="true">
-        <span class="light close"></span>
-        <span class="light min"></span>
-        <span class="light max"></span>
+  <div class="term terminal-intro mac-window is-active" id="terminal" data-window-id="status" data-window-main data-window-mode="normal" data-window-dock-label="status" role="region" aria-label="model-uptime status terminal">
+    <div class="titlebar window-titlebar" data-window-titlebar>
+      <div class="window-controls">
+        <button class="window-control close" type="button" data-window-action="close" aria-label="Close status window"></button>
+        <button class="window-control minimize" type="button" data-window-action="minimize" aria-label="Minimize status window"></button>
+        <button class="window-control maximize" type="button" data-window-action="maximize" aria-label="Maximize status window"></button>
       </div>
       <div class="title-text">
         <span class="mute">—</span> <span id="term-subtitle">model-uptime</span> <span class="mute">—</span>
@@ -52,6 +52,7 @@
     </div>
   </div>
 
+  <div class="window-dock" id="window-dock" aria-label="Minimized windows"></div>
   <div class="tip" id="tip" role="tooltip"></div>
   <script type="module" src="/assets/scripts/status-page.js"></script>
 </body>

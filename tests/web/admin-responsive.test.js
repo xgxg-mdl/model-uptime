@@ -41,13 +41,16 @@ test('管理页使用外置资源并保留响应式结构', () => {
     'class="service-list" id="svc-list"',
     'class="telegram-token-row"',
     'class="metric-options"',
-    'class="wrap admin-window"',
-    'class="titlebar"',
-    'class="lights" aria-hidden="true"',
-    'class="auth-view subwindow page-reveal" id="login-view"',
-    'id="login-title">Welcome back',
+    'class="admin-nav" aria-label="Public pages"',
+    '<a href="/heatmap/">heatmap</a>',
+    'class="wrap admin-window mac-window is-active"',
+    'class="titlebar window-titlebar"',
+    'class="window-controls"',
+    'class="auth-view subwindow mac-window popup-window hidden" id="login-view"',
+    'class="subwindow-title" id="login-title">authenticate · model-uptime',
     'class="auth-input-row"',
-    'class="product-lockup"',
+    'id="window-layer"',
+    'id="window-dock"',
   ]) {
     assert.ok(html.includes(marker), `missing responsive service marker: ${marker}`);
   }
@@ -66,7 +69,7 @@ test('管理页使用外置资源并保留响应式结构', () => {
   ]) {
     assert.ok(adminCSS.includes(marker), `missing responsive admin style: ${marker}`);
   }
-  assert.ok(foundationCSS.includes('.light.close { background: var(--btn-close); }'));
+  assert.ok(foundationCSS.includes('.mac-window.is-active .window-control.close::after'));
   assert.doesNotMatch(adminCSS, /@media \(max-width: 960px\)|content:\s*attr\(data-label\)/);
   assert.doesNotMatch(adminCSS, /\.admin-surface::before|repeating-linear-gradient/);
   assert.match(adminCSS, /\.btn\.primary:disabled\s*{[^}]*background:\s*var\(--surface-raised\);/s);
@@ -79,19 +82,22 @@ test('登录密码自动填充保持暗色主题', () => {
 });
 
 test('认证页和管理页保持清晰的视觉层级', () => {
-  for (const marker of [
-    'grid-template-columns: 190px minmax(320px, 1fr)',
-    '.auth-identity {',
-    '.auth-card {',
-    '.product-mark {',
-    '#app-view > .panel > h2::before',
-  ]) {
+  for (const marker of ['.auth-card {', '.auth-view {', '.admin-nav a {']) {
     assert.ok(adminCSS.includes(marker), `missing admin visual marker: ${marker}`);
   }
+  assert.doesNotMatch(adminCSS, /counter-(?:reset|increment)|counter\(admin-panel\)/);
+  for (const removedMarker of ['product-mark', 'auth-identity', 'auth-monogram', 'auth-signal']) {
+    assert.ok(!html.includes(removedMarker), `unexpected avatar marker in HTML: ${removedMarker}`);
+    assert.ok(!adminCSS.includes(removedMarker), `unexpected avatar marker in CSS: ${removedMarker}`);
+  }
+  for (const removedCopy of ['Welcome back', 'restricted access', 'Stored for this tab session only.']) {
+    assert.ok(!html.includes(removedCopy), `unexpected decorative login copy: ${removedCopy}`);
+  }
+  assert.match(html, /<span class="prompt">~ \$<\/span> admin login <span class="flag">--session<\/span>/);
 
   const mobileOffset = adminCSS.indexOf('@media (max-width: 559px)');
   const mobileCSS = adminCSS.slice(mobileOffset);
-  assert.match(mobileCSS, /\.auth-window-body \{ grid-template-columns: 1fr;/);
+  assert.match(mobileCSS, /\.auth-window-body \{ min-height: 0;/);
   assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
 });
 
@@ -112,30 +118,31 @@ test('管理密码长度按 Unicode 字符而非编码单元计算', () => {
   assert.equal(passwordCharacterCount('🔐🔐🔐🔐🔐🔐🔐🔐'), 8);
 });
 
-test('桌面端滚动收进管理窗口内容区', () => {
+test('所有视口的滚动都收进管理窗口内容区', () => {
   const desktopOffset = adminCSS.indexOf('@media (min-width: 960px)');
   assert.ok(desktopOffset >= 0, 'missing desktop admin layout');
-  const desktopCSS = adminCSS.slice(desktopOffset);
+  const layoutCSS = adminCSS;
 
   for (const marker of [
     'height: 100dvh;',
     'overflow: hidden;',
     'display: flex;',
     'flex-direction: column;',
-    'height: auto;',
-    'max-height: calc(100dvh - 80px);',
-    'flex: 0 1 auto;',
+    'height: calc(100dvh - 80px);',
     'flex: 1 1 auto;',
     'overflow-y: auto;',
     'overscroll-behavior: contain;',
-    'scrollbar-color: var(--scroll-thumb) transparent;',
-    '.admin-content::-webkit-scrollbar { width: 8px; }',
   ]) {
-    assert.ok(desktopCSS.includes(marker), `missing desktop scrolling style: ${marker}`);
+    assert.ok(layoutCSS.includes(marker), `missing window scrolling style: ${marker}`);
   }
-  assert.doesNotMatch(desktopCSS, /\.admin-window\s*{[^}]*\n\s*height:\s*calc\(100dvh - 80px\);/);
-  assert.doesNotMatch(desktopCSS, /\.admin-surface\s*{[^}]*\n\s*height:\s*calc\(100% - 30px\);/);
-  assert.doesNotMatch(desktopCSS, /scrollbar-gutter/);
+  assert.match(layoutCSS, /\.admin-window\s*{[^}]*height:\s*calc\(100dvh - 80px\);/s);
+  assert.doesNotMatch(layoutCSS, /\.admin-surface\s*{[^}]*\n\s*height:\s*calc\(100% - 30px\);/);
+  assert.doesNotMatch(layoutCSS, /scrollbar-gutter/);
+  assert.match(foundationCSS, /scrollbar-color: var\(--scroll-thumb\) transparent;/);
+  assert.match(foundationCSS, /\*::-webkit-scrollbar \{ width: 8px; height: 8px; \}/);
+  assert.doesNotMatch(`${adminCSS}\n${statusCSS}`, /scrollbar-(?:color|width)|::-webkit-scrollbar/);
+  assert.match(foundationCSS, /@media \(max-width: 640px\)[\s\S]*?\* \{ scrollbar-width: none; \}/);
+  assert.match(foundationCSS, /@media \(max-width: 640px\)[\s\S]*?\*::-webkit-scrollbar \{ display: none; \}/);
 });
 
 test('桌面和移动服务渲染器保持相同操作能力并转义字段', () => {
@@ -224,6 +231,7 @@ test('管理页颜色只来自已审核的共享色板', () => {
     '#2a2a30',
     '#3a3a42',
     '#55555e',
+    '#66666d',
     '#5eff9c',
     '#7afcff',
     '#8a8a94',
@@ -233,6 +241,9 @@ test('管理页颜色只来自已审核的共享色板', () => {
     '#ff5f57',
     '#ffc857',
     '#28c840',
+    '#7a1712',
+    '#805b0b',
+    '#0b6719',
   ]);
   const source = `${foundationCSS}\n${adminCSS}`;
   const unexpected = [...new Set(source.match(/#[0-9a-fA-F]{3,8}\b/g) || [])].filter(
@@ -244,7 +255,7 @@ test('管理页颜色只来自已审核的共享色板', () => {
 test('公共终端样式集中在基础层，页面样式只消费颜色变量', () => {
   assert.doesNotMatch(adminCSS, /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/);
 
-  for (const selector of ['.titlebar', '.lights', '.light', '.prompt', '.flag']) {
+  for (const selector of ['.titlebar', '.window-controls', '.window-control', '.prompt', '.flag']) {
     assert.ok(foundationCSS.includes(`${selector} {`), `基础层缺少公共规则: ${selector}`);
     assert.ok(!adminCSS.includes(`${selector} {`), `管理页重复声明公共规则: ${selector}`);
     assert.ok(!statusCSS.includes(`${selector} {`), `状态页重复声明公共规则: ${selector}`);
@@ -255,25 +266,29 @@ test('公共终端样式集中在基础层，页面样式只消费颜色变量',
   assert.doesNotMatch(statusCSS, /@keyframes surface-in/);
 });
 
-test('登录与临时编辑任务共用一套子窗口结构', () => {
+test('所有管理窗口共用站点级窗口结构和真实控制按钮', () => {
   for (const marker of [
     '.subwindow {',
     '.subwindow-titlebar {',
-    '.subwindow-controls {',
+    '.window-controls {',
+    '.window-control {',
     '.subwindow-title {',
     '.subwindow-body {',
+    '.window-layer {',
+    '.popup-window {',
   ]) {
     assert.ok(foundationCSS.includes(marker), '基础层缺少子窗口组件: ' + marker);
   }
 
-  assert.equal((html.match(/class="subwindow-titlebar"/g) || []).length, 5);
-  assert.equal((html.match(/class="subwindow-controls"/g) || []).length, 5);
+  assert.equal((html.match(/class="subwindow-titlebar window-titlebar"/g) || []).length, 5);
+  assert.equal((html.match(/class="window-controls"/g) || []).length, 6);
+  assert.equal((html.match(/data-window-action="(?:close|minimize|maximize)"/g) || []).length, 18);
   for (const marker of [
-    'class="auth-view subwindow page-reveal" id="login-view"',
-    'class="auth-view subwindow page-reveal" id="setup-view"',
-    'class="service-editor subwindow panel-reveal hidden" id="editor"',
-    'class="bulk-editor subwindow panel-reveal hidden" id="bulk-editor"',
-    'class="subscription-editor subwindow panel-reveal hidden" id="tg-editor"',
+    'class="auth-view subwindow mac-window popup-window hidden" id="login-view"',
+    'class="auth-view subwindow mac-window popup-window hidden" id="setup-view"',
+    'class="service-editor subwindow mac-window popup-window hidden" id="editor"',
+    'class="bulk-editor subwindow mac-window popup-window hidden" id="bulk-editor"',
+    'class="subscription-editor subwindow mac-window popup-window hidden" id="tg-editor"',
   ]) {
     assert.ok(html.includes(marker), '缺少统一子窗口结构: ' + marker);
   }

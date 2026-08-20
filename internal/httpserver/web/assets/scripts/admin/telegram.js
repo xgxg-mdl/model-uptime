@@ -50,6 +50,7 @@ export async function sendTelegramTest({ subscription, results, save, api, kind 
 export function createTelegramController({
   document: documentRef,
   window: windowRef = globalThis.window,
+  windows,
   api,
   toast,
   confirm: confirmAction = globalThis.confirm,
@@ -60,6 +61,14 @@ export function createTelegramController({
   let editingIndex = null;
   let tokenConfigured = false;
   const element = id => documentRef.getElementById(id);
+  const showWindow = id => {
+    if (windows) windows.open(id);
+    else revealPanel(element(id), windowRef);
+  };
+  const hideWindow = id => {
+    if (windows) windows.close(id);
+    else element(id).classList.add('hidden');
+  };
 
   function selectedServiceIDs() {
     return Array.from(documentRef.querySelectorAll('#tg-model-picker input:checked')).map(input => input.value);
@@ -175,12 +184,12 @@ export function createTelegramController({
     element('tg-template').value = subscription.template || templates[subscription.language];
     element('tg-test-result').className = 'test-result feedback-in hidden';
     renderModelPicker(subscription.service_ids);
-    revealPanel(element('tg-editor'), windowRef);
+    showWindow('tg-editor');
   }
 
   function closeEditor() {
     editingIndex = null;
-    element('tg-editor').classList.add('hidden');
+    hideWindow('tg-editor');
   }
 
   function collectSubscription() {

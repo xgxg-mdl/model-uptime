@@ -69,14 +69,14 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
     assert.ok(statusCSS.includes(marker), `公开页面缺少终端输入动效: ${marker}`);
   }
   assert.match(heatmapCSS, /\.range-change\s*{[^}]*animation:/);
-  assert.match(statusHTML, /class="term terminal-intro"/);
+  assert.match(statusHTML, /class="term terminal-intro mac-window is-active"/);
   assert.match(statusHTML, /id="command-uptime"/);
   assert.match(statusHTML, /id="command-monitor"/);
   assert.match(
     statusHTML,
     /class="terminal-command-text"[^>]*>[\s\S]*?--watch[\s\S]*?id="cmd-models"[\s\S]*?<\/span><span class="terminal-typing-cursor"/,
   );
-  assert.match(heatmapHTML, /class="term heatmap-term terminal-intro"/);
+  assert.match(heatmapHTML, /class="term heatmap-term terminal-intro mac-window is-active"/);
   assert.match(heatmapHTML, /id="command-heatmap-monitor"/);
   assert.match(heatmapHTML, /id="command-heatmap"/);
   assert.match(
@@ -89,13 +89,10 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?body\s*{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.term\s*{[^}]*height:\s*auto;[^}]*max-height:\s*100%;/);
   assert.doesNotMatch(statusCSS, /\.term\s*{[^}]*\n\s*height:\s*100%;/);
-  assert.match(
-    statusCSS,
-    /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;[^}]*scrollbar-color:\s*var\(--scroll-thumb\) transparent;[^}]*scrollbar-width:\s*thin;/,
-  );
+  assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.body\s*{[^}]*overflow-y:\s*auto;/);
   assert.doesNotMatch(statusCSS, /scrollbar-gutter:/);
-  assert.match(statusCSS, /\.body::-webkit-scrollbar\s*{\s*width:\s*8px;/);
-  assert.match(statusCSS, /\.body::-webkit-scrollbar-thumb\s*{[^}]*background:\s*var\(--scroll-thumb\);/);
+  assert.match(foundationCSS, /\*::-webkit-scrollbar\s*{\s*width:\s*8px;\s*height:\s*8px;/);
+  assert.match(foundationCSS, /\*::-webkit-scrollbar-thumb\s*{[^}]*background:\s*var\(--scroll-thumb\);/);
   assert.doesNotMatch(statusCSS, /\.bar\s*\{[^}]*animation:/s);
 });
 
