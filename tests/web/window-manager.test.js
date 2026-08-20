@@ -60,6 +60,7 @@ function createWindowHarness() {
   const layer = document.registerElement('window-layer');
   const main = createWindow(document, { id: 'main', label: 'status', main: true });
   const popup = createWindow(document, { id: 'popup', label: 'service editor', popup: true, hidden: true });
+  main.element.append(popup.element);
   document.querySelectorAll = selector => (selector === '[data-window-id]' ? [main.element, popup.element] : []);
 
   const listeners = new Map();
@@ -148,6 +149,8 @@ test('最大化、最小化和恢复同步窗口状态并保留位置', () => {
   click(harness.popup.controls.querySelector('[data-window-action="minimize"]'));
   assert.equal(harness.popup.element.dataset.windowMode, 'minimized');
   assert.ok(harness.popup.element.classList.contains('hidden'));
+  assert.equal(harness.main.element.dataset.windowMode, 'normal');
+  assert.ok(!harness.main.element.classList.contains('hidden'));
   assert.equal(harness.popup.element.getAttribute('aria-hidden'), 'true');
   const dockItem = harness.dock.querySelector('[data-window-restore="popup"]');
   assert.ok(dockItem.classList.contains('is-minimized'));

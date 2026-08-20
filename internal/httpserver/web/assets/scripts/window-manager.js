@@ -63,6 +63,20 @@ export function createWindowManager({
     return Array.from(elements.values()).find(element => element.dataset.windowMain !== undefined);
   }
 
+  function ownedWindowElement(element, selector) {
+    return Array.from(element.querySelectorAll(selector)).find(
+      candidate => candidate.closest?.('[data-window-id]') === element,
+    );
+  }
+
+  function windowControls(element) {
+    const titlebar = ownedWindowElement(element, '[data-window-titlebar]');
+    if (!titlebar) return [];
+    return Array.from(titlebar.querySelectorAll('[data-window-action]')).filter(
+      control => control.closest?.('[data-window-id]') === element,
+    );
+  }
+
   function windowLabel(element) {
     const labelledBy = element.getAttribute?.('aria-labelledby');
     const labelledElement = labelledBy ? documentRef.getElementById(labelledBy) : null;
@@ -86,7 +100,7 @@ export function createWindowManager({
     element.classList.toggle('is-minimized', mode === 'minimized');
     element.classList.toggle('is-maximized', mode === 'maximized');
     element.setAttribute?.('aria-hidden', String(hidden));
-    element.querySelectorAll('[data-window-action]').forEach(control => {
+    windowControls(element).forEach(control => {
       const action = control.dataset.windowAction;
       const label = controlLabel(action, element, mode);
       control.setAttribute('aria-label', label);
@@ -394,7 +408,7 @@ export function createWindowManager({
 
   function bindWindow(element) {
     const id = element.dataset.windowId;
-    const titlebar = element.querySelector('[data-window-titlebar]');
+    const titlebar = ownedWindowElement(element, '[data-window-titlebar]');
     element.addEventListener('pointerdown', () => activate(id));
     element.addEventListener('focusin', event => {
       activate(id);
@@ -406,7 +420,7 @@ export function createWindowManager({
     titlebar?.addEventListener('dblclick', event => {
       if (!event.target.closest('[data-window-action]')) toggleMode(id, 'maximize');
     });
-    element.querySelectorAll('[data-window-action]').forEach(control => {
+    windowControls(element).forEach(control => {
       control.addEventListener('click', event => {
         event.stopPropagation();
         const action = control.dataset.windowAction;
