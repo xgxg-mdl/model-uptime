@@ -97,7 +97,7 @@ test('认证页和管理页保持清晰的视觉层级', () => {
   }
   assert.match(html, /<span class="prompt">~ \$<\/span> admin login <span class="flag">--session<\/span>/);
   assert.match(html, /<span class="prompt">~ \$<\/span> admin setup <span class="flag">--persist<\/span>/);
-  assert.match(html, /id="login-token" aria-label="Admin password" placeholder="admin password"/);
+  assert.match(html, /id="login-token"[^>]*data-window-initial-focus[^>]*aria-label="Admin password"/);
   assert.match(html, /class="btn primary" type="submit">enter<\/button>/);
   assert.match(html, /class="auth-terminal-form vertical" id="setup-form"/);
   assert.doesNotMatch(html, />Create administrator<|>Admin password<\/label>|>New admin password<\/label>/);

@@ -38,7 +38,7 @@
 
     <div class="admin-content">
       <!-- 登录视图 -->
-      <section class="auth-view subwindow mac-window popup-window hidden" id="login-view" data-window-id="login-view" data-window-popup data-window-mode="normal" aria-labelledby="login-title">
+      <section class="auth-view subwindow mac-window popup-window hidden" id="login-view" data-window-id="login-view" data-window-popup data-window-mode="normal" role="dialog" aria-modal="true" aria-labelledby="login-title">
         <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
           <div class="window-controls">
             <button class="window-control close" type="button" data-window-action="close" aria-label="Close login window"></button>
@@ -53,7 +53,7 @@
             <p class="auth-command"><span class="prompt">~ $</span> admin login <span class="flag">--session</span></p>
             <form class="auth-terminal-form" id="login-form">
               <div class="auth-input-row">
-                <input type="password" id="login-token" aria-label="Admin password" placeholder="admin password" autocomplete="current-password" />
+                <input type="password" id="login-token" data-window-initial-focus aria-label="Admin password" placeholder="admin password" autocomplete="current-password" />
                 <button class="btn primary" type="submit">enter</button>
               </div>
             </form>
@@ -62,7 +62,7 @@
       </section>
 
       <!-- 首次设置密码视图（仅当服务未配置管理密码时显示） -->
-      <section class="auth-view subwindow mac-window popup-window hidden" id="setup-view" data-window-id="setup-view" data-window-popup data-window-mode="normal" aria-labelledby="setup-title">
+      <section class="auth-view subwindow mac-window popup-window hidden" id="setup-view" data-window-id="setup-view" data-window-popup data-window-mode="normal" role="dialog" aria-modal="true" aria-labelledby="setup-title">
         <div class="subwindow-titlebar window-titlebar" data-window-titlebar>
           <div class="window-controls">
             <button class="window-control close" type="button" data-window-action="close" aria-label="Close setup window"></button>
@@ -76,7 +76,7 @@
           <div class="auth-card">
             <p class="auth-command" id="setup-title"><span class="prompt">~ $</span> admin setup <span class="flag">--persist</span></p>
             <form class="auth-terminal-form vertical" id="setup-form">
-              <input type="password" id="setup-token" aria-label="New admin password" placeholder="new admin password (8+ characters)" autocomplete="new-password" />
+              <input type="password" id="setup-token" data-window-initial-focus aria-label="New admin password" placeholder="new admin password (8+ characters)" autocomplete="new-password" />
               <input type="password" id="setup-confirm" aria-label="Confirm admin password" placeholder="confirm password" autocomplete="new-password" />
               <button class="btn primary" type="submit">set password</button>
             </form>
@@ -158,7 +158,7 @@
             </div>
             <div class="field">
               <label>Name *</label>
-              <input id="f-name" required autocomplete="off" />
+              <input id="f-name" data-window-initial-focus required autocomplete="off" />
               <span class="hint">状态页显示的模型名</span>
             </div>
             <div class="field">
@@ -264,7 +264,7 @@
         <form id="bulk-form">
           <div class="field">
             <label>Interval (s)</label>
-            <input id="b-interval" type="number" min="5" step="1" placeholder="不改" />
+            <input id="b-interval" data-window-initial-focus type="number" min="5" step="1" placeholder="不改" />
             <span class="hint">采样间隔，最小 5</span>
           </div>
           <div class="field">
@@ -326,7 +326,7 @@
             <form id="tg-subscription-form">
             <div class="field">
               <label>Subscription ID *</label>
-              <input id="tg-id" required autocomplete="off" placeholder="operations" />
+              <input id="tg-id" data-window-initial-focus required autocomplete="off" placeholder="operations" />
               <span class="hint">Unique identifier; cannot be changed after saving.</span>
             </div>
             <div class="field">

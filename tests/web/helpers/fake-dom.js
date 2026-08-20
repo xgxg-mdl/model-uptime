@@ -32,6 +32,20 @@ class FakeClassList {
   }
 }
 
+class FakeStyle {
+  setProperty(name, value) {
+    this[name] = String(value);
+  }
+
+  removeProperty(name) {
+    const camelName = name.replace(/-([a-z])/g, (_, character) => character.toUpperCase());
+    const previous = this[name] ?? this[camelName] ?? '';
+    delete this[name];
+    delete this[camelName];
+    return previous;
+  }
+}
+
 class FakeNode {
   constructor(ownerDocument, nodeType) {
     this.ownerDocument = ownerDocument;
@@ -60,6 +74,19 @@ class FakeNode {
     for (const child of this.childNodes) child.parentNode = null;
     this.childNodes = [];
     this.append(...nodes);
+  }
+
+  contains(node) {
+    for (let current = node; current; current = current.parentNode) {
+      if (current === this) return true;
+    }
+    return false;
+  }
+
+  remove() {
+    if (!this.parentNode) return;
+    this.parentNode.childNodes = this.parentNode.childNodes.filter(child => child !== this);
+    this.parentNode = null;
   }
 
   get textContent() {
@@ -99,7 +126,7 @@ export class FakeElement extends FakeNode {
     this.classList = new FakeClassList(this);
     this.attributes = new Map();
     this.dataset = {};
-    this.style = {};
+    this.style = new FakeStyle();
     this.hidden = false;
     this.disabled = false;
     this.checked = false;
@@ -122,6 +149,10 @@ export class FakeElement extends FakeNode {
 
   getAttribute(name) {
     if (name === 'class') return this.className || null;
+    if (name.startsWith('data-')) {
+      const key = name.slice(5).replace(/-([a-z])/g, (_, character) => character.toUpperCase());
+      return this.dataset[key] ?? null;
+    }
     return this.attributes.get(name) ?? null;
   }
 
@@ -173,6 +204,13 @@ export class FakeElement extends FakeNode {
   querySelector(selector) {
     return this.querySelectorAll(selector)[0] || null;
   }
+
+  closest(selector) {
+    for (let current = this; current instanceof FakeElement; current = current.parentNode) {
+      if (matchesSelector(current, selector)) return current;
+    }
+    return null;
+  }
 }
 
 export class FakeDocumentFragment extends FakeNode {
@@ -187,6 +225,7 @@ export class FakeDocument {
     this.documentElement = { clientWidth: 1024 };
     this.title = '';
     this.activeElement = null;
+    this.listeners = new Map();
   }
 
   createElement(tagName) {
@@ -203,6 +242,16 @@ export class FakeDocument {
 
   getElementById(id) {
     return this.elementsByID.get(id) || null;
+  }
+
+  addEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  dispatchEvent(event) {
+    for (const listener of this.listeners.get(event.type) || []) listener(event);
   }
 
   registerElement(id, tagName = 'div', className = '') {
