@@ -211,9 +211,11 @@
               <input id="f-warning" type="number" min="1" max="300" step="1" value="30" />
               <span class="hint">Successful probes slower than this appear as warning.</span>
             </div>
-            <div class="field llm check-row">
-              <input type="checkbox" id="f-stream" checked />
-              <label for="f-stream">streaming</label>
+            <div class="field llm checkbox-field">
+              <label for="f-stream">Streaming</label>
+              <div class="checkbox-control">
+                <input type="checkbox" id="f-stream" checked />
+              </div>
               <span class="hint">Validate the SSE streaming path by default</span>
             </div>
             <div class="field http hidden">
@@ -232,9 +234,11 @@
               <label>Body</label>
               <textarea id="f-body" placeholder="可选请求体"></textarea>
             </div>
-            <div class="field check-row">
-              <input type="checkbox" id="f-enabled" checked />
-              <label for="f-enabled">enabled</label>
+            <div class="field checkbox-field">
+              <label for="f-enabled">Enabled</label>
+              <div class="checkbox-control">
+                <input type="checkbox" id="f-enabled" checked />
+              </div>
             </div>
             <div class="form-actions">
               <button class="btn primary" type="submit" id="save-btn">save</button>
@@ -346,9 +350,11 @@
               </select>
               <span class="hint">Controls the built-in template; custom templates can use any language.</span>
             </div>
-            <div class="field check-row">
-              <input id="tg-enabled" type="checkbox" checked />
-              <label for="tg-enabled">enabled</label>
+            <div class="field checkbox-field">
+              <label for="tg-enabled">Enabled</label>
+              <div class="checkbox-control">
+                <input id="tg-enabled" type="checkbox" checked />
+              </div>
             </div>
             <div class="field full">
               <label>Models *</label>

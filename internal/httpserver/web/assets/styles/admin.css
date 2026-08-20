@@ -221,17 +221,19 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   padding: 0;
   accent-color: var(--ok);
 }
-.field.check-row {
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
-  align-content: start;
+.checkbox-control {
+  display: flex;
+  min-height: 34px;
   align-items: center;
-  column-gap: 8px;
-  row-gap: 4px;
 }
-.field.check-row > input[type="checkbox"] { grid-column: 1; grid-row: 1; }
-.field.check-row > label { grid-column: 2; grid-row: 1; }
-.field.check-row > .hint { grid-column: 2; grid-row: 2; }
+.checkbox-control > input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--ok);
+}
 .metric-options { display: flex; flex-wrap: wrap; gap: 14px; }
 .metric-options .check-row { white-space: nowrap; }
 .form-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 4px; align-items: center; }

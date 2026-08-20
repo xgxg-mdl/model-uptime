@@ -117,14 +117,23 @@ test('认证页和管理页保持清晰的视觉层级', () => {
   assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
 });
 
-test('弹窗复选字段保持同行对齐且文本域不显示原生缩放手柄', () => {
+test('弹窗复选字段使用标题、控件和说明三层布局', () => {
   assert.match(
-    adminCSS,
-    /\.field\.check-row\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*14px minmax\(0, 1fr\);/s,
+    html,
+    /class="field llm checkbox-field">\s*<label for="f-stream">Streaming<\/label>\s*<div class="checkbox-control">\s*<input type="checkbox" id="f-stream" checked \/>\s*<\/div>\s*<span class="hint">Validate the SSE streaming path by default<\/span>/,
   );
   assert.match(
+    html,
+    /class="field checkbox-field">\s*<label for="f-enabled">Enabled<\/label>\s*<div class="checkbox-control">\s*<input type="checkbox" id="f-enabled" checked \/>\s*<\/div>/,
+  );
+  assert.match(
+    html,
+    /class="field checkbox-field">\s*<label for="tg-enabled">Enabled<\/label>\s*<div class="checkbox-control">\s*<input id="tg-enabled" type="checkbox" checked \/>\s*<\/div>/,
+  );
+  assert.match(adminCSS, /\.checkbox-control\s*{[^}]*min-height:\s*34px;[^}]*align-items:\s*center;/s);
+  assert.match(
     adminCSS,
-    /\.check-row input\[type="checkbox"\]\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;[^}]*margin:\s*0;/s,
+    /\.checkbox-control > input\[type="checkbox"\]\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;[^}]*margin:\s*0;/s,
   );
   assert.match(adminCSS, /\.field textarea\s*{[^}]*resize:\s*none;/s);
   assert.doesNotMatch(adminCSS, /\.field input,\s*\n\.field select/);
