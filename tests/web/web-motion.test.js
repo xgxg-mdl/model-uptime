@@ -85,7 +85,13 @@ test('两页共享动效变量并尊重 reduced-motion', () => {
   );
   assert.match(statusCSS, /\.terminal-command\s*{[^}]*white-space:\s*normal;/s);
   assert.match(statusCSS, /\.terminal-command-text\s*{[^}]*display:\s*inline;[^}]*white-space:\s*normal;/s);
-  assert.match(statusCSS, /\.terminal-intro \.terminal-reveal\s*{[^}]*position:\s*absolute;/s);
+  assert.match(statusCSS, /\.terminal-intro \.terminal-reveal\s*{[^}]*display:\s*none;/s);
+  assert.match(
+    statusCSS,
+    /\.terminal-intro \.terminal-reveal\.terminal-reveal-visible\s*{[^}]*display:\s*var\(--terminal-reveal-display, block\);/s,
+  );
+  assert.match(heatmapCSS, /\.heatmap-toolbar\s*{[^}]*--terminal-reveal-display:\s*flex;/s);
+  assert.match(heatmapCSS, /\.heatmap-panels\s*{[^}]*--terminal-reveal-display:\s*grid;/s);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?body\s*{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   assert.match(statusCSS, /@media \(min-width: 641px\)[\s\S]*?\.term\s*{[^}]*height:\s*auto;[^}]*max-height:\s*100%;/);
   assert.doesNotMatch(statusCSS, /\.term\s*{[^}]*\n\s*height:\s*100%;/);

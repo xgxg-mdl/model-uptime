@@ -90,13 +90,13 @@ body {
 }
 
 .terminal-intro .terminal-reveal {
-  position: absolute;
+  display: none;
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
 }
 .terminal-intro .terminal-reveal.terminal-reveal-visible {
-  position: static;
+  display: var(--terminal-reveal-display, block);
   visibility: visible;
   pointer-events: auto;
   animation: terminal-output-in var(--motion-base) var(--motion-ease-out) forwards;
@@ -294,6 +294,7 @@ body {
   .bar:focus-visible { transform: none; }
   .cursor { opacity: 1; }
   .terminal-intro .terminal-command { visibility: visible; }
+  .terminal-intro .terminal-reveal { display: var(--terminal-reveal-display, block); }
   .terminal-intro .terminal-reveal,
   .terminal-intro .terminal-idle { visibility: visible; opacity: 1; transform: none; }
   .terminal-intro .terminal-typing-cursor { display: none; }

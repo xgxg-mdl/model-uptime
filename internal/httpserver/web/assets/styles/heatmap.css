@@ -10,6 +10,7 @@
 .heatmap-command { display: grid; gap: 8px; }
 
 .heatmap-toolbar {
+  --terminal-reveal-display: flex;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -67,6 +68,7 @@
 .legend-swatch.failing { background: var(--heat-failing); }
 
 .heatmap-panels {
+  --terminal-reveal-display: grid;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px 28px;

@@ -106,29 +106,44 @@ test('认证页和管理页保持清晰的视觉层级', () => {
   assert.match(html, /class="wrap admin-window mac-window hidden"[^>]*data-window-id="admin"/);
   assert.match(adminAppJS, /function enterApp\(\)[\s\S]*?windows\.open\('admin'\);/);
 
+  assert.match(adminCSS, /\.admin-nav a\s*{[^}]*text-decoration:\s*none;/s);
+  assert.match(
+    adminCSS,
+    /\.admin-nav a:focus-visible\s*{[^}]*outline:\s*none;[^}]*box-shadow:\s*inset 0 0 0 1px var\(--info-border\);/s,
+  );
+
   const mobileOffset = adminCSS.indexOf('@media (max-width: 559px)');
   const mobileCSS = adminCSS.slice(mobileOffset);
   assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
 });
 
-test('小屏长表单切换为单列任务视图并固定操作栏，认证表单保持紧凑弹窗', () => {
+test('弹窗复选字段保持同行对齐且文本域不显示原生缩放手柄', () => {
   assert.match(
     adminCSS,
-    /@media \(max-width: 640px\)[\s\S]*?\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\)\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*height:\s*100dvh;[^}]*transform:\s*none;/,
+    /\.field\.check-row\s*{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*14px minmax\(0, 1fr\);/s,
   );
   assert.match(
     adminCSS,
-    /\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\) \.window-control:is\(\.minimize, \.maximize\)\s*{[^}]*display:\s*none;/,
+    /\.check-row input\[type="checkbox"\]\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;[^}]*margin:\s*0;/s,
+  );
+  assert.match(adminCSS, /\.field textarea\s*{[^}]*resize:\s*none;/s);
+  assert.doesNotMatch(adminCSS, /\.field input,\s*\n\.field select/);
+});
+
+test('小屏编辑器保留站点统一的浮动窗口样式', () => {
+  assert.match(
+    foundationCSS,
+    /\.popup-window\s*{[^}]*position:\s*absolute;[^}]*width:\s*min\(720px, calc\(100% - 24px\)\);[^}]*max-height:\s*calc\(100dvh - 24px\);[^}]*transform:\s*translate\(-50%, -50%\);/s,
   );
   assert.match(
-    adminCSS,
-    /\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\) form\s*{[^}]*grid-template-columns:\s*1fr;/,
+    foundationCSS,
+    /\.popup-window > :not\(\.window-titlebar\)\s*{[^}]*max-height:\s*calc\(100dvh - 54px\);[^}]*overflow:\s*auto;/s,
   );
-  assert.match(
+  assert.doesNotMatch(
     adminCSS,
-    /\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\) \.form-actions\s*{[^}]*position:\s*sticky;[^}]*bottom:\s*0;[^}]*background:\s*var\(--term-bg\);[^}]*border-top:\s*1px solid var\(--line\);/,
+    /@media \(max-width: 640px\)[\s\S]*?\.popup-window:is\(\.service-editor, \.bulk-editor, \.subscription-editor\)/,
   );
-  assert.doesNotMatch(adminCSS, /:is\([^)]*\.auth-view[^)]*\)[^{]*{[^}]*height:\s*100dvh;/);
+  assert.doesNotMatch(adminCSS, /\.popup-window[^}]*border-radius:\s*0/);
 });
 
 test('toast 提供统一状态视觉和无障碍容器', () => {
