@@ -210,15 +210,12 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 }
 .section-feedback.bad { color: var(--bad); border-color: var(--bad-border); }
 .auth-view {
-  width: min(520px, calc(100% - 24px));
+  width: min(440px, calc(100% - 24px));
 }
 .auth-view[hidden] { display: none; }
-.auth-window-body { min-height: 260px; }
-.auth-card { display: flex; min-height: 260px; flex-direction: column; justify-content: center; padding: 30px; }
-.auth-card h2 { margin: 6px 0 20px; color: var(--fg); font-size: 20px; line-height: 1.25; }
-.auth-card form { display: flex; flex-direction: column; gap: 7px; }
-.auth-card form.vertical { gap: 7px; }
-.auth-card form label { color: var(--dim); font-size: 10px; }
+.auth-window-body { min-height: 0; background: var(--term-bg); }
+.auth-card { padding: 24px; }
+.auth-terminal-form { display: flex; flex-direction: column; gap: 8px; }
 .auth-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .auth-card input {
   width: 100%;
@@ -246,10 +243,7 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   -webkit-box-shadow: 0 0 0 1000px var(--term-bg) inset;
   caret-color: var(--fg);
 }
-.auth-command { margin: 0 0 14px; color: var(--fg); font-size: 11px; }
-#login-view .auth-window-body,
-#login-view .auth-card { min-height: 0; }
-#login-view .auth-card { padding: 22px; }
+.auth-command { margin: 0 0 14px; color: var(--fg); font-size: 12px; }
 .toast {
   position: fixed;
   top: 16px;
@@ -384,8 +378,7 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 }
 
 @media (max-width: 959px) {
-  body { padding-top: 12px; padding-bottom: 12px; }
-  .admin-window { height: calc(100dvh - 24px); }
+  .admin-window { height: calc(100dvh - 40px); }
   .service-table-wrap { display: none; }
   .service-list { display: block; border-top: 1px solid var(--line); }
   .service-item {
@@ -471,9 +464,7 @@ form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   .update-value:nth-child(2) { border-right: 0; }
   .update-value:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line); }
   .toast { top: 12px; right: 12px; width: calc(100% - 24px); }
-  .auth-window-body { min-height: 0; }
-  .auth-card { min-height: 0; padding: 24px 18px; }
-  .auth-card h2 { margin-bottom: 18px; font-size: 18px; }
+  .auth-card { padding: 24px 18px; }
   .auth-input-row { grid-template-columns: 1fr; }
   .auth-card .btn { width: 100%; min-height: 34px; }
 }

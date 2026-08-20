@@ -12,6 +12,7 @@ import { passwordCharacterCount } from '../../internal/httpserver/web/assets/scr
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'internal/httpserver/web/admin/index.html'), 'utf8');
+const adminAppJS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/scripts/admin/app.js'), 'utf8');
 const adminCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/admin.css'), 'utf8');
 const foundationCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/foundation.css'), 'utf8');
 const statusCSS = fs.readFileSync(path.join(root, 'internal/httpserver/web/assets/styles/status.css'), 'utf8');
@@ -43,11 +44,12 @@ test('管理页使用外置资源并保留响应式结构', () => {
     'class="metric-options"',
     'class="admin-nav" aria-label="Public pages"',
     '<a href="/heatmap/">heatmap</a>',
-    'class="wrap admin-window mac-window is-active"',
+    'class="wrap admin-window mac-window hidden"',
     'class="titlebar window-titlebar"',
     'class="window-controls"',
     'class="auth-view subwindow mac-window popup-window hidden" id="login-view"',
     'class="subwindow-title" id="login-title">authenticate · model-uptime',
+    'class="auth-terminal-form" id="login-form"',
     'class="auth-input-row"',
     'id="window-layer"',
     'id="window-dock"',
@@ -94,10 +96,18 @@ test('认证页和管理页保持清晰的视觉层级', () => {
     assert.ok(!html.includes(removedCopy), `unexpected decorative login copy: ${removedCopy}`);
   }
   assert.match(html, /<span class="prompt">~ \$<\/span> admin login <span class="flag">--session<\/span>/);
+  assert.match(html, /<span class="prompt">~ \$<\/span> admin setup <span class="flag">--persist<\/span>/);
+  assert.match(html, /id="login-token" aria-label="Admin password" placeholder="admin password"/);
+  assert.match(html, /class="btn primary" type="submit">enter<\/button>/);
+  assert.match(html, /class="auth-terminal-form vertical" id="setup-form"/);
+  assert.doesNotMatch(html, />Create administrator<|>Admin password<\/label>|>New admin password<\/label>/);
+  assert.match(adminCSS, /\.auth-view\s*{[^}]*width:\s*min\(440px,/s);
+  assert.match(adminCSS, /\.auth-window-body\s*{[^}]*background:\s*var\(--term-bg\);/s);
+  assert.match(html, /class="wrap admin-window mac-window hidden"[^>]*data-window-id="admin"/);
+  assert.match(adminAppJS, /function enterApp\(\)[\s\S]*?windows\.open\('admin'\);/);
 
   const mobileOffset = adminCSS.indexOf('@media (max-width: 559px)');
   const mobileCSS = adminCSS.slice(mobileOffset);
-  assert.match(mobileCSS, /\.auth-window-body \{ min-height: 0;/);
   assert.match(mobileCSS, /\.auth-input-row \{ grid-template-columns: 1fr;/);
 });
 
@@ -136,6 +146,8 @@ test('所有视口的滚动都收进管理窗口内容区', () => {
     assert.ok(layoutCSS.includes(marker), `missing window scrolling style: ${marker}`);
   }
   assert.match(layoutCSS, /\.admin-window\s*{[^}]*height:\s*calc\(100dvh - 80px\);/s);
+  assert.match(layoutCSS, /@media \(max-width: 959px\)[\s\S]*?\.admin-window\s*{[^}]*height:\s*calc\(100dvh - 40px\);/);
+  assert.match(foundationCSS, /@media \(max-width: 640px\)[\s\S]*?--page-padding:\s*16px 12px 24px;/);
   assert.doesNotMatch(layoutCSS, /\.admin-surface\s*{[^}]*\n\s*height:\s*calc\(100% - 30px\);/);
   assert.doesNotMatch(layoutCSS, /scrollbar-gutter/);
   assert.match(foundationCSS, /scrollbar-color: var\(--scroll-thumb\) transparent;/);

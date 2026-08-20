@@ -49,6 +49,8 @@
   --btn-min-symbol: #805b0b;
   --btn-max-symbol: #0b6719;
   --window-control-inactive: #66666d;
+  --window-control-size: 12px;
+  --window-control-symbol-size: 6px;
 
   --bg: var(--page-bg);
   --panel: var(--term-bg);
@@ -194,8 +196,8 @@ body {
   content: '';
   position: absolute;
   inset: 50% auto auto 50%;
-  width: 12px;
-  height: 12px;
+  width: var(--window-control-size);
+  height: var(--window-control-size);
   transform: translate(-50%, -50%);
   background: var(--window-control-inactive);
   border: 0.5px solid var(--light-border);
@@ -221,21 +223,21 @@ body {
 
 .window-controls:hover .window-control::before { opacity: 0.86; }
 .window-control.close::before {
-  width: 8px;
-  height: 8px;
+  width: var(--window-control-symbol-size);
+  height: var(--window-control-symbol-size);
   background:
     linear-gradient(45deg, transparent 40%, var(--btn-close-symbol) 40% 60%, transparent 60%),
     linear-gradient(-45deg, transparent 40%, var(--btn-close-symbol) 40% 60%, transparent 60%);
 }
 .window-control.minimize::before {
-  width: 8px;
-  height: 2px;
+  width: var(--window-control-symbol-size);
+  height: 1.5px;
   background: var(--btn-min-symbol);
   border-radius: 1px;
 }
 .window-control.maximize::before {
-  width: 8px;
-  height: 8px;
+  width: var(--window-control-symbol-size);
+  height: var(--window-control-symbol-size);
   background: linear-gradient(
     135deg,
     var(--btn-max-symbol) 0 42%,
@@ -334,6 +336,10 @@ body {
   animation: window-open var(--motion-slow) var(--motion-ease-out);
 }
 
+.mac-window.is-opening:not(.popup-window) {
+  animation: surface-in var(--motion-slow) var(--motion-ease-out);
+}
+
 .popup-window.is-minimized {
   width: min(360px, calc(100% - 24px));
   max-height: none;
@@ -406,7 +412,7 @@ body {
 }
 
 @media (max-width: 640px) {
-  :root { --page-padding: 12px 8px 32px; }
+  :root { --page-padding: 16px 12px 24px; }
   body { font-size: 12px; }
   :where(.term, .admin-window) { border-radius: 8px; }
   .titlebar { height: 26px; padding: 0 10px; }

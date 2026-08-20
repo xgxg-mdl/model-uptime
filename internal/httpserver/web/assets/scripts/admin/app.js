@@ -85,6 +85,7 @@ export function startAdminApp({
     windows.close('setup-view');
     documentRef.getElementById('app-view').hidden = false;
     documentRef.getElementById('logout-btn').hidden = false;
+    windows.open('admin');
     void services.load();
     void telegram.load();
     void pageSettings.load();

@@ -49,13 +49,21 @@ test('状态、热力图和管理页接入同一套窗口控制结构', () => {
 
   for (const marker of [
     '--window-control-inactive:',
+    '--window-control-size: 12px;',
+    '--window-control-symbol-size: 6px;',
     '.mac-window.is-active .window-control.close::after',
     '.window-controls:hover .window-control.close::after',
-    'width: 12px;',
     '@keyframes window-open',
+    '.mac-window.is-opening:not(.popup-window)',
     '.popup-window.is-maximized',
     '.window-dock',
   ]) {
     assert.ok(foundationCSS.includes(marker), `共享基础层缺少窗口规则: ${marker}`);
   }
+  assert.match(foundationCSS, /\.window-control::after\s*{[^}]*width:\s*var\(--window-control-size\);/s);
+  assert.match(foundationCSS, /\.window-control\.close::before\s*{[^}]*width:\s*var\(--window-control-symbol-size\);/s);
+  assert.match(
+    foundationCSS,
+    /\.window-control\.maximize::before\s*{[^}]*width:\s*var\(--window-control-symbol-size\);/s,
+  );
 });

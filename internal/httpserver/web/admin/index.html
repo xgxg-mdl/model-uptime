@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/assets/styles/admin.css" />
 </head>
 <body>
-<div class="wrap admin-window mac-window is-active" data-window-id="admin" data-window-main data-window-mode="normal" data-window-dock-label="manage">
+<div class="wrap admin-window mac-window hidden" data-window-id="admin" data-window-main data-window-mode="normal" data-window-dock-label="manage">
   <div class="titlebar window-titlebar" data-window-titlebar>
     <div class="window-controls">
       <button class="window-control close" type="button" data-window-action="close" aria-label="Close admin window"></button>
@@ -51,11 +51,10 @@
         <div class="auth-window-body">
           <div class="auth-card">
             <p class="auth-command"><span class="prompt">~ $</span> admin login <span class="flag">--session</span></p>
-            <form id="login-form">
-              <label for="login-token">Admin password</label>
+            <form class="auth-terminal-form" id="login-form">
               <div class="auth-input-row">
-                <input type="password" id="login-token" placeholder="Enter password" autocomplete="current-password" />
-                <button class="btn primary" type="submit">sign in</button>
+                <input type="password" id="login-token" aria-label="Admin password" placeholder="admin password" autocomplete="current-password" />
+                <button class="btn primary" type="submit">enter</button>
               </div>
             </form>
           </div>
@@ -75,13 +74,11 @@
         </div>
         <div class="auth-window-body">
           <div class="auth-card">
-            <h2 id="setup-title">Create administrator</h2>
-            <form class="vertical" id="setup-form">
-              <label for="setup-token">New admin password</label>
-              <input type="password" id="setup-token" placeholder="At least 8 characters" autocomplete="new-password" />
-              <label for="setup-confirm">Confirm password</label>
-              <input type="password" id="setup-confirm" placeholder="Repeat password" autocomplete="new-password" />
-              <button class="btn primary" type="submit">create account</button>
+            <p class="auth-command" id="setup-title"><span class="prompt">~ $</span> admin setup <span class="flag">--persist</span></p>
+            <form class="auth-terminal-form vertical" id="setup-form">
+              <input type="password" id="setup-token" aria-label="New admin password" placeholder="new admin password (8+ characters)" autocomplete="new-password" />
+              <input type="password" id="setup-confirm" aria-label="Confirm admin password" placeholder="confirm password" autocomplete="new-password" />
+              <button class="btn primary" type="submit">set password</button>
             </form>
           </div>
         </div>
