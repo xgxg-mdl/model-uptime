@@ -145,12 +145,9 @@ body {
 .bar.warning { background: var(--warn); }
 .bar.bad { background: var(--bad); }
 .bar.probing { background: var(--bar-probing); }
-.bar.paused { background: var(--surface-control-hover); }
+.bar.paused,
+.bar.not-started { background: var(--surface-control-hover); }
 .bar.unobserved { background: var(--bar-unobserved); }
-.bar.not-started {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--bar-unobserved);
-}
 .bar.paused:hover,
 .bar.paused:focus-visible { filter: brightness(1.25); }
 
