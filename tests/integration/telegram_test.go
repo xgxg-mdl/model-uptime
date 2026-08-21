@@ -40,13 +40,13 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 		AdminToken: testToken,
 		Page:       model.PageConfig{PublicURL: "https://status.example.com/?from=test&view=full", HistoryLen: 60, RefreshSec: 5},
 		Services: []model.Service{{
-			ID: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
+			UID: "service-uid", Model: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
 			BaseURL: "http://example.com", IntervalSec: 60, Enabled: boolp(true),
 		}},
 		Telegram: notification.Config{
 			BotToken: "secret-token",
 			Subscriptions: []notification.Subscription{{
-				ID: "ops", Name: "Operations", Enabled: true, ChatID: "-100", ServiceIDs: []string{"s1"},
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "-100", ServiceUIDs: []string{"service-uid"},
 			}},
 		},
 	}
@@ -80,7 +80,7 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 		"bot_token": "",
 		"subscriptions": []map[string]any{{
 			"id": "ops", "name": "Primary operations", "enabled": true,
-			"chat_id": "-100", "language": "en-US", "service_ids": []string{"s1"}, "template": "<b>{{.TotalChanges}}</b>",
+			"chat_id": "-100", "language": "en-US", "service_uids": []string{"service-uid"}, "template": "<b>{{.TotalChanges}}</b>",
 		}},
 	})
 	if code != http.StatusOK || out["bot_token"] != "****" {
@@ -119,12 +119,12 @@ func TestTelegramAdminFlowAndServiceReferenceCleanup(t *testing.T) {
 	}
 	rejectTelegram.Store(false)
 
-	code, out = doJSON(t, ts, http.MethodDelete, "/api/admin/services/s1", testToken, nil)
+	code, out = doJSON(t, ts, http.MethodDelete, "/api/admin/services/service-uid", testToken, nil)
 	if code != http.StatusOK {
 		t.Fatalf("删除服务失败: code=%d out=%v", code, out)
 	}
 	saved, err = settings.Load(configPath)
-	if err != nil || len(saved.Telegram.Subscriptions) != 1 || len(saved.Telegram.Subscriptions[0].ServiceIDs) != 0 {
+	if err != nil || len(saved.Telegram.Subscriptions) != 1 || len(saved.Telegram.Subscriptions[0].ServiceUIDs) != 0 {
 		t.Fatalf("删除服务未清理订阅引用: cfg=%+v err=%v", saved, err)
 	}
 }
@@ -169,7 +169,7 @@ func TestQuarantinedNotificationRecoversAfterOfflineConfigChange(t *testing.T) {
 		RenderPayload: &notification.RenderPayload{
 			ChangedAt: changedAt,
 			Changes: []model.StatusChange{{
-				ServiceID: "a", Model: "alpha", PreviousStatus: "up", Status: "down",
+				ServiceUID: "a", Model: "alpha", PreviousStatus: "up", Status: "down",
 			}},
 		},
 	}}); err != nil {
@@ -177,7 +177,7 @@ func TestQuarantinedNotificationRecoversAfterOfflineConfigChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldConfig := notification.Config{BotToken: "old-token", Subscriptions: []notification.Subscription{{
-		ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"a"},
+		ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: []string{"a"},
 		Template: `old {{range .Changes}}{{.Model}}{{end}}`,
 	}}}
 	oldNotifier, err := notification.New(notification.Options{
@@ -210,7 +210,7 @@ func TestQuarantinedNotificationRecoversAfterOfflineConfigChange(t *testing.T) {
 	}
 	defer store.Close()
 	newConfig := notification.Config{BotToken: "new-token", Subscriptions: []notification.Subscription{{
-		ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"a"},
+		ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: []string{"a"},
 		Template: `new {{range .Changes}}{{.Model}}{{end}}`,
 	}}}
 	newNotifier, err := notification.New(notification.Options{

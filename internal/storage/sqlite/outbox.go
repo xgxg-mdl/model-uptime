@@ -200,6 +200,12 @@ func (s *Store) Claim(ctx context.Context, now, leaseUntil time.Time) (*notifica
 		var payload notification.RenderPayload
 		if err := json.Unmarshal([]byte(payloadJSON), &payload); err == nil &&
 			!payload.ChangedAt.IsZero() && len(payload.Changes) > 0 {
+			for index := range payload.Changes {
+				if payload.Changes[index].ServiceUID == "" {
+					payload.Changes[index].ServiceUID = payload.Changes[index].LegacyServiceID
+				}
+				payload.Changes[index].LegacyServiceID = ""
+			}
 			delivery.RenderPayload = &payload
 		}
 		// payload 是可选的重渲染增强数据。损坏或来自未知版本的数据不能

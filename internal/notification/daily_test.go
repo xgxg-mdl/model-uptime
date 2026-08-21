@@ -22,9 +22,9 @@ func TestDailyReporterDoesNotSendOnStartup(t *testing.T) {
 	reporter, err := NewDailyReporter(repository, func() DailySnapshot {
 		return DailySnapshot{
 			Telegram: Config{BotToken: "token", Subscriptions: []Subscription{{
-				ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"alpha"},
+				ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: []string{"alpha"},
 			}}},
-			Services: []model.Service{{ID: "alpha", Model: "alpha"}},
+			Services: []model.Service{{UID: "alpha", Model: "alpha"}},
 		}
 	}, discardLogger())
 	if err != nil {
@@ -76,13 +76,13 @@ func TestDailyReporterSummarizesSelectedModelsAndDoesNotDuplicate(t *testing.T) 
 	reporter, err := NewDailyReporter(repository, func() DailySnapshot {
 		return DailySnapshot{
 			Telegram: Config{BotToken: "token", Subscriptions: []Subscription{{
-				ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"active-incident", "incident", "healthy", "unobserved"},
+				ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: []string{"active-incident", "incident", "healthy", "unobserved"},
 			}}},
 			Services: []model.Service{
-				{ID: "active-incident", Model: "delta", Provider: "D"},
-				{ID: "incident", Model: "alpha", Provider: "A"},
-				{ID: "healthy", Model: "beta", Provider: "B"},
-				{ID: "unobserved", Model: "gamma", Provider: "C"},
+				{UID: "active-incident", Model: "delta", Provider: "D"},
+				{UID: "incident", Model: "alpha", Provider: "A"},
+				{UID: "healthy", Model: "beta", Provider: "B"},
+				{UID: "unobserved", Model: "gamma", Provider: "C"},
 			},
 			StatusPageURL: "https://status.example.com/",
 		}
@@ -124,11 +124,31 @@ func TestDailyReporterSummarizesSelectedModelsAndDoesNotDuplicate(t *testing.T) 
 	}
 }
 
+func TestDailyReportUsesEditedModelForStableUID(t *testing.T) {
+	start := time.Date(2026, 8, 16, 0, 0, 0, 0, beijingLocation)
+	repository := &dailyRepositoryStub{histories: map[string][]model.ProbeResult{
+		"stable-uid": {{TS: start.Add(-time.Minute).Unix(), OK: true}},
+	}}
+	reporter := &DailyReporter{repository: repository}
+	subscription := compiledSubscription{Subscription: Subscription{ServiceUIDs: []string{"stable-uid"}}}
+	services := map[string]model.Service{
+		"stable-uid": {UID: "stable-uid", Model: "edited-model", Provider: "provider"},
+	}
+
+	report, err := reporter.buildReport(context.Background(), start, start.AddDate(0, 0, 1), subscription, services)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Models) != 1 || report.Models[0].Model != "edited-model" {
+		t.Fatalf("订阅应按稳定 UID 命中并显示修改后的 model: %+v", report.Models)
+	}
+}
+
 func TestBuildDailyDeliveriesSplitsOnlyBetweenModels(t *testing.T) {
 	report := dailyReport{Date: time.Date(2026, 8, 16, 0, 0, 0, 0, beijingLocation), Total: 2, Unavailable: 2}
 	for i := 0; i < 2; i++ {
 		report.Models = append(report.Models, dailyModel{
-			ServiceID: string(rune('a' + i)), Model: strings.Repeat("model", 700), Provider: "provider",
+			ServiceUID: string(rune('a' + i)), Model: strings.Repeat("model", 700), Provider: "provider",
 			Stats: model.DailyStats{DownSec: 60, DownCount: 1},
 		})
 	}

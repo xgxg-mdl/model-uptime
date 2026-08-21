@@ -137,7 +137,8 @@ func TestBuildAggregatesServicesConcurrentlyAndKeepsSortOrder(t *testing.T) {
 	repository := blockingRepository{started: make(chan string, buildConcurrency), release: make(chan struct{})}
 	services := make([]model.ServiceView, buildConcurrency)
 	for index := range services {
-		services[index] = model.ServiceView{ID: fmt.Sprintf("svc-%d", index), SortOrder: buildConcurrency - index, IntervalSec: 60, WarningSec: 30}
+		uid := fmt.Sprintf("svc-%d", index)
+		services[index] = model.ServiceView{ServiceUID: uid, Model: uid, SortOrder: buildConcurrency - index, IntervalSec: 60, WarningSec: 30}
 	}
 	builder, err := New(repository, statusStub{response: model.StatusResponse{Services: services}})
 	if err != nil {
@@ -165,7 +166,7 @@ func TestBuildAggregatesServicesConcurrentlyAndKeepsSortOrder(t *testing.T) {
 		t.Fatal(buildErr)
 	}
 	for index, service := range response.Services {
-		if service.ID != fmt.Sprintf("svc-%d", buildConcurrency-1-index) {
+		if service.Model != fmt.Sprintf("svc-%d", buildConcurrency-1-index) {
 			t.Fatalf("并行聚合打乱 sort_order: %+v", response.Services)
 		}
 	}
@@ -179,7 +180,7 @@ func TestFutureCellsRemainUnobserved(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			view := buildServiceView(model.ServiceView{ID: "svc", IntervalSec: 60, WarningSec: 30}, nil, spec)
+			view := buildServiceView(model.ServiceView{ServiceUID: "svc", Model: "svc", IntervalSec: 60, WarningSec: 30}, nil, spec)
 			last := view.Cells[len(view.Cells)-1]
 			if last.Status != StatusUnobserved || last.ExpectedSamples != 0 || last.ActualSamples != 0 {
 				t.Fatalf("未来最后一格应无观测: %+v", last)
@@ -240,7 +241,7 @@ func TestSampleAtCurrentBucketStartIsObserved(t *testing.T) {
 		t.Fatal(err)
 	}
 	view := buildServiceView(
-		model.ServiceView{ID: "svc", IntervalSec: 60, WarningSec: 30},
+		model.ServiceView{ServiceUID: "svc", Model: "svc", IntervalSec: 60, WarningSec: 30},
 		[]model.ProbeResult{{OK: true, TS: now.Unix(), LatencyMS: 20}},
 		spec,
 	)
@@ -256,7 +257,7 @@ func TestBuildUsesCurrentServiceThreshold(t *testing.T) {
 	service, err := New(repositoryStub{results: map[string][]model.ProbeResult{
 		"slow": {{OK: true, TS: now.Add(-time.Minute).Unix(), LatencyMS: 1500}},
 	}}, statusStub{response: model.StatusResponse{Services: []model.ServiceView{
-		{ID: "slow", Model: "Slow", IntervalSec: 60, WarningSec: 1, Last: &last},
+		{ServiceUID: "slow", Name: "Slow", Model: "slow-model", IntervalSec: 60, WarningSec: 1, Last: &last},
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -280,8 +281,8 @@ func TestBuildInvalidatesCacheForConfigAndServiceChanges(t *testing.T) {
 		"other": nil,
 	}}
 	status := &statusStub{response: model.StatusResponse{Services: []model.ServiceView{
-		{ID: "other", Model: "Other", SortOrder: 20, IntervalSec: 60, WarningSec: 30},
-		{ID: "slow", Model: "Slow", SortOrder: 10, IntervalSec: 60, WarningSec: 30, Last: &last},
+		{ServiceUID: "other", Name: "Other", Model: "other-model", SortOrder: 20, IntervalSec: 60, WarningSec: 30},
+		{ServiceUID: "slow", Name: "Slow", Model: "slow-model", SortOrder: 10, IntervalSec: 60, WarningSec: 30, Last: &last},
 	}}}
 	service, err := New(repository, status)
 	if err != nil {
@@ -293,7 +294,7 @@ func TestBuildInvalidatesCacheForConfigAndServiceChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repository.calls != 2 || len(first.Services) != 2 || first.Services[0].ID != "slow" || first.Services[0].Status != StatusHealthy {
+	if repository.calls != 2 || len(first.Services) != 2 || first.Services[0].Model != "slow-model" || first.Services[0].Status != StatusHealthy {
 		t.Fatalf("首次构建未按 sort_order 排序: calls=%d response=%+v", repository.calls, first.Services)
 	}
 	currentTime = currentTime.Add(time.Second)
@@ -314,12 +315,23 @@ func TestBuildInvalidatesCacheForConfigAndServiceChanges(t *testing.T) {
 		t.Fatalf("warning_sec 变化后缓存未失效: calls=%d response=%+v", repository.calls, changed.Services)
 	}
 
+	// 删除后重建同名同 model 服务时，内部 UID 变化也必须使旧历史缓存失效。
+	status.response.Services[1].ServiceUID = "slow-recreated"
+	repository.results["slow-recreated"] = nil
+	recreated, err := service.Build(context.Background(), Range7D)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repository.calls != 6 || recreated.Services[0].Samples != 0 {
+		t.Fatalf("服务 UID 变化后缓存未失效: calls=%d response=%+v", repository.calls, recreated.Services)
+	}
+
 	status.response.Services = status.response.Services[:1]
 	withoutDisabled, err := service.Build(context.Background(), Range7D)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repository.calls != 5 || len(withoutDisabled.Services) != 1 || withoutDisabled.Services[0].ID != "other" {
+	if repository.calls != 7 || len(withoutDisabled.Services) != 1 || withoutDisabled.Services[0].Model != "other-model" {
 		t.Fatalf("禁用服务从快照移除后仍出现在缓存中: calls=%d response=%+v", repository.calls, withoutDisabled.Services)
 	}
 }
@@ -328,7 +340,7 @@ func TestBuildInvalidatesRangeCacheAtBeijingMidnight(t *testing.T) {
 	currentTime := time.Date(2026, 8, 18, 23, 59, 59, 0, beijingLocation)
 	repository := &countingRepository{results: map[string][]model.ProbeResult{"svc": nil}}
 	service, err := New(repository, statusStub{response: model.StatusResponse{Services: []model.ServiceView{
-		{ID: "svc", Model: "Service", IntervalSec: 60, WarningSec: 30},
+		{ServiceUID: "svc", Name: "Service", Model: "service-model", IntervalSec: 60, WarningSec: 30},
 	}}})
 	if err != nil {
 		t.Fatal(err)

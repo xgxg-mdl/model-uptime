@@ -125,6 +125,9 @@ services:
 		t.Error("全部统计维度关闭时应回退全开")
 	}
 	svc := c.Services[0]
+	if svc.UID != "s1" {
+		t.Errorf("旧 id 应迁移为 uid，got %q", svc.UID)
+	}
 	if svc.IntervalSec != 60 || svc.TimeoutSec != 60 || svc.WarningSec != 30 {
 		t.Errorf("服务默认 interval/timeout/warning = %d/%d/%d", svc.IntervalSec, svc.TimeoutSec, svc.WarningSec)
 	}
@@ -203,13 +206,13 @@ func TestSaveRoundTrip(t *testing.T) {
 			HistoryLen: 30,
 		},
 		Services: []model.Service{{
-			ID: "s1", Name: "svc-1", Protocol: model.ProtocolHTTP,
+			LegacyID: "s1", Name: "svc-1", Protocol: model.ProtocolHTTP,
 			BaseURL: "https://example.com/health",
 		}},
 		Telegram: notification.Config{
 			BotToken: "bot-token",
 			Subscriptions: []notification.Subscription{{
-				ID: "ops", Name: "Operations", Enabled: true, ChatID: "-100", ServiceIDs: []string{"s1"},
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "-100", ServiceUIDs: []string{"s1"},
 			}},
 		},
 	}
@@ -226,8 +229,15 @@ func TestSaveRoundTrip(t *testing.T) {
 	if got.Page.PublicURL != "https://status.example.com/" {
 		t.Errorf("round-trip PublicURL = %q", got.Page.PublicURL)
 	}
-	if len(got.Services) != 1 || got.Services[0].ID != "s1" {
+	if len(got.Services) != 1 || got.Services[0].UID != "s1" || got.Services[0].Model != "s1" {
 		t.Errorf("round-trip services 不一致: %+v", got.Services)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(contents), "\n    id:") || !strings.Contains(string(contents), "uid: s1") {
+		t.Fatalf("写回配置应只持久化 uid，不应保留旧 id:\n%s", contents)
 	}
 	if got.Telegram.BotToken != "bot-token" || len(got.Telegram.Subscriptions) != 1 {
 		t.Errorf("round-trip Telegram 配置不一致: %+v", got.Telegram)
@@ -240,8 +250,105 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadMigratesLegacyHTTPServiceAndSubscription(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	contents := `services:
+  - id: health
+    name: Health
+    protocol: http
+    base_url: https://example.com/health
+telegram:
+  bot_token: token
+  subscriptions:
+    - id: ops
+      name: Operations
+      enabled: true
+      chat_id: "1"
+      service_ids: [health]
+`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := settings.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := config.Services[0]
+	if service.UID != "health" || service.Model != "health" {
+		t.Fatalf("旧 HTTP 服务迁移结果错误: %+v", service)
+	}
+	if got := config.Telegram.Subscriptions[0].ServiceUIDs; !reflect.DeepEqual(got, []string{"health"}) {
+		t.Fatalf("订阅引用未迁移到 uid: %v", got)
+	}
+	if err := config.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "service_ids:") || !strings.Contains(string(saved), "service_uids:") {
+		t.Fatalf("写回配置应只保留 service_uids:\n%s", saved)
+	}
+}
+
+func TestNormalizeGeneratesStableServiceUID(t *testing.T) {
+	service := model.Service{Name: "Health", Model: "health", Protocol: model.ProtocolHTTP, BaseURL: "https://example.com"}
+	service.Normalize()
+	first := service.UID
+	if len(first) != 36 || strings.Count(first, "-") != 4 {
+		t.Fatalf("自动生成的 uid 不是 UUID: %q", first)
+	}
+	service.Normalize()
+	if service.UID != first {
+		t.Fatalf("重复 Normalize 改变了 uid: %q -> %q", first, service.UID)
+	}
+}
+
+func TestLoadPersistsGeneratedUIDAcrossRestarts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	contents := `services:
+  - name: Health
+    model: health
+    protocol: http
+    base_url: https://example.com/health
+`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := settings.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := settings.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Services[0].UID == "" || second.Services[0].UID != first.Services[0].UID {
+		t.Fatalf("重启后生成的 uid 不稳定: %q -> %q", first.Services[0].UID, second.Services[0].UID)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(saved), "uid: ") {
+		t.Fatalf("生成的 uid 未写回配置:\n%s", saved)
+	}
+}
+
+func TestValidateRejectsDuplicateModel(t *testing.T) {
+	config := settings.Config{Services: []model.Service{
+		{UID: "one", Name: "One", Model: "shared", Protocol: model.ProtocolHTTP, BaseURL: "https://one.example.com"},
+		{UID: "two", Name: "Two", Model: "shared", Protocol: model.ProtocolHTTP, BaseURL: "https://two.example.com"},
+	}}
+	config.Normalize()
+	if err := config.Validate(); err == nil || !strings.Contains(err.Error(), "model 重复") {
+		t.Fatalf("重复 model 应被拒绝，got %v", err)
+	}
+}
+
 func TestValidateTelegramSubscriptions(t *testing.T) {
-	service := model.Service{ID: "s1", Name: "svc", Protocol: model.ProtocolHTTP, BaseURL: "https://example.com"}
+	service := model.Service{LegacyID: "s1", Name: "svc", Protocol: model.ProtocolHTTP, BaseURL: "https://example.com"}
 	cases := []struct {
 		name     string
 		telegram notification.Config
@@ -249,25 +356,25 @@ func TestValidateTelegramSubscriptions(t *testing.T) {
 		{
 			name: "启用订阅缺少 token",
 			telegram: notification.Config{Subscriptions: []notification.Subscription{{
-				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"s1"},
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceUIDs: []string{"s1"},
 			}}},
 		},
 		{
 			name: "引用不存在服务",
 			telegram: notification.Config{BotToken: "token", Subscriptions: []notification.Subscription{{
-				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"missing"},
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceUIDs: []string{"missing"},
 			}}},
 		},
 		{
 			name: "模板语法错误",
 			telegram: notification.Config{BotToken: "token", Subscriptions: []notification.Subscription{{
-				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{"s1"}, Template: "{{",
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceUIDs: []string{"s1"}, Template: "{{",
 			}}},
 		},
 		{
 			name: "不支持的通知语言",
 			telegram: notification.Config{BotToken: "token", Subscriptions: []notification.Subscription{{
-				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", Language: "fr-FR", ServiceIDs: []string{"s1"},
+				ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", Language: "fr-FR", ServiceUIDs: []string{"s1"},
 			}}},
 		},
 	}

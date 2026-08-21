@@ -43,7 +43,7 @@ test('Telegram 模板以服务端响应为唯一默认来源', () => {
   assert.doesNotMatch(telegramSource, /TodayUptimePct|OutageDurationSec|Model status update/);
 });
 
-test('新订阅使用中文服务端模板并复制 service_ids', () => {
+test('新订阅使用中文服务端模板并复制 service_uids', () => {
   const templates = normalizeTelegramTemplates({
     zh: 'zh template',
     en: 'en template',
@@ -54,7 +54,7 @@ test('新订阅使用中文服务端模板并复制 service_ids', () => {
       id: 'ops',
       name: 'Operations',
       chat_id: 123,
-      service_ids: serviceIDs,
+      service_uids: serviceIDs,
     },
     templates,
   );
@@ -63,7 +63,7 @@ test('新订阅使用中文服务端模板并复制 service_ids', () => {
   assert.equal(subscription.language, 'zh-CN');
   assert.equal(subscription.template, 'zh template');
   assert.equal(subscription.chat_id, '123');
-  assert.deepEqual(subscription.service_ids, ['s1']);
+  assert.deepEqual(subscription.service_uids, ['s1']);
 });
 
 test('Telegram 测试在列表和编辑器中保留成功或失败反馈', async () => {

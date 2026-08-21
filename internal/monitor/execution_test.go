@@ -164,7 +164,7 @@ func TestConcurrentManualProbesShareFlightWhileWaitingForSlot(t *testing.T) {
 	releaseBlocker := make(chan struct{})
 	var targetCalls atomic.Int64
 	s.probeFn = func(_ context.Context, service *model.Service) probe.Result {
-		if service.ID == "blocker" {
+		if service.UID == "blocker" {
 			close(blockerStarted)
 			<-releaseBlocker
 			return probe.Result{OK: true}

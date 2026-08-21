@@ -189,7 +189,7 @@ func TestRecordProbeResultRollsBackResultWhenTransitionInsertFails(t *testing.T)
 		"svc-a",
 		model.ProbeResult{OK: false, TS: now.Unix(), Error: "down"},
 		&model.StatusTransition{
-			Change:      model.StatusChange{ServiceID: "svc-a", Status: "down"},
+			Change:      model.StatusChange{ServiceUID: "svc-a", Status: "down"},
 			ChangedAt:   now,
 			AvailableAt: now,
 		},
@@ -230,7 +230,7 @@ func TestTransitionSurvivesStoreRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if batch == nil || token == "" || batch.Changes[0].ServiceID != "svc-a" {
+	if batch == nil || token == "" || batch.Changes[0].ServiceUID != "svc-a" {
 		t.Fatalf("重启后事件不完整: batch=%+v token=%q", batch, token)
 	}
 	if !batch.ChangedAt.Equal(now) || batch.StatusPageURL != "https://status.example.com" {
@@ -263,7 +263,7 @@ func TestTransitionGroupIsStableAcrossReclaimAndRejectsStaleAck(t *testing.T) {
 	if first == nil || len(first.Changes) != 2 || first.Key == "" || firstToken == "" {
 		t.Fatalf("首次领取不完整: batch=%+v token=%q", first, firstToken)
 	}
-	firstIDs := []string{first.Changes[0].ServiceID, first.Changes[1].ServiceID}
+	firstIDs := []string{first.Changes[0].ServiceUID, first.Changes[1].ServiceUID}
 	reclaimed, secondToken, err := store.ClaimTransitions(ctx, claimAt.Add(time.Second), claimAt.Add(2*time.Second), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -271,7 +271,7 @@ func TestTransitionGroupIsStableAcrossReclaimAndRejectsStaleAck(t *testing.T) {
 	if reclaimed == nil || reclaimed.Key != first.Key || len(reclaimed.Changes) != 2 {
 		t.Fatalf("重领改变了事件组: first=%+v reclaimed=%+v", first, reclaimed)
 	}
-	if reclaimed.Changes[0].ServiceID != firstIDs[0] || reclaimed.Changes[1].ServiceID != firstIDs[1] {
+	if reclaimed.Changes[0].ServiceUID != firstIDs[0] || reclaimed.Changes[1].ServiceUID != firstIDs[1] {
 		t.Fatalf("重领改变了事件集合: first=%v reclaimed=%+v", firstIDs, reclaimed.Changes)
 	}
 	if secondToken == firstToken {
@@ -288,7 +288,7 @@ func TestTransitionGroupIsStableAcrossReclaimAndRejectsStaleAck(t *testing.T) {
 	}
 
 	remaining, _, err := store.ClaimTransitions(ctx, claimAt.Add(time.Second), claimAt.Add(2*time.Second), 10)
-	if err != nil || remaining == nil || len(remaining.Changes) != 1 || remaining.Changes[0].ServiceID != "svc-2" {
+	if err != nil || remaining == nil || len(remaining.Changes) != 1 || remaining.Changes[0].ServiceUID != "svc-2" {
 		t.Fatalf("确认稳定组后剩余事件错误: batch=%+v err=%v", remaining, err)
 	}
 }
@@ -306,14 +306,14 @@ func TestTransitionClaimsUseFixedAggregationWindows(t *testing.T) {
 	if err != nil || first == nil {
 		t.Fatalf("领取首个聚合窗口: batch=%+v err=%v", first, err)
 	}
-	if len(first.Changes) != 2 || first.Changes[0].ServiceID != "svc-a" || first.Changes[1].ServiceID != "svc-b" {
+	if len(first.Changes) != 2 || first.Changes[0].ServiceUID != "svc-a" || first.Changes[1].ServiceUID != "svc-b" {
 		t.Fatalf("首个固定窗口内容错误: %+v", first.Changes)
 	}
 	if err := store.CommitTransitions(ctx, first.Key, token, nil); err != nil {
 		t.Fatal(err)
 	}
 	second, _, err := store.ClaimTransitions(ctx, start.Add(7*time.Second), start.Add(time.Minute), 10)
-	if err != nil || second == nil || len(second.Changes) != 1 || second.Changes[0].ServiceID != "svc-c" {
+	if err != nil || second == nil || len(second.Changes) != 1 || second.Changes[0].ServiceUID != "svc-c" {
 		t.Fatalf("窗口外事件应留给下一批: batch=%+v err=%v", second, err)
 	}
 }
@@ -389,10 +389,10 @@ func TestConcurrentTransitionClaimsDoNotOverlap(t *testing.T) {
 		}
 		seenGroups[batch.Key] = struct{}{}
 		for _, change := range batch.Changes {
-			if _, exists := seenChanges[change.ServiceID]; exists {
-				t.Errorf("事件被重复领取: %s", change.ServiceID)
+			if _, exists := seenChanges[change.ServiceUID]; exists {
+				t.Errorf("事件被重复领取: %s", change.ServiceUID)
 			}
-			seenChanges[change.ServiceID] = struct{}{}
+			seenChanges[change.ServiceUID] = struct{}{}
 		}
 	}
 	if len(seenChanges) != total {
@@ -486,7 +486,7 @@ func recordStatusTransition(
 		model.ProbeResult{OK: status == "up", TS: changedAt.Unix(), Error: "down"},
 		&model.StatusTransition{
 			Change: model.StatusChange{
-				ServiceID:      serviceID,
+				ServiceUID:     serviceID,
 				Model:          serviceID,
 				OK:             status == "up",
 				PreviousStatus: previousStatus,

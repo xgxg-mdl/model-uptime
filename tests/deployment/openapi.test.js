@@ -71,15 +71,19 @@ test('OpenAPI document passes schema and reference validation', async () => {
   assert.equal(validated.openapi, '3.1.0');
 });
 
-test('OpenAPI preserves server-generated service identifiers', () => {
+test('OpenAPI separates editable models from server-generated service UIDs', () => {
   const createSchema = contract.paths['/api/admin/services'].post.requestBody.content['application/json'].schema;
-  const updateSchema = contract.paths['/api/admin/services/{id}'].put.requestBody.content['application/json'].schema;
+  const updateSchema = contract.paths['/api/admin/services/{uid}'].put.requestBody.content['application/json'].schema;
   const responseSchema = contract.components.schemas.Service;
 
   assert.equal(createSchema.$ref, '#/components/schemas/ServiceInput');
   assert.equal(updateSchema.$ref, '#/components/schemas/ServiceInput');
-  assert.ok(!contract.components.schemas.ServiceInput.required.includes('id'));
-  assert.deepEqual(responseSchema.allOf.at(-1).required, ['id']);
+  assert.ok(!contract.components.schemas.ServiceInput.properties.id);
+  assert.ok(contract.components.schemas.ServiceInput.required.includes('model'));
+  assert.deepEqual(responseSchema.allOf.at(-1).required, ['uid']);
+  assert.equal(contract.components.schemas.ServiceInput.properties.uid.readOnly, true);
+  assert.deepEqual(contract.components.schemas.BulkServicePatchRequest.required, ['uids', 'patch']);
+  assert.ok(contract.components.schemas.TelegramSubscription.required.includes('service_uids'));
 });
 
 test('OpenAPI distinguishes setup validation from login authentication', () => {
@@ -97,7 +101,7 @@ test('OpenAPI defines the server-generated status timeline contract', () => {
   const slotSchema = contract.components.schemas.StatusTimelineSlot;
 
   assert.deepEqual(serviceSchema.required, [
-    'id',
+    'name',
     'model',
     'interval_sec',
     'warning_sec',

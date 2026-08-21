@@ -145,16 +145,16 @@ telegram:
       enabled: true
       chat_id: "-1001234567890"
       language: zh-CN     # zh-CN（默认）| en-US
-      service_ids:       # 可包含 enabled: false 的服务
-        - openai-gpt54
+      service_uids:      # 内部稳定关联键；可包含 enabled: false 的服务
+        - 11111111-1111-4111-8111-111111111111
       template: ""       # 留空使用默认聚合模板
 
 services:                # 监控目标
-  - id: openai-gpt54     # 唯一 ID，创建后不可改
+  - uid: 11111111-1111-4111-8111-111111111111 # 管理页创建时自动生成，不可编辑
     name: gpt-5.4        # 状态页显示名
     provider: OpenAI     # 展示用标签
     protocol: chat       # chat | response | message | http
-    model: gpt-5.4       # 发给 API 的模型 ID（http 协议无需）
+    model: gpt-5.4       # 可编辑的唯一模型 ID；所有协议必填
     base_url: https://api.openai.com/v1
     api_key: sk-xxx      # 留空则探测时不带鉴权头
     interval_sec: 60
@@ -163,7 +163,9 @@ services:                # 监控目标
     enabled: true
 ```
 
-`http` 协议额外支持 `method` / `headers`（JSON 对象）/ `body` / `expect_status`。
+`uid` 是系统内部的稳定关联键，管理页不会展示或编辑它；修改 `model` 不会改变 `uid`，因此历史记录和 Telegram 订阅会继续保留。旧配置中的服务 `id` 和订阅 `service_ids` 会在加载时迁移为 `uid` / `service_uids`。
+
+`http` 协议额外支持 `method` / `headers`（JSON 对象）/ `body` / `expect_status`，并同样要求填写唯一 `model` 作为该检查项的可编辑标识。
 
 ## Telegram 聚合订阅
 
@@ -224,9 +226,9 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 | `/api/admin/login` | POST | — | `{token}` 校验 |
 | `/api/admin/services` | GET / POST | Bearer | 列表 / 新增 |
 | `/api/admin/services` | PATCH | Bearer | 批量启用、禁用或删除服务 |
-| `/api/admin/services/{id}` | PUT / DELETE | Bearer | 更新 / 删除 |
-| `/api/admin/services/{id}/duplicate` | POST | Bearer | 复制服务并生成新 ID |
-| `/api/admin/services/{id}/test` | POST | Bearer | 立即探测一次 |
+| `/api/admin/services/{uid}` | PUT / DELETE | Bearer | 更新 / 删除 |
+| `/api/admin/services/{uid}/duplicate` | POST | Bearer | 复制服务并生成新 UID 和唯一 model |
+| `/api/admin/services/{uid}/test` | POST | Bearer | 立即探测一次 |
 | `/api/admin/page` | GET / PUT | Bearer | 页面显示配置 |
 | `/api/admin/telegram` | GET / PUT | Bearer | 获取（Token 脱敏）/ 更新 Telegram 配置 |
 | `/api/admin/telegram/test` | POST | Bearer | 按 `{"subscription_id": "operations", "kind": "event"\|"daily"}` 同步发送实时或日报测试消息 |

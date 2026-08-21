@@ -39,10 +39,10 @@ telegram:
       language: zh-CN
       # 可引用下方任意服务，包括 enabled: false 的服务；禁用期间不会探测或通知，
       # 重新启用并产生状态变化后会继续参与该订阅的聚合消息。
-      service_ids:
-        - openai-gpt54
-        - anthropic-claude-sonnet
-        - xai-grok-4
+      service_uids:
+        - 11111111-1111-4111-8111-111111111111
+        - 22222222-2222-4222-8222-222222222222
+        - 33333333-3333-4333-8333-333333333333
       # 留空时自动使用以下默认模板。模板采用 Go html/template 语法，消息以
       # Telegram HTML 发送；变量值会自动转义。
       template: |
@@ -68,7 +68,7 @@ telegram:
 #   message  -> POST {base_url}/v1/messages          (Anthropic)
 #   http     -> 通用 HTTP 探测，可配 method/headers/body/期望状态码
 services:
-  - id: openai-gpt54
+  - uid: 11111111-1111-4111-8111-111111111111 # 内部稳定关联键；管理页创建时自动生成
     name: gpt-5.4            # 状态页显示的模型名
     provider: OpenAI         # 提供商标签（仅展示）
     protocol: chat
@@ -83,7 +83,7 @@ services:
     # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
     stream: true
 
-  - id: anthropic-claude-sonnet
+  - uid: 22222222-2222-4222-8222-222222222222
     name: claude-sonnet-5
     provider: Anthropic
     protocol: message
@@ -98,7 +98,7 @@ services:
     # LLM 探针默认 stream: true，验证真实 SSE 链路；仅兼容不支持 SSE 的端点时设为 false。
     stream: true
 
-  - id: xai-grok-4
+  - uid: 33333333-3333-4333-8333-333333333333
     name: grok-4
     provider: xAI
     protocol: response
@@ -114,8 +114,9 @@ services:
     stream: true
 
   # 通用 HTTP 探针示例：监控任意 API / 网站可用性
-  - id: health-page
+  - uid: 44444444-4444-4444-8444-444444444444
     name: my-health-endpoint
+    model: health-page       # HTTP 探针也需要唯一 model，作为用户可编辑标识
     provider: Self
     sort_order: 4
     protocol: http

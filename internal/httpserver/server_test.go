@@ -255,7 +255,7 @@ func TestPublicHeatmapEndpointCompressesLargeResponses(t *testing.T) {
 	}
 	server.heatmaps.response = heatmap.Response{
 		Range:    heatmap.Range30D,
-		Services: []heatmap.ServiceView{{ID: "service-1", Model: "Model", Cells: cells}},
+		Services: []heatmap.ServiceView{{Name: "Model", Model: "model-id", Cells: cells}},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/heatmap?range=30d", nil)

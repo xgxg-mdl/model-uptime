@@ -101,7 +101,7 @@ func (s *Scheduler) executeProbe(job probeJob) {
 		flightRes = nil
 		probeErr = err
 	} else {
-		s.recordGenerationContext(ctx, job.svc.ID, job.generation, *result)
+		s.recordGenerationContext(ctx, job.svc.UID, job.generation, *result)
 	}
 
 	s.finishFlight(job, flightRes, probeErr)
@@ -117,7 +117,7 @@ func (s *Scheduler) finishFlight(job probeJob, result *model.ProbeResult, err er
 	cancel := job.flight.cancel
 	job.flight.cancel = nil
 	delete(s.activeFlights, job.flight)
-	if state := s.states[job.svc.ID]; state != nil &&
+	if state := s.states[job.svc.UID]; state != nil &&
 		state.generation == job.generation && state.flight == job.flight {
 		state.flight = nil
 	}

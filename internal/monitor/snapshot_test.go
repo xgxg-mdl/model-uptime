@@ -37,7 +37,7 @@ func TestPendingAndDisabled(t *testing.T) {
 	}
 }
 
-func TestSnapshotIncludesStableServiceID(t *testing.T) {
+func TestSnapshotUsesModelAsPublicIdentity(t *testing.T) {
 	s := New(nil, nil)
 	service := testSvc("stable-id", true)
 	service.WarningSec = 12
@@ -45,15 +45,15 @@ func TestSnapshotIncludesStableServiceID(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot := s.Snapshot()
-	if len(snapshot.Services) != 1 || snapshot.Services[0].ID != "stable-id" {
-		t.Fatalf("状态快照缺少服务 ID: %+v", snapshot.Services)
+	if len(snapshot.Services) != 1 || snapshot.Services[0].Model != "stable-id" {
+		t.Fatalf("状态快照缺少模型 ID: %+v", snapshot.Services)
 	}
 	if snapshot.Services[0].WarningSec != 12 {
 		t.Fatalf("状态快照 warning_sec = %d，期望 12", snapshot.Services[0].WarningSec)
 	}
 }
 
-func TestSnapshotSortsServicesByOrderModelAndID(t *testing.T) {
+func TestSnapshotSortsServicesByOrderNameAndModel(t *testing.T) {
 	s := New(nil, nil)
 	services := []model.Service{
 		testSvc("unordered", true),
@@ -71,7 +71,7 @@ func TestSnapshotSortsServicesByOrderModelAndID(t *testing.T) {
 	snapshot := s.Snapshot()
 	got := make([]string, len(snapshot.Services))
 	for index, service := range snapshot.Services {
-		got[index] = service.ID
+		got[index] = service.Model
 	}
 	want := []string{"first", "a-id", "z-id", "unordered"}
 	if !reflect.DeepEqual(got, want) {

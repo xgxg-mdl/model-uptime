@@ -15,7 +15,7 @@ import (
 
 func TestBuiltInTemplateLanguageSelection(t *testing.T) {
 	t.Parallel()
-	context := NewTemplateContext(time.Now(), []model.StatusChange{{ServiceID: "a", Model: "alpha", Error: "timeout", Status: "down", PreviousStatus: "up"}})
+	context := NewTemplateContext(time.Now(), []model.StatusChange{{ServiceUID: "a", Model: "alpha", Error: "timeout", Status: "down", PreviousStatus: "up"}})
 	english, err := RenderTemplate(TemplateForLanguage(LanguageEnglish), context)
 	if err != nil {
 		t.Fatal(err)
@@ -83,11 +83,11 @@ func TestValidateConfigRejectsUnsupportedLanguage(t *testing.T) {
 	}
 }
 
-func TestCompileConfigOwnsServiceIDsAndUsesStableDeliveryFingerprint(t *testing.T) {
+func TestCompileConfigOwnsServiceUIDsAndUsesStableDeliveryFingerprint(t *testing.T) {
 	t.Parallel()
 	serviceIDs := []string{" b ", "a", "a"}
 	config := Config{BotToken: " token ", Subscriptions: []Subscription{{
-		ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: serviceIDs, Template: "message",
+		ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: serviceIDs, Template: "message",
 	}}}
 	compiled, err := compileConfig(config)
 	if err != nil {
@@ -97,12 +97,12 @@ func TestCompileConfigOwnsServiceIDsAndUsesStableDeliveryFingerprint(t *testing.
 		t.Fatalf("编译配置修改了调用方切片: %q", serviceIDs)
 	}
 	serviceIDs[0] = "changed"
-	if got := compiled.subscriptions[0].ServiceIDs[0]; got != "b" {
+	if got := compiled.subscriptions[0].ServiceUIDs[0]; got != "b" {
 		t.Fatalf("运行时配置仍引用调用方切片: %q", got)
 	}
 
 	reordered, err := compileConfig(Config{BotToken: "token", Subscriptions: []Subscription{{
-		ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"a", "b"}, Template: "message",
+		ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: []string{"a", "b"}, Template: "message",
 	}}})
 	if err != nil {
 		t.Fatal(err)

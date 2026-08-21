@@ -112,7 +112,7 @@ func TestCheckDuePersistsMixedChangesForOneDeliveryBatch(t *testing.T) {
 	s.record("recovered", model.ProbeResult{OK: false, TS: 1, Error: "old failure"})
 
 	s.probeFn = func(_ context.Context, svc *model.Service) probe.Result {
-		if svc.ID == "down" {
+		if svc.UID == "down" {
 			return probe.Result{OK: false, Error: "timeout"}
 		}
 		return probe.Result{OK: true, LatencyMS: 42}
@@ -129,7 +129,7 @@ func TestCheckDuePersistsMixedChangesForOneDeliveryBatch(t *testing.T) {
 	}
 	statuses := map[string]string{}
 	for _, change := range batch.Changes {
-		statuses[change.ServiceID] = change.Status
+		statuses[change.ServiceUID] = change.Status
 	}
 	if statuses["down"] != "down" || statuses["recovered"] != "up" {
 		t.Fatalf("聚合状态错误: %v", statuses)
@@ -182,7 +182,7 @@ func TestInvalidatedProbeDoesNotPersistTransition(t *testing.T) {
 	started := make(chan string, 2)
 	release := make(chan struct{})
 	s.probeFn = func(_ context.Context, svc *model.Service) probe.Result {
-		started <- svc.ID
+		started <- svc.UID
 		<-release
 		return probe.Result{OK: false, Error: "failed"}
 	}
@@ -193,7 +193,7 @@ func TestInvalidatedProbeDoesNotPersistTransition(t *testing.T) {
 	close(release)
 	s.wg.Wait()
 	batch := claimTransitionBatch(t, store)
-	if batch == nil || len(batch.Changes) != 1 || batch.Changes[0].ServiceID != "kept" {
+	if batch == nil || len(batch.Changes) != 1 || batch.Changes[0].ServiceUID != "kept" {
 		t.Fatalf("只应持久化仍有效服务的变化: %+v", batch)
 	}
 }

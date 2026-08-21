@@ -44,7 +44,7 @@ func buildDeliveries(config runtimeConfig, batch deliveryBatch, dedupeKey delive
 		if !subscription.Enabled {
 			continue
 		}
-		selected := selectChanges(changes, subscription.ServiceIDs)
+		selected := selectChanges(changes, subscription.ServiceUIDs)
 		if len(selected) == 0 {
 			continue
 		}
@@ -151,8 +151,8 @@ func finalChanges(changes []model.StatusChange) []model.StatusChange {
 	positions := make(map[string]int, len(changes))
 	merged := make([]model.StatusChange, 0, len(changes))
 	for _, change := range changes {
-		change.ServiceID = strings.TrimSpace(change.ServiceID)
-		if change.ServiceID == "" {
+		change.ServiceUID = strings.TrimSpace(change.ServiceUID)
+		if change.ServiceUID == "" {
 			continue
 		}
 		if change.Status == "" {
@@ -166,14 +166,14 @@ func finalChanges(changes []model.StatusChange) []model.StatusChange {
 			continue
 		}
 		change.OK = change.Status == "up"
-		if position, exists := positions[change.ServiceID]; exists {
+		if position, exists := positions[change.ServiceUID]; exists {
 			// 聚合窗口以首个旧状态和最后新状态为准，避免 up -> down -> up
 			// 被误报为恢复事件。
 			change.PreviousStatus = merged[position].PreviousStatus
 			merged[position] = change
 			continue
 		}
-		positions[change.ServiceID] = len(merged)
+		positions[change.ServiceUID] = len(merged)
 		merged = append(merged, change)
 	}
 	result := make([]model.StatusChange, 0, len(merged))
@@ -192,7 +192,7 @@ func selectChanges(changes []model.StatusChange, serviceIDs []string) []model.St
 	}
 	selected := make([]model.StatusChange, 0, len(changes))
 	for _, change := range changes {
-		if _, ok := selectedIDs[change.ServiceID]; ok {
+		if _, ok := selectedIDs[change.ServiceUID]; ok {
 			selected = append(selected, change)
 		}
 	}
@@ -235,7 +235,7 @@ func sortChangesForDelivery(changes []model.StatusChange) {
 		}
 		left, right := strings.ToLower(changes[i].Model), strings.ToLower(changes[j].Model)
 		if left == right {
-			return changes[i].ServiceID < changes[j].ServiceID
+			return changes[i].ServiceUID < changes[j].ServiceUID
 		}
 		return left < right
 	})
@@ -296,7 +296,7 @@ func (n *Notifier) resolveDelivery(delivery *Delivery) (sendJob, bool, error) {
 		}
 		if delivery.RenderPayload != nil {
 			payload := delivery.RenderPayload
-			changes := selectChanges(payload.Changes, subscription.ServiceIDs)
+			changes := selectChanges(payload.Changes, subscription.ServiceUIDs)
 			if len(changes) == 0 {
 				return sendJob{}, false, nil
 			}

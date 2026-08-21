@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -125,17 +124,10 @@ func (m *Manager) SetupToken(token string) error {
 	return nil
 }
 
-var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
-
-func slugify(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	return strings.Trim(slugPattern.ReplaceAllString(value, "-"), "-")
-}
-
 func (m *Manager) CreateService(service model.Service) (model.Service, error) {
-	if service.ID == "" {
-		service.ID = slugify(service.Name)
-	}
+	// uid 只能由服务端生成，避免请求体注入一个已有历史所属的内部身份。
+	service.UID = ""
+	service.LegacyID = ""
 	service.Normalize()
 	if err := service.Validate(); err != nil {
 		return model.Service{}, invalid(err.Error())
@@ -143,8 +135,8 @@ func (m *Manager) CreateService(service model.Service) (model.Service, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next := m.config.Clone()
-	if _, exists := next.ServiceByID(service.ID); exists {
-		return model.Service{}, conflict("服务 id 已存在: %s", service.ID)
+	if _, exists := next.ServiceByModel(service.Model); exists {
+		return model.Service{}, conflict("服务 model 已存在: %s", service.Model)
 	}
 	if service.SortOrder == 0 {
 		service.SortOrder = nextServiceSortOrder(next.Services)
@@ -156,30 +148,29 @@ func (m *Manager) CreateService(service model.Service) (model.Service, error) {
 	return service, nil
 }
 
-func (m *Manager) UpdateService(id string, service model.Service) (model.Service, error) {
+func (m *Manager) UpdateService(uid string, service model.Service) (model.Service, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next := m.config.Clone()
-	index := serviceIndex(next.Services, id)
+	index := serviceIndex(next.Services, uid)
 	if index < 0 {
-		return model.Service{}, notFound("服务不存在: %s", id)
+		return model.Service{}, notFound("服务不存在: %s", uid)
 	}
 	previous := next.Services[index]
 	if service.APIKey == "" || service.APIKey == model.APIKeySentinel {
 		service.APIKey = previous.APIKey
 	}
-	if service.ID == "" {
-		service.ID = previous.ID
-	}
-	if service.ID != id {
-		return model.Service{}, invalid("服务 id 创建后不可修改")
-	}
+	service.UID = previous.UID
+	service.LegacyID = ""
 	if service.SortOrder == 0 {
 		service.SortOrder = previous.SortOrder
 	}
 	service.Normalize()
 	if err := service.Validate(); err != nil {
 		return model.Service{}, invalid(err.Error())
+	}
+	if duplicate, exists := next.ServiceByModel(service.Model); exists && duplicate.UID != uid {
+		return model.Service{}, conflict("服务 model 已存在: %s", service.Model)
 	}
 	next.Services[index] = service
 	if err := m.commitLocked(next); err != nil {
@@ -188,22 +179,25 @@ func (m *Manager) UpdateService(id string, service model.Service) (model.Service
 	return service, nil
 }
 
-func (m *Manager) DuplicateService(id string) (model.Service, error) {
+func (m *Manager) DuplicateService(uid string) (model.Service, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next := m.config.Clone()
-	index := serviceIndex(next.Services, id)
+	index := serviceIndex(next.Services, uid)
 	if index < 0 {
-		return model.Service{}, notFound("服务不存在: %s", id)
+		return model.Service{}, notFound("服务不存在: %s", uid)
 	}
 	duplicate := next.Services[index]
-	base := duplicate.ID + "-copy"
-	duplicate.ID = base
-	for suffix := 2; serviceIndex(next.Services, duplicate.ID) >= 0; suffix++ {
-		duplicate.ID = fmt.Sprintf("%s%d", base, suffix)
+	duplicate.UID = ""
+	duplicate.LegacyID = ""
+	base := duplicate.Model + "-copy"
+	duplicate.Model = base
+	for suffix := 2; serviceModelIndex(next.Services, duplicate.Model) >= 0; suffix++ {
+		duplicate.Model = fmt.Sprintf("%s%d", base, suffix)
 	}
 	duplicate.Name += " (copy)"
 	duplicate.SortOrder = nextServiceSortOrder(next.Services)
+	duplicate.Normalize()
 	next.Services = append(next.Services, duplicate)
 	if err := m.commitLocked(next); err != nil {
 		return model.Service{}, err
@@ -211,24 +205,24 @@ func (m *Manager) DuplicateService(id string) (model.Service, error) {
 	return duplicate, nil
 }
 
-func (m *Manager) DeleteService(id string) error {
+func (m *Manager) DeleteService(uid string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next := m.config.Clone()
-	index := serviceIndex(next.Services, id)
+	index := serviceIndex(next.Services, uid)
 	if index < 0 {
-		return notFound("服务不存在: %s", id)
+		return notFound("服务不存在: %s", uid)
 	}
 	next.Services = append(next.Services[:index], next.Services[index+1:]...)
 	for index := range next.Telegram.Subscriptions {
 		subscription := &next.Telegram.Subscriptions[index]
-		selected := subscription.ServiceIDs[:0]
-		for _, serviceID := range subscription.ServiceIDs {
-			if serviceID != id {
-				selected = append(selected, serviceID)
+		selected := subscription.ServiceUIDs[:0]
+		for _, serviceUID := range subscription.ServiceUIDs {
+			if serviceUID != uid {
+				selected = append(selected, serviceUID)
 			}
 		}
-		subscription.ServiceIDs = selected
+		subscription.ServiceUIDs = selected
 	}
 	return m.commitLocked(next)
 }
@@ -241,22 +235,22 @@ type ServicePatch struct {
 	Stream      *bool
 }
 
-func (m *Manager) UpdateServices(ids []string, patch ServicePatch) ([]model.Service, error) {
-	if len(ids) == 0 {
-		return nil, invalid("ids 不能为空")
+func (m *Manager) UpdateServices(uids []string, patch ServicePatch) ([]model.Service, error) {
+	if len(uids) == 0 {
+		return nil, invalid("uids 不能为空")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next := m.config.Clone()
-	selected := make(map[string]struct{}, len(ids))
+	selected := make(map[string]struct{}, len(uids))
 	missing := make([]string, 0)
-	for _, id := range ids {
-		if _, duplicate := selected[id]; duplicate {
+	for _, uid := range uids {
+		if _, duplicate := selected[uid]; duplicate {
 			continue
 		}
-		selected[id] = struct{}{}
-		if serviceIndex(next.Services, id) < 0 {
-			missing = append(missing, id)
+		selected[uid] = struct{}{}
+		if serviceIndex(next.Services, uid) < 0 {
+			missing = append(missing, uid)
 		}
 	}
 	if len(missing) > 0 {
@@ -264,7 +258,7 @@ func (m *Manager) UpdateServices(ids []string, patch ServicePatch) ([]model.Serv
 	}
 	for index := range next.Services {
 		service := &next.Services[index]
-		if _, ok := selected[service.ID]; !ok {
+		if _, ok := selected[service.UID]; !ok {
 			continue
 		}
 		if patch.Enabled != nil {
@@ -314,11 +308,11 @@ func (m *Manager) UpdateTelegram(nextConfig notification.Config) (notification.C
 	return m.config.Telegram, nil
 }
 
-func (m *Manager) ProbeNow(ctx context.Context, id string) (*model.ProbeResult, error) {
+func (m *Manager) ProbeNow(ctx context.Context, uid string) (*model.ProbeResult, error) {
 	if m.monitor == nil {
 		return nil, internal("监控模块未初始化", nil)
 	}
-	result, err := m.monitor.ProbeNow(ctx, id)
+	result, err := m.monitor.ProbeNow(ctx, uid)
 	if err != nil {
 		return nil, notFound("%s", err)
 	}
@@ -378,9 +372,18 @@ func (m *Manager) rollbackLocked(previous settings.Config, rollbackNotifications
 	return errors.Join(errorsToJoin...)
 }
 
-func serviceIndex(services []model.Service, id string) int {
+func serviceIndex(services []model.Service, uid string) int {
 	for index := range services {
-		if services[index].ID == id {
+		if services[index].UID == uid {
+			return index
+		}
+	}
+	return -1
+}
+
+func serviceModelIndex(services []model.Service, serviceModel string) int {
+	for index := range services {
+		if services[index].Model == serviceModel {
 			return index
 		}
 	}

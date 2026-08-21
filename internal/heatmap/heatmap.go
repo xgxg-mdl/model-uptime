@@ -81,7 +81,7 @@ type Response struct {
 }
 
 type ServiceView struct {
-	ID             string  `json:"id"`
+	Name           string  `json:"name"`
 	Model          string  `json:"model"`
 	Provider       string  `json:"provider,omitempty"`
 	Status         string  `json:"status"`
@@ -155,9 +155,9 @@ func (s *Service) Build(ctx context.Context, rangeName string) (Response, error)
 			defer workers.Done()
 			for index := range jobs {
 				service := services[index]
-				results, err := s.repository.LoadResultsBetween(ctx, service.ID, spec.queryFrom.Unix(), spec.queryTo.Unix())
+				results, err := s.repository.LoadResultsBetween(ctx, service.ServiceUID, spec.queryFrom.Unix(), spec.queryTo.Unix())
 				if err != nil {
-					errs[index] = fmt.Errorf("构建服务 %q 热力图失败: %w", service.ID, err)
+					errs[index] = fmt.Errorf("构建服务 %q 热力图失败: %w", service.Model, err)
 					continue
 				}
 				views[index] = buildServiceView(service, results, spec)
@@ -267,7 +267,7 @@ func buildServiceView(service model.ServiceView, results []model.ProbeResult, sp
 		uptime = float64(successful) / float64(len(results)) * 100
 	}
 	return ServiceView{
-		ID: service.ID, Model: service.Model, Provider: service.Provider,
+		Name: service.Name, Model: service.Model, Provider: service.Provider,
 		Status: currentStatus(service.Last, service.WarningSec), Samples: len(results), UptimePct: uptime,
 		LatencySamples: len(allSuccessfulLatencies), P95LatencyMS: percentile95(allSuccessfulLatencies), Cells: cells,
 	}
@@ -298,7 +298,7 @@ func buildCacheKey(spec gridSpec, services []model.ServiceView) string {
 	periodEnd := spec.slots[len(spec.slots)-1].end.Unix()
 	fmt.Fprintf(&key, "%s|%d|%d|%d", spec.rangeName, spec.queryFrom.Unix(), periodEnd, len(spec.slots))
 	for _, service := range services {
-		fmt.Fprintf(&key, "|%s|%s|%s|%d|%d|%d", service.ID, service.Model, service.Provider, service.SortOrder, service.IntervalSec, service.WarningSec)
+		fmt.Fprintf(&key, "|%s|%s|%s|%s|%d|%d|%d", service.ServiceUID, service.Name, service.Model, service.Provider, service.SortOrder, service.IntervalSec, service.WarningSec)
 		if service.Last != nil {
 			fmt.Fprintf(&key, "|%d|%t|%d", service.Last.TS, service.Last.OK, service.Last.LatencyMS)
 		}

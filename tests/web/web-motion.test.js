@@ -18,10 +18,9 @@ const heatmapHTML = fs.readFileSync(path.join(root, 'internal/httpserver/web/hea
 function service(id, ok) {
   const result = { ts: 100, ok, latency_ms: 10 };
   return {
-    id,
     name: 'Same display name',
     provider: 'Same provider',
-    model: 'same-model',
+    model: id,
     interval_sec: 60,
     uptime_pct: ok ? 100 : 90,
     timeline: [
@@ -148,7 +147,7 @@ test('首次渲染不播放变化动效，整体状态实际变化时才播放',
   assert.equal(findAll(banner, element => element.classList.contains('status-change')).length, 1);
 });
 
-test('同名服务重排后仍按稳定 ID 标记真正变化的服务', () => {
+test('同名服务重排后仍按唯一 model 标记真正变化的服务', () => {
   const document = createStatusDocument();
   const renderer = createStatusRenderer({
     document,

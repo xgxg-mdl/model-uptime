@@ -14,7 +14,7 @@ import (
 
 const defaultMaxConcurrentProbe = 8
 
-// serviceState 是调度器维护的某个服务的运行时状态。generation 区分同一 ID 的观测生命周期。
+// serviceState 是调度器维护的某个服务的运行时状态。generation 区分同一 UID 的观测生命周期。
 // pauses 记录运行时禁用区间，用于状态页显式渲染暂停空档；不持久化。
 type serviceState struct {
 	svc           model.Service

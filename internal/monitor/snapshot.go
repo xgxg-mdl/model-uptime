@@ -76,7 +76,8 @@ func buildSnapshot(now int64, historyLength int, states []serviceSnapshot) model
 			ProbeStartedAt: state.probeStartedAt, History: state.history, Pauses: state.pauses,
 		})
 		view := model.ServiceView{
-			ID: service.ID, Model: service.Name, Provider: service.Provider, SortOrder: service.SortOrder,
+			ServiceUID: service.UID, Name: service.Name, Model: service.Model,
+			Provider: service.Provider, SortOrder: service.SortOrder,
 			IntervalSec: service.IntervalSec, WarningSec: service.WarningSec,
 			ObservedSince: state.observedSince, ProbeStartedAt: state.probeStartedAt,
 			UptimePct: projection.UptimePct, Timeline: projection.Slots, Last: state.last,

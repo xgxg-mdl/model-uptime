@@ -13,7 +13,7 @@ func boolp(b bool) *bool { return &b }
 
 func testSvc(id string, enabled bool) model.Service {
 	return model.Service{
-		ID: id, Name: id, Protocol: model.ProtocolHTTP, BaseURL: "http://example.com",
+		UID: id, Model: id, Name: id, Protocol: model.ProtocolHTTP, BaseURL: "http://example.com",
 		IntervalSec: 60, TimeoutSec: 5, Enabled: boolp(enabled),
 	}
 }

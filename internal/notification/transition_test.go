@@ -27,8 +27,8 @@ func TestWorkerIngestsTransitionIntoOutbox(t *testing.T) {
 	n, err := New(Options{
 		Repository: source, PollInterval: time.Hour, Logger: discardLogger(),
 	}, Config{BotToken: "token", Subscriptions: []Subscription{
-		{ID: "ops", Enabled: true, ChatID: "chat", ServiceIDs: []string{"a"}, Template: `{{.TotalChanges}}|{{range .Changes}}{{.Model}}{{end}}`},
-		{ID: "other", Enabled: true, ChatID: "other", ServiceIDs: []string{"b"}, Template: `unexpected`},
+		{ID: "ops", Enabled: true, ChatID: "chat", ServiceUIDs: []string{"a"}, Template: `{{.TotalChanges}}|{{range .Changes}}{{.Model}}{{end}}`},
+		{ID: "other", Enabled: true, ChatID: "other", ServiceUIDs: []string{"b"}, Template: `unexpected`},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestTransitionUsesCurrentCompleteConfig(t *testing.T) {
 	n, err := New(Options{
 		Repository: source, PollInterval: time.Hour, Logger: discardLogger(),
 	}, Config{BotToken: "old-token", Subscriptions: []Subscription{{
-		ID: "old", Enabled: true, ChatID: "old-chat", ServiceIDs: []string{"a"}, Template: `old`,
+		ID: "old", Enabled: true, ChatID: "old-chat", ServiceUIDs: []string{"a"}, Template: `old`,
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestTransitionUsesCurrentCompleteConfig(t *testing.T) {
 
 	if err := n.UpdateConfig(Config{BotToken: "new-token", Subscriptions: []Subscription{{
 		ID: "current", Enabled: true, ChatID: "new-chat", Language: LanguageEnglish,
-		ServiceIDs: []string{"a"}, Template: `current|{{range .Changes}}{{.Model}}{{end}}`,
+		ServiceUIDs: []string{"a"}, Template: `current|{{range .Changes}}{{.Model}}{{end}}`,
 	}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -236,9 +236,9 @@ func TestTransitionCommitRetryKeepsStableMessageShards(t *testing.T) {
 		serviceID := fmt.Sprintf("service-%02d", index)
 		serviceIDs = append(serviceIDs, serviceID)
 		changes = append(changes, model.StatusChange{
-			ServiceID: serviceID,
-			Model:     fmt.Sprintf("%02d-%s", index, strings.Repeat("界", 1190)),
-			Status:    "down", PreviousStatus: "up", LastTS: changedAt.Unix(),
+			ServiceUID: serviceID,
+			Model:      fmt.Sprintf("%02d-%s", index, strings.Repeat("界", 1190)),
+			Status:     "down", PreviousStatus: "up", LastTS: changedAt.Unix(),
 		})
 	}
 	outbox := newRecordingOutbox()
@@ -257,7 +257,7 @@ func TestTransitionCommitRetryKeepsStableMessageShards(t *testing.T) {
 		PersistenceRetryDelays: []time.Duration{time.Millisecond}, Logger: discardLogger(),
 	}, Config{BotToken: "token", Subscriptions: []Subscription{{
 		ID: "ops", Enabled: true, ChatID: "chat", Language: LanguageEnglish,
-		ServiceIDs: serviceIDs, Template: "{{range .Changes}}{{.Model}}\n{{end}}",
+		ServiceUIDs: serviceIDs, Template: "{{range .Changes}}{{.Model}}\n{{end}}",
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -305,7 +305,7 @@ func TestTransitionCommitRetryKeepsStableMessageShards(t *testing.T) {
 	allText := rendered.String()
 	for _, change := range changes {
 		if count := strings.Count(allText, change.Model); count != 1 {
-			t.Fatalf("模型 %q 在全部分片中出现 %d 次，期望 1", change.ServiceID, count)
+			t.Fatalf("模型 %q 在全部分片中出现 %d 次，期望 1", change.ServiceUID, count)
 		}
 	}
 }
@@ -704,7 +704,7 @@ func transitionBatch(key string, changedAt time.Time, statusPageURL string) mode
 	return model.TransitionBatch{
 		Key: key, ChangedAt: changedAt, StatusPageURL: statusPageURL,
 		Changes: []model.StatusChange{{
-			ServiceID: "a", Model: "alpha", Status: "down", PreviousStatus: "up", LastTS: changedAt.Unix(),
+			ServiceUID: "a", Model: "alpha", Status: "down", PreviousStatus: "up", LastTS: changedAt.Unix(),
 		}},
 	}
 }

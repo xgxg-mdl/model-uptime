@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -42,7 +43,8 @@ func (c *Config) Clone() Config {
 	}
 	out.Telegram.Subscriptions = append([]notification.Subscription(nil), c.Telegram.Subscriptions...)
 	for i := range out.Telegram.Subscriptions {
-		out.Telegram.Subscriptions[i].ServiceIDs = append([]string(nil), c.Telegram.Subscriptions[i].ServiceIDs...)
+		out.Telegram.Subscriptions[i].ServiceUIDs = append([]string(nil), c.Telegram.Subscriptions[i].ServiceUIDs...)
+		out.Telegram.Subscriptions[i].LegacyServiceIDs = append([]string(nil), c.Telegram.Subscriptions[i].LegacyServiceIDs...)
 	}
 	return out
 }
@@ -131,19 +133,58 @@ func Load(path string) (*Config, error) {
 		}
 		return nil, fmt.Errorf("解析配置 %s 失败: %w", path, err)
 	}
+	identityMigration := needsIdentityMigration(c)
 	c.Normalize()
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("配置校验失败: %w", err)
 	}
+	if identityMigration {
+		if err := c.Save(path); err != nil {
+			return nil, fmt.Errorf("持久化服务 uid 迁移失败: %w", err)
+		}
+	}
 	return c, nil
+}
+
+func needsIdentityMigration(config *Config) bool {
+	for _, service := range config.Services {
+		if service.UID == "" || service.LegacyID != "" {
+			return true
+		}
+	}
+	for _, subscription := range config.Telegram.Subscriptions {
+		if len(subscription.LegacyServiceIDs) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Normalize 填充各层默认值。
 func (c *Config) Normalize() {
 	c.Page.Normalize()
 	notification.NormalizeConfig(&c.Telegram)
+	legacyIDs := make(map[string]string, len(c.Services))
 	for i := range c.Services {
 		c.Services[i].Normalize()
+		if c.Services[i].LegacyID != "" {
+			legacyIDs[c.Services[i].LegacyID] = c.Services[i].UID
+		}
+		c.Services[i].LegacyID = ""
+	}
+	for i := range c.Telegram.Subscriptions {
+		subscription := &c.Telegram.Subscriptions[i]
+		if len(subscription.ServiceUIDs) == 0 && len(subscription.LegacyServiceIDs) > 0 {
+			subscription.ServiceUIDs = append([]string(nil), subscription.LegacyServiceIDs...)
+		}
+		for j, serviceID := range subscription.ServiceUIDs {
+			serviceID = strings.TrimSpace(serviceID)
+			subscription.ServiceUIDs[j] = serviceID
+			if uid, ok := legacyIDs[serviceID]; ok {
+				subscription.ServiceUIDs[j] = uid
+			}
+		}
+		subscription.LegacyServiceIDs = nil
 	}
 	normalizeServiceSortOrders(c.Services)
 }
@@ -171,16 +212,21 @@ func (c *Config) Validate() error {
 	if err := c.Page.Validate(); err != nil {
 		return err
 	}
-	seen := make(map[string]bool, len(c.Services))
+	seenUIDs := make(map[string]bool, len(c.Services))
+	seenModels := make(map[string]bool, len(c.Services))
 	for i := range c.Services {
 		svc := &c.Services[i]
 		if err := svc.Validate(); err != nil {
 			return err
 		}
-		if seen[svc.ID] {
-			return fmt.Errorf("服务 id 重复: %q", svc.ID)
+		if seenUIDs[svc.UID] {
+			return fmt.Errorf("服务 uid 重复: %q", svc.UID)
 		}
-		seen[svc.ID] = true
+		seenUIDs[svc.UID] = true
+		if seenModels[svc.Model] {
+			return fmt.Errorf("服务 model 重复: %q", svc.Model)
+		}
+		seenModels[svc.Model] = true
 	}
 	if err := notification.ValidateConfig(c.Telegram); err != nil {
 		return err
@@ -189,9 +235,9 @@ func (c *Config) Validate() error {
 		if subscription.Name == "" {
 			return fmt.Errorf("Telegram 订阅 %q: name 不能为空", subscription.ID)
 		}
-		references := make(map[string]bool, len(subscription.ServiceIDs))
-		for _, id := range subscription.ServiceIDs {
-			if id == "" || !seen[id] {
+		references := make(map[string]bool, len(subscription.ServiceUIDs))
+		for _, id := range subscription.ServiceUIDs {
+			if id == "" || !seenUIDs[id] {
 				return fmt.Errorf("Telegram 订阅 %q 引用了不存在的服务 %q", subscription.ID, id)
 			}
 			if references[id] {
@@ -246,11 +292,21 @@ func (c *Config) Save(path string) error {
 	return syncDirectory(dir)
 }
 
-// ServiceByID 返回指定 id 的服务副本；不存在返回零值与 false。
-func (c *Config) ServiceByID(id string) (model.Service, bool) {
+// ServiceByUID 返回指定内部 uid 的服务副本；不存在返回零值与 false。
+func (c *Config) ServiceByUID(uid string) (model.Service, bool) {
 	for _, s := range c.Services {
-		if s.ID == id {
+		if s.UID == uid {
 			return s, true
+		}
+	}
+	return model.Service{}, false
+}
+
+// ServiceByModel 返回指定可编辑 model 的服务副本；不存在返回零值与 false。
+func (c *Config) ServiceByModel(serviceModel string) (model.Service, bool) {
+	for _, service := range c.Services {
+		if service.Model == serviceModel {
+			return service, true
 		}
 	}
 	return model.Service{}, false

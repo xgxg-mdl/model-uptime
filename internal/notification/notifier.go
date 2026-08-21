@@ -199,8 +199,8 @@ func (n *Notifier) SendTest(ctx context.Context, subscriptionID, statusPageURL s
 			downModel, recoveredModel, provider, probeError = "示例异常模型", "示例恢复模型", "示例提供商", "探测超时"
 		}
 		testChanges := []model.StatusChange{
-			{ServiceID: "example-down", SortOrder: 1, Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix(), TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
-			{ServiceID: "example-recovered", SortOrder: 2, Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix(), OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
+			{ServiceUID: "example-down", SortOrder: 1, Model: downModel, Provider: provider, Protocol: "chat", Error: probeError, PreviousStatus: "up", Status: "down", LastTS: now.Unix(), TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
+			{ServiceUID: "example-recovered", SortOrder: 2, Model: recoveredModel, Provider: provider, Protocol: "chat", OK: true, LatencyMS: 128, PreviousStatus: "down", Status: "up", LastTS: now.Unix(), OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
 		}
 		for _, changes := range splitChangesByStatus(testChanges) {
 			text, err := renderDeliveryText(subscription, now, changes, statusPageURL)

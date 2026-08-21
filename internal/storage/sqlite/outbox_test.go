@@ -227,7 +227,7 @@ func TestOutboxQuarantinePreservesPayloadAndDoesNotBlockFIFO(t *testing.T) {
 	payload := &notification.RenderPayload{
 		ChangedAt: now.Add(123456789 * time.Nanosecond),
 		Changes: []model.StatusChange{{
-			ServiceID: "svc-a", Model: "alpha", Status: "down", PreviousStatus: "up",
+			ServiceUID: "svc-a", Model: "alpha", Status: "down", PreviousStatus: "up",
 		}},
 		StatusPageURL: "https://status.example.com/",
 	}
@@ -281,6 +281,30 @@ func TestOutboxQuarantinePreservesPayloadAndDoesNotBlockFIFO(t *testing.T) {
 		!recovered.RenderPayload.ChangedAt.Equal(payload.ChangedAt) ||
 		recovered.FailureConfigFingerprint != "" {
 		t.Fatalf("恢复后的 payload 或失败计数错误: %+v", recovered)
+	}
+}
+
+func TestClaimMigratesLegacyServiceIDInPersistedPayload(t *testing.T) {
+	t.Parallel()
+	store := openTest(t)
+	ctx := context.Background()
+	now := time.Unix(1_700_000_000, 0)
+	payload := fmt.Sprintf(`{"changed_at":%q,"changes":[{"service_id":"legacy-service","model":"renamed-model","status":"down"}]}`,
+		now.Format(time.RFC3339Nano))
+	if _, err := store.db.Exec(`
+		INSERT INTO notification_outbox (
+			dedupe_key, subscription_id, message, payload_json, created_at_ms, available_at_ms
+		) VALUES ('legacy', 'ops', 'message', ?, ?, ?)`, payload, now.UnixMilli(), now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+
+	delivery, err := store.Claim(ctx, now, now.Add(time.Minute))
+	if err != nil || delivery == nil || delivery.RenderPayload == nil {
+		t.Fatalf("领取旧通知 payload 失败: delivery=%+v err=%v", delivery, err)
+	}
+	change := delivery.RenderPayload.Changes[0]
+	if change.ServiceUID != "legacy-service" || change.LegacyServiceID != "" {
+		t.Fatalf("旧 service_id 未迁移为 service_uid: %+v", change)
 	}
 }
 

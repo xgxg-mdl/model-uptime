@@ -275,11 +275,11 @@ export function createHeatmapRenderer({
     cellSignatures.set(button, signature);
   }
 
-  function createCell(cell, serviceID, cellIndex) {
+  function createCell(cell, serviceModel, cellIndex) {
     const button = createElement(documentRef, 'button');
     button.type = 'button';
     button.setAttribute('aria-describedby', 'tip');
-    button.setAttribute('data-service-id', serviceID);
+    button.setAttribute('data-service-model', serviceModel);
     button.setAttribute('data-cell-index', String(cellIndex));
     updateCell(button, cell);
     return button;
@@ -390,11 +390,11 @@ export function createHeatmapRenderer({
 
   function createPanel(service, data) {
     const panel = createElement(documentRef, 'section', 'heatmap-panel');
-    panel.setAttribute('data-service-id', service.id);
+    panel.setAttribute('data-service-model', service.model);
     const heading = createElement(documentRef, 'div', 'line service-heading heatmap-panel-heading');
     heading.append(createElement(documentRef, 'span', 'mute', '→'));
     appendText(documentRef, heading, ' ');
-    heading.append(createElement(documentRef, 'span', 'cmd bold heatmap-model-name', service.model));
+    heading.append(createElement(documentRef, 'span', 'cmd bold heatmap-model-name', service.name || service.model));
     appendText(documentRef, heading, ' · ');
     heading.append(
       createElement(
@@ -424,7 +424,7 @@ export function createHeatmapRenderer({
 
     const grid = createElement(documentRef, 'div', 'heat-grid service-indent');
     grid.setAttribute('role', 'grid');
-    grid.setAttribute('aria-label', `${service.model} ${rangeLabel(data.range)} health history`);
+    grid.setAttribute('aria-label', `${service.name || service.model} ${rangeLabel(data.range)} health history`);
     const layout = gridLayout(data.range, data.rows, data.columns, service.cells);
     configureGrid(grid, [], layout.rows.length, layout.columnCount);
     const axis = createElement(documentRef, 'div', 'axis service-indent heatmap-axis');
@@ -446,7 +446,7 @@ export function createHeatmapRenderer({
       row.setAttribute('aria-rowindex', String(rowIndex + 1));
       row.style.gridTemplateColumns = `repeat(${layout.columnCount}, minmax(0, 1fr))`;
       for (const [columnIndex, item] of layoutRow.entries()) {
-        const button = createCell(item.cell, service.id, item.sourceIndex);
+        const button = createCell(item.cell, service.model, item.sourceIndex);
         button.setAttribute('role', 'gridcell');
         button.setAttribute('aria-colindex', String(columnIndex + 1));
         // 行分批到达时仍只保留一个键盘入口，避免后续再扫描全部格子。
@@ -467,13 +467,13 @@ export function createHeatmapRenderer({
     }
     for (const service of services) {
       appendText(documentRef, commandModels, ' ');
-      commandModels.append(createElement(documentRef, 'span', 'str', service.model));
+      commandModels.append(createElement(documentRef, 'span', 'str', service.name || service.model));
     }
   }
 
   function updatePanel(panel, service, data) {
-    panel.setAttribute('data-service-id', service.id);
-    panel.querySelector('.heatmap-model-name').textContent = service.model;
+    panel.setAttribute('data-service-model', service.model);
+    panel.querySelector('.heatmap-model-name').textContent = service.name || service.model;
     const current = panel.querySelector('.heatmap-current');
     current.className = `heatmap-current ${service.status}`;
     current.textContent = `● ${currentStatusLabel(service.status)}`;
@@ -498,7 +498,7 @@ export function createHeatmapRenderer({
   }
 
   function restoreFocusedCell(panel, focusedCell) {
-    if (!focusedCell || panel.getAttribute('data-service-id') !== focusedCell.serviceID) return;
+    if (!focusedCell || panel.getAttribute('data-service-model') !== focusedCell.serviceModel) return;
     const replacement = [...panel.querySelectorAll('.heat-cell')].find(
       cell => cell.getAttribute('data-cell-index') === focusedCell.cellIndex,
     );
@@ -512,7 +512,7 @@ export function createHeatmapRenderer({
     const focusedCell =
       activeElement?.classList?.contains('heat-cell') && isDescendant(output, activeElement)
         ? {
-            serviceID: activeElement.getAttribute('data-service-id'),
+            serviceModel: activeElement.getAttribute('data-service-model'),
             cellIndex: activeElement.getAttribute('data-cell-index'),
           }
         : null;
@@ -534,7 +534,7 @@ export function createHeatmapRenderer({
     const services = data.services || [];
     renderCommandModels(services);
     const layoutKey = `${data.range}|${(data.rows || []).length}|${(data.columns || []).length}`;
-    const serviceKey = JSON.stringify(services.map(service => service.id));
+    const serviceKey = JSON.stringify(services.map(service => service.model));
     const panels = [...output.querySelectorAll('.heatmap-panel')];
     if (
       renderedComplete &&

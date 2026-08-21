@@ -2,6 +2,7 @@
 package model
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,7 +23,8 @@ const APIKeySentinel = "***unchanged***"
 
 // Service 是一个监控目标。字段同时用于 YAML 配置文件和配置页 JSON API。
 type Service struct {
-	ID          string `yaml:"id" json:"id"`
+	UID         string `yaml:"uid" json:"uid"`                               // 内部稳定标识，不随 model 修改
+	LegacyID    string `yaml:"id,omitempty" json:"-"`                        // 仅用于读取旧配置；写回时省略
 	Name        string `yaml:"name" json:"name"`                             // 状态页显示的模型名
 	Provider    string `yaml:"provider,omitempty" json:"provider,omitempty"` // 提供商标签
 	Protocol    string `yaml:"protocol" json:"protocol"`                     // chat|response|message|http
@@ -46,6 +48,13 @@ type Service struct {
 	ExpectStatus int               `yaml:"expect_status,omitempty" json:"expect_status,omitempty"`
 }
 
+// MarshalYAML 不再写回旧 id 字段；其值只用于把旧配置迁移到 uid。
+func (s Service) MarshalYAML() (any, error) {
+	type serviceYAML Service
+	s.LegacyID = ""
+	return serviceYAML(s), nil
+}
+
 // IsEnabled 返回服务是否启用（未显式配置时默认启用）。
 func (s *Service) IsEnabled() bool { return s.Enabled == nil || *s.Enabled }
 
@@ -56,12 +65,25 @@ func (s *Service) IsStreaming() bool {
 
 // Normalize 填充默认值并清理字段。
 func (s *Service) Normalize() {
-	s.ID = strings.TrimSpace(s.ID)
+	s.UID = strings.TrimSpace(s.UID)
+	s.LegacyID = strings.TrimSpace(s.LegacyID)
 	s.Name = strings.TrimSpace(s.Name)
 	s.Provider = strings.TrimSpace(s.Provider)
 	s.Protocol = strings.ToLower(strings.TrimSpace(s.Protocol))
+	s.Model = strings.TrimSpace(s.Model)
 	s.BaseURL = strings.TrimRight(strings.TrimSpace(s.BaseURL), "/")
 	s.Method = strings.ToUpper(strings.TrimSpace(s.Method))
+	if s.UID == "" {
+		if s.LegacyID != "" {
+			s.UID = s.LegacyID
+		} else {
+			s.UID = newServiceUID()
+		}
+	}
+	// 旧 HTTP 配置没有 model；原 id 是其用户可见标识，可无损迁移为 model。
+	if s.Model == "" && s.Protocol == ProtocolHTTP && s.LegacyID != "" {
+		s.Model = s.LegacyID
+	}
 	if s.IntervalSec <= 0 {
 		s.IntervalSec = 60
 	}
@@ -82,45 +104,57 @@ func (s *Service) Normalize() {
 	}
 }
 
+func newServiceUID() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		// crypto/rand 失败意味着运行环境已无法安全生成身份，继续运行会制造重复关联。
+		panic(fmt.Sprintf("生成服务 uid 失败: %v", err))
+	}
+	value[6] = (value[6] & 0x0f) | 0x40
+	value[8] = (value[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		value[0:4], value[4:6], value[6:8], value[8:10], value[10:16])
+}
+
 // Validate 校验服务定义，返回首个错误。
 func (s *Service) Validate() error {
-	if s.ID == "" {
-		return fmt.Errorf("id 不能为空")
+	if s.UID == "" {
+		return fmt.Errorf("uid 不能为空")
+	}
+	if s.Model == "" {
+		return fmt.Errorf("服务 %q: model 不能为空", s.UID)
 	}
 	if s.Name == "" {
-		return fmt.Errorf("服务 %q: name 不能为空", s.ID)
+		return fmt.Errorf("服务 %q: name 不能为空", s.Model)
 	}
 	switch s.Protocol {
 	case ProtocolChat, ProtocolResponse, ProtocolMessage, ProtocolHTTP:
 	default:
-		return fmt.Errorf("服务 %q: 不支持的协议 %q（支持 chat|response|message|http）", s.ID, s.Protocol)
+		return fmt.Errorf("服务 %q: 不支持的协议 %q（支持 chat|response|message|http）", s.Model, s.Protocol)
 	}
 	if s.Protocol == ProtocolHTTP {
 		if s.BaseURL == "" {
-			return fmt.Errorf("服务 %q: http 协议需要 base_url", s.ID)
+			return fmt.Errorf("服务 %q: http 协议需要 base_url", s.Model)
 		}
 		if s.ExpectStatus < 100 || s.ExpectStatus > 599 {
-			return fmt.Errorf("服务 %q: expect_status 必须是合法 HTTP 状态码", s.ID)
+			return fmt.Errorf("服务 %q: expect_status 必须是合法 HTTP 状态码", s.Model)
 		}
 	} else {
 		if s.BaseURL == "" {
-			return fmt.Errorf("服务 %q: 需要 base_url", s.ID)
-		}
-		if s.Model == "" {
-			return fmt.Errorf("服务 %q: %s 协议需要 model", s.ID, s.Protocol)
+			return fmt.Errorf("服务 %q: 需要 base_url", s.Model)
 		}
 	}
 	if s.IntervalSec < 5 {
-		return fmt.Errorf("服务 %q: interval_sec 不能小于 5", s.ID)
+		return fmt.Errorf("服务 %q: interval_sec 不能小于 5", s.Model)
 	}
 	if s.TimeoutSec < 1 || s.TimeoutSec > 300 {
-		return fmt.Errorf("服务 %q: timeout_sec 需在 1~300 之间", s.ID)
+		return fmt.Errorf("服务 %q: timeout_sec 需在 1~300 之间", s.Model)
 	}
 	if s.WarningSec < 1 || s.WarningSec > 300 {
-		return fmt.Errorf("服务 %q: warning_sec 需在 1~300 之间", s.ID)
+		return fmt.Errorf("服务 %q: warning_sec 需在 1~300 之间", s.Model)
 	}
 	if s.SortOrder < 0 {
-		return fmt.Errorf("服务 %q: sort_order 不能为负数", s.ID)
+		return fmt.Errorf("服务 %q: sort_order 不能为负数", s.Model)
 	}
 	return nil
 }
@@ -136,7 +170,8 @@ type ProbeResult struct {
 
 // StatusChange 描述单个服务一次最终状态变化，不包含任何投递渠道语义。
 type StatusChange struct {
-	ServiceID         string  `json:"service_id"`
+	ServiceUID        string  `json:"service_uid"`
+	LegacyServiceID   string  `json:"service_id,omitempty"` // 仅用于读取升级前持久化的通知 payload
 	SortOrder         int     `json:"sort_order,omitempty"`
 	Model             string  `json:"model"`
 	Provider          string  `json:"provider"`
@@ -270,7 +305,8 @@ type StatusTimelineSlot struct {
 
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
-	ID             string               `json:"id"`
+	ServiceUID     string               `json:"-"`
+	Name           string               `json:"name"`
 	Model          string               `json:"model"`
 	Provider       string               `json:"provider,omitempty"`
 	SortOrder      int                  `json:"-"`
@@ -286,7 +322,7 @@ type ServiceView struct {
 }
 
 // ServiceViewLess 定义公开页面统一使用的模型顺序：显式 order 优先，
-// 未设置的 order 置底，同 order 再以展示名和稳定 ID 消除来源切片差异。
+// 未设置的 order 置底，同 order 再以展示名和模型 ID 消除来源切片差异。
 func ServiceViewLess(left, right ServiceView) bool {
 	if left.SortOrder != right.SortOrder {
 		if left.SortOrder <= 0 {
@@ -297,10 +333,10 @@ func ServiceViewLess(left, right ServiceView) bool {
 		}
 		return left.SortOrder < right.SortOrder
 	}
-	if left.Model != right.Model {
-		return left.Model < right.Model
+	if left.Name != right.Name {
+		return left.Name < right.Name
 	}
-	return left.ID < right.ID
+	return left.Model < right.Model
 }
 
 // StatusResponse 是 /api/status 的监控数据响应体。

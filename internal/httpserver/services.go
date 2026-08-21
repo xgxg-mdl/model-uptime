@@ -36,7 +36,7 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 		writeDecodeError(w, err)
 		return
 	}
-	updated, err := s.admin.UpdateService(r.PathValue("id"), service)
+	updated, err := s.admin.UpdateService(r.PathValue("uid"), service)
 	if err != nil {
 		writeAdminError(w, err)
 		return
@@ -45,7 +45,7 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDuplicateService(w http.ResponseWriter, r *http.Request) {
-	duplicated, err := s.admin.DuplicateService(r.PathValue("id"))
+	duplicated, err := s.admin.DuplicateService(r.PathValue("uid"))
 	if err != nil {
 		writeAdminError(w, err)
 		return
@@ -54,7 +54,7 @@ func (s *Server) handleDuplicateService(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
-	if err := s.admin.DeleteService(r.PathValue("id")); err != nil {
+	if err := s.admin.DeleteService(r.PathValue("uid")); err != nil {
 		writeAdminError(w, err)
 		return
 	}
@@ -62,7 +62,7 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) {
-	result, err := s.admin.ProbeNow(r.Context(), r.PathValue("id"))
+	result, err := s.admin.ProbeNow(r.Context(), r.PathValue("uid"))
 	if err != nil {
 		writeAdminError(w, err)
 		return
@@ -80,14 +80,14 @@ type servicePatchRequest struct {
 
 func (s *Server) handleBulkUpdateServices(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		IDs   []string            `json:"ids"`
+		UIDs  []string            `json:"uids"`
 		Patch servicePatchRequest `json:"patch"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeDecodeError(w, err)
 		return
 	}
-	services, err := s.admin.UpdateServices(request.IDs, admin.ServicePatch{
+	services, err := s.admin.UpdateServices(request.UIDs, admin.ServicePatch{
 		Enabled: request.Patch.Enabled, IntervalSec: request.Patch.IntervalSec,
 		TimeoutSec: request.Patch.TimeoutSec, WarningSec: request.Patch.WarningSec,
 		Stream: request.Patch.Stream,

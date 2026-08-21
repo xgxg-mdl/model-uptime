@@ -114,7 +114,7 @@ func (r *DailyReporter) Report(ctx context.Context, dayStart time.Time) error {
 	}
 	services := make(map[string]model.Service, len(snapshot.Services))
 	for _, service := range snapshot.Services {
-		services[service.ID] = service
+		services[service.UID] = service
 	}
 
 	var allErrs []error
@@ -140,11 +140,11 @@ func (r *DailyReporter) Report(ctx context.Context, dayStart time.Time) error {
 }
 
 type dailyModel struct {
-	ServiceID string
-	Model     string
-	Provider  string
-	SortOrder int
-	Stats     model.DailyStats
+	ServiceUID string
+	Model      string
+	Provider   string
+	SortOrder  int
+	Stats      model.DailyStats
 }
 
 type dailyReport struct {
@@ -163,7 +163,7 @@ type dailyReport struct {
 
 func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, subscription compiledSubscription, services map[string]model.Service) (dailyReport, error) {
 	report := dailyReport{Date: start}
-	for _, id := range subscription.ServiceIDs {
+	for _, id := range subscription.ServiceUIDs {
 		service, ok := services[id]
 		if !ok {
 			continue
@@ -179,7 +179,7 @@ func (r *DailyReporter) buildReport(ctx context.Context, start, end time.Time, s
 			name = service.Name
 		}
 		item := dailyModel{
-			ServiceID: id, Model: compactDailyLabel(name, 512),
+			ServiceUID: id, Model: compactDailyLabel(name, 512),
 			Provider: compactDailyLabel(service.Provider, 256), SortOrder: service.SortOrder, Stats: stats,
 		}
 		if stats.ObservedSec() == 0 {

@@ -17,7 +17,7 @@ func boolp(b bool) *bool { return &b }
 // newSvc 构造一个可探测的服务。
 func newSvc(id, protocol, baseURL string) *model.Service {
 	return &model.Service{
-		ID: id, Name: id, Protocol: protocol, Model: "test-model",
+		UID: id, Name: id, Protocol: protocol, Model: "test-model",
 		BaseURL: baseURL, APIKey: "sk-test-key",
 		IntervalSec: 60, TimeoutSec: 5, Enabled: boolp(true), Stream: boolp(false),
 	}

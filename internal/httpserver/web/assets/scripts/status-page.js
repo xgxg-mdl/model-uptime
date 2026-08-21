@@ -79,9 +79,8 @@ function timelinePresentation(status) {
   return TIMELINE_PRESENTATION.get(status) || TIMELINE_PRESENTATION.get('unobserved');
 }
 
-export function serviceIdentity(service, index) {
-  if (service.id) return service.id;
-  return `${service.provider || ''}\u0000${service.model || ''}\u0000${index}`;
+export function serviceIdentity(service) {
+  return service.model;
 }
 
 function appendText(documentRef, parent, text) {
@@ -297,7 +296,7 @@ export function createStatusRenderer({
     } else {
       for (const service of services) {
         appendText(documentRef, commandModels, ' ');
-        appendSpan(documentRef, commandModels, service.model, 'str');
+        appendSpan(documentRef, commandModels, service.name || service.model, 'str');
       }
     }
 
@@ -321,7 +320,7 @@ export function createStatusRenderer({
       const heading = createElement(documentRef, 'div', 'line service-heading');
       appendSpan(documentRef, heading, '→', 'mute');
       appendText(documentRef, heading, ' ');
-      appendSpan(documentRef, heading, service.model, 'cmd bold');
+      appendSpan(documentRef, heading, service.name || service.model, 'cmd bold');
       appendText(documentRef, heading, ' · ');
       appendSpan(documentRef, heading, `● ${statusText}`, `${statusClass}${statusChanged ? ' status-change' : ''}`);
 

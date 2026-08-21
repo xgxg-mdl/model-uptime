@@ -79,7 +79,7 @@ func response(status int, body string) *http.Response {
 }
 
 func validConfig(token, chatID string) Config {
-	return Config{BotToken: token, Subscriptions: []Subscription{{ID: "ops", Enabled: true, ChatID: chatID, ServiceIDs: []string{"a"}, Template: `{{.TotalChanges}}`}}}
+	return Config{BotToken: token, Subscriptions: []Subscription{{ID: "ops", Enabled: true, ChatID: chatID, ServiceUIDs: []string{"a"}, Template: `{{.TotalChanges}}`}}}
 }
 
 func newTestNotifier(t *testing.T, apiBaseURL string, config Config) *Notifier {

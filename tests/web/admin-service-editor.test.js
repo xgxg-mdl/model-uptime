@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import {
   compareServiceOrder,
   createEditorSessionState,
+  renderServiceListItem,
+  renderServiceTableRow,
 } from '../../internal/httpserver/web/assets/scripts/admin/services.js';
 import { revealPanel } from '../../internal/httpserver/web/assets/scripts/admin/shared.js';
 import { FakeDocument } from './helpers/fake-dom.js';
@@ -14,7 +16,7 @@ import { FakeDocument } from './helpers/fake-dom.js';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'internal/httpserver/web/admin/index.html'), 'utf8');
 
-test('服务编辑器以独立窗口声明且 ID 唯一', () => {
+test('服务编辑器以独立窗口声明且 DOM ID 唯一', () => {
   const servicePanelStart = html.indexOf('<h2>monitor services</h2>');
   const serviceListStart = html.indexOf('id="svc-list"', servicePanelStart);
   const editorStart = html.indexOf('id="editor"', servicePanelStart);
@@ -28,23 +30,43 @@ test('服务编辑器以独立窗口声明且 ID 唯一', () => {
   assert.match(html, /<div class="window-layer" id="window-layer"><\/div>/);
   assert.doesNotMatch(html, /<section class="panel hidden" id="editor">/);
 
-  for (const id of ['editor', 'svc-form', 'f-id-input', 'f-name', 'f-sort-order', 'save-btn']) {
+  for (const id of ['editor', 'svc-form', 'f-name', 'f-model', 'f-sort-order', 'save-btn']) {
     const matches = html.match(new RegExp(`(?:^|\\s)id="${id}"`, 'g')) || [];
     assert.equal(matches.length, 1, `服务编辑器 ID 不是唯一值: ${id}`);
   }
+
+  assert.doesNotMatch(html, /id="f-id-input"/);
+  assert.match(html, /<input id="f-model" required/);
+  assert.doesNotMatch(html, /class="field llm">\s*<label>Model/);
 });
 
 test('服务列表按通知排序字段排列，缺失值放在末尾', () => {
   const services = [
-    { id: 'missing', name: 'Missing' },
-    { id: 'later', name: 'Later', sort_order: 20 },
-    { id: 'first', name: 'First', sort_order: 10 },
+    { uid: 'uid-missing', model: 'missing', name: 'Missing' },
+    { uid: 'uid-later', model: 'later', name: 'Later', sort_order: 20 },
+    { uid: 'uid-first', model: 'first', name: 'First', sort_order: 10 },
   ];
   services.sort(compareServiceOrder);
   assert.deepEqual(
-    services.map(service => service.id),
+    services.map(service => service.model),
     ['first', 'later', 'missing'],
   );
+});
+
+test('服务列表使用 uid 定位但不向用户展示', () => {
+  const service = {
+    uid: '01HIDDENUID',
+    model: 'gpt-4o',
+    name: 'GPT 4o',
+    protocol: 'chat',
+    enabled: true,
+  };
+
+  for (const markup of [renderServiceTableRow(service), renderServiceListItem(service)]) {
+    assert.match(markup, /data-uid="01HIDDENUID"/);
+    assert.doesNotMatch(markup, />#01HIDDENUID</);
+    assert.match(markup, /gpt-4o/);
+  }
 });
 
 test('编辑会话拒绝重复保存', () => {
@@ -52,13 +74,13 @@ test('编辑会话拒绝重复保存', () => {
   const version = state.open('service-1');
   const firstSave = state.beginSave();
 
-  assert.deepEqual(firstSave, { version, serviceID: 'service-1' });
+  assert.deepEqual(firstSave, { version, serviceUID: 'service-1' });
   assert.equal(state.saving, true);
   assert.equal(state.beginSave(), null);
 
   state.finishSave(version);
   assert.equal(state.saving, false);
-  assert.deepEqual(state.beginSave(), { version, serviceID: 'service-1' });
+  assert.deepEqual(state.beginSave(), { version, serviceUID: 'service-1' });
 });
 
 test('旧保存完成后不能关闭或锁定新编辑草稿', () => {
@@ -69,14 +91,14 @@ test('旧保存完成后不能关闭或锁定新编辑草稿', () => {
   const currentVersion = state.open('service-2');
 
   assert.equal(state.isCurrent(staleSave.version), false);
-  assert.equal(state.editingID, 'service-2');
+  assert.equal(state.editingUID, 'service-2');
   assert.equal(state.saving, false);
 
   state.finishSave(staleSave.version);
-  assert.equal(state.editingID, 'service-2');
+  assert.equal(state.editingUID, 'service-2');
   assert.deepEqual(state.beginSave(), {
     version: currentVersion,
-    serviceID: 'service-2',
+    serviceUID: 'service-2',
   });
 });
 

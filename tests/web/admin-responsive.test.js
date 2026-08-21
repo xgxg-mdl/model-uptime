@@ -203,7 +203,7 @@ test('所有视口的滚动都收进管理窗口内容区', () => {
 
 test('桌面和移动服务渲染器保持相同操作能力并转义字段', () => {
   const service = {
-    id: 'openai-main',
+    uid: 'openai-main',
     name: 'Primary <Model>',
     protocol: 'chat',
     model: 'gpt-5',
@@ -215,7 +215,8 @@ test('桌面和移动服务渲染器保持相同操作能力并转义字段', ()
   const listItem = renderServiceListItem(service);
   assert.match(listItem, /chat · gpt-5 · OpenAI/);
   assert.match(listItem, /service-item-interval">60s/);
-  assert.match(listItem, /title="Primary &lt;Model&gt; #openai-main"/);
+  assert.match(listItem, /title="Primary &lt;Model&gt;"/);
+  assert.doesNotMatch(listItem, />#openai-main</);
   assert.equal((listItem.match(/data-act=/g) || []).length, 4);
   assert.equal((listItem.match(/class="btn icon-btn/g) || []).length, 4);
   assert.doesNotMatch(listItem, /Primary <Model>/);

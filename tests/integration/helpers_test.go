@@ -30,7 +30,7 @@ func newIntegrationServer(t *testing.T) *httptest.Server {
 		AdminToken: testToken,
 		Page:       model.PageConfig{HistoryLen: 60, RefreshSec: 5},
 		Services: []model.Service{{
-			ID: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
+			UID: "s1", Model: "s1", Name: "svc-one", Protocol: model.ProtocolHTTP,
 			BaseURL: "http://example.com", IntervalSec: 60, Enabled: boolp(true),
 		}},
 	}

@@ -171,9 +171,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/admin/services/{id}:
+  /api/admin/services/{uid}:
     parameters:
-      - $ref: '#/components/parameters/ServiceID'
+      - $ref: '#/components/parameters/ServiceUID'
     put:
       operationId: updateService
       summary: Replace a monitoring service
@@ -208,9 +208,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-  /api/admin/services/{id}/test:
+  /api/admin/services/{uid}/test:
     parameters:
-      - $ref: '#/components/parameters/ServiceID'
+      - $ref: '#/components/parameters/ServiceUID'
     post:
       operationId: testService
       summary: Probe a monitoring service immediately
@@ -227,9 +227,9 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /api/admin/services/{id}/duplicate:
+  /api/admin/services/{uid}/duplicate:
     parameters:
-      - $ref: '#/components/parameters/ServiceID'
+      - $ref: '#/components/parameters/ServiceUID'
     post:
       operationId: duplicateService
       summary: Duplicate a monitoring service
@@ -390,11 +390,11 @@ components:
       scheme: bearer
       description: Administrator password returned to the UI session after successful validation.
   parameters:
-    ServiceID:
-      name: id
+    ServiceUID:
+      name: uid
       in: path
       required: true
-      description: Stable monitoring service identifier.
+      description: Stable internal monitoring service identifier.
       schema:
         type: string
         minLength: 1
@@ -489,10 +489,12 @@ components:
     ServiceInput:
       type: object
       additionalProperties: false
-      required: [name, protocol, base_url]
+      required: [name, protocol, model, base_url]
       properties:
-        id:
+        uid:
           type: string
+          readOnly: true
+          description: Server-generated stable identifier used by administration operations.
         name:
           type: string
         provider:
@@ -502,6 +504,8 @@ components:
           enum: [chat, response, message, http]
         model:
           type: string
+          minLength: 1
+          description: Editable model identifier; unique across configured services.
         base_url:
           type: string
           format: uri
@@ -544,7 +548,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/ServiceInput'
         - type: object
-          required: [id]
+          required: [uid]
     ServiceEnvelope:
       type: object
       additionalProperties: false
@@ -583,9 +587,9 @@ components:
     BulkServicePatchRequest:
       type: object
       additionalProperties: false
-      required: [ids, patch]
+      required: [uids, patch]
       properties:
-        ids:
+        uids:
           type: array
           minItems: 1
           items:
@@ -668,7 +672,7 @@ components:
     TelegramSubscription:
       type: object
       additionalProperties: false
-      required: [id, name, enabled, chat_id, language, service_ids, template]
+      required: [id, name, enabled, chat_id, language, service_uids, template]
       properties:
         id:
           type: string
@@ -681,7 +685,7 @@ components:
         language:
           type: string
           enum: [zh-CN, en-US]
-        service_ids:
+        service_uids:
           type: array
           items:
             type: string
@@ -785,9 +789,9 @@ components:
     StatusService:
       type: object
       additionalProperties: false
-      required: [id, model, interval_sec, warning_sec, uptime_pct, last, history, timeline]
+      required: [name, model, interval_sec, warning_sec, uptime_pct, last, history, timeline]
       properties:
-        id:
+        name:
           type: string
         model:
           type: string
@@ -890,7 +894,7 @@ components:
       type: object
       additionalProperties: false
       required:
-        - id
+        - name
         - model
         - status
         - samples
@@ -899,7 +903,7 @@ components:
         - p95_latency_ms
         - cells
       properties:
-        id:
+        name:
           type: string
         model:
           type: string

@@ -61,7 +61,7 @@ function data(overrides = {}) {
     columns: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
     services: [
       {
-        id: 'service-1',
+        name: 'GPT 5',
         model: 'gpt-5',
         provider: 'OpenAI',
         status: 'warning',
@@ -284,7 +284,7 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   const cells = findAll(output, element => element.classList.contains('heat-cell'));
   assert.equal(cells.length, 24);
   assert.ok(cells[0].classList.contains('warning'));
-  assert.match(output.textContent, /gpt-5/);
+  assert.match(output.textContent, /GPT 5/);
   assert.match(output.textContent, /99\.50%/);
   assert.doesNotMatch(output.textContent, /OpenAI/);
   assert.ok(findAll(output, element => element.classList.contains('heatmap-uptime-value'))[0].classList.contains('ok'));
@@ -295,7 +295,7 @@ test('渲染每个模型的二维网格并提供完整 tooltip', () => {
   assert.equal(current.textContent, '● slow');
   assert.equal(document.getElementById('probe-comment').textContent, '# Monitoring production models');
   const commandModels = document.getElementById('cmd-models');
-  assert.equal(commandModels.textContent, ' gpt-5');
+  assert.equal(commandModels.textContent, ' GPT 5');
   assert.ok(commandModels.children[0].classList.contains('str'));
 
   cells[0].focus();
@@ -487,8 +487,8 @@ test('首次渲染先提交一个模型并逐帧追加其余模型', () => {
     data({
       services: [
         service,
-        { ...service, id: 'service-2', model: 'gpt-5-mini' },
-        { ...service, id: 'service-3', model: 'gpt-5-nano' },
+        { ...service, name: 'GPT 5 Mini', model: 'gpt-5-mini' },
+        { ...service, name: 'GPT 5 Nano', model: 'gpt-5-nano' },
       ],
     }),
   );
@@ -616,13 +616,13 @@ test('结构变化取消尚未提交的旧模型', () => {
   const service = data().services[0];
   renderer.render(
     data({
-      services: [service, { ...service, id: 'stale-service', model: 'stale-model' }],
+      services: [service, { ...service, name: 'Stale', model: 'stale-model' }],
     }),
   );
   renderer.render(
     data({
       range: '1d',
-      services: [{ ...service, id: 'fresh-service', model: 'fresh-model' }],
+      services: [{ ...service, name: 'Fresh', model: 'fresh-model' }],
     }),
   );
 
@@ -632,7 +632,7 @@ test('结构变化取消尚未提交的旧模型', () => {
     element.classList.contains('heatmap-panel'),
   );
   assert.equal(panels.length, 1);
-  assert.equal(panels[0].getAttribute('data-service-id'), 'fresh-service');
+  assert.equal(panels[0].getAttribute('data-service-model'), 'fresh-model');
 });
 
 test('低覆盖率 tooltip 明确显示 insufficient data', () => {

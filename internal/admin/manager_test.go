@@ -43,13 +43,13 @@ func (m *fakeMonitor) Reload(services []model.Service, page model.PageConfig) er
 	return nil
 }
 
-func (m *fakeMonitor) ProbeNow(_ context.Context, id string) (*model.ProbeResult, error) {
+func (m *fakeMonitor) ProbeNow(_ context.Context, uid string) (*model.ProbeResult, error) {
 	for _, service := range m.services {
-		if service.ID == id {
+		if service.UID == uid {
 			return &model.ProbeResult{OK: true}, nil
 		}
 	}
-	return nil, errors.New("服务不存在: " + id)
+	return nil, errors.New("服务不存在: " + uid)
 }
 
 type fakeNotifications struct {
@@ -75,7 +75,7 @@ func initialConfig() *settings.Config {
 		AdminToken: "original-token",
 		Page:       model.PageConfig{HistoryLen: 60, RefreshSec: 5, ShowUptime: true},
 		Services: []model.Service{{
-			ID: "one", Name: "One", Protocol: model.ProtocolHTTP, BaseURL: "https://example.com",
+			UID: "one", Name: "One", Model: "one", Protocol: model.ProtocolHTTP, BaseURL: "https://example.com",
 			APIKey: "secret", Enabled: &enabled,
 		}},
 	}
@@ -101,47 +101,49 @@ func newManager(t *testing.T) (*admin.Manager, *memoryRepository, *fakeMonitor, 
 func TestManagerServiceLifecycle(t *testing.T) {
 	manager, repository, monitor, _ := newManager(t)
 	created, err := manager.CreateService(model.Service{
-		Name: "Second Service", Protocol: model.ProtocolHTTP, BaseURL: "https://example.org", APIKey: "new-secret",
+		Name: "Second Service", Model: "second-model", Protocol: model.ProtocolHTTP,
+		BaseURL: "https://example.org", APIKey: "new-secret",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID != "second-service" || created.SortOrder != 2 || repository.saves != 1 || monitor.reloads != 1 {
+	if created.UID == "" || created.Model != "second-model" || created.SortOrder != 2 || repository.saves != 1 || monitor.reloads != 1 {
 		t.Fatalf("创建结果异常: service=%+v saves=%d reloads=%d", created, repository.saves, monitor.reloads)
 	}
 
 	created.Name = "Second Updated"
+	created.Model = "second-model-v2"
 	created.APIKey = ""
-	updated, err := manager.UpdateService(created.ID, created)
+	updated, err := manager.UpdateService(created.UID, created)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.APIKey != "new-secret" {
-		t.Fatal("空密钥更新应保留原密钥")
+	if updated.APIKey != "new-secret" || updated.UID != created.UID || updated.Model != "second-model-v2" {
+		t.Fatal("更新应保留 uid 和空密钥，并允许修改 model")
 	}
 
-	duplicate, err := manager.DuplicateService(created.ID)
+	duplicate, err := manager.DuplicateService(created.UID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if duplicate.ID != "second-service-copy" || duplicate.Name != "Second Updated (copy)" || duplicate.SortOrder != 3 {
+	if duplicate.UID == created.UID || duplicate.Model != "second-model-v2-copy" || duplicate.Name != "Second Updated (copy)" || duplicate.SortOrder != 3 {
 		t.Fatalf("复制结果异常: %+v", duplicate)
 	}
 
 	telegram := notification.Config{BotToken: "bot-token", Subscriptions: []notification.Subscription{{
-		ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceIDs: []string{created.ID},
+		ID: "ops", Name: "Operations", Enabled: true, ChatID: "1", ServiceUIDs: []string{created.UID},
 	}}}
 	if _, err := manager.UpdateTelegram(telegram); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.DeleteService(created.ID); err != nil {
+	if err := manager.DeleteService(created.UID); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := manager.Snapshot()
-	if _, exists := snapshot.ServiceByID(created.ID); exists {
+	if _, exists := snapshot.ServiceByUID(created.UID); exists {
 		t.Fatal("服务删除后仍存在")
 	}
-	if len(snapshot.Telegram.Subscriptions[0].ServiceIDs) != 0 {
+	if len(snapshot.Telegram.Subscriptions[0].ServiceUIDs) != 0 {
 		t.Fatal("删除服务后订阅引用未清理")
 	}
 }
@@ -150,16 +152,16 @@ func TestManagerPublishesAtomicallyAndRollsBack(t *testing.T) {
 	manager, repository, monitor, notifications := newManager(t)
 	monitor.err = errors.New("database unavailable")
 	_, err := manager.CreateService(model.Service{
-		ID: "two", Name: "Two", Protocol: model.ProtocolHTTP, BaseURL: "https://example.org",
+		Model: "two", Name: "Two", Protocol: model.ProtocolHTTP, BaseURL: "https://example.org",
 	})
 	if err == nil || admin.KindOf(err) != admin.ErrorInternal {
 		t.Fatalf("运行时失败应返回内部错误: %v", err)
 	}
 	snapshot := manager.Snapshot()
-	if _, exists := snapshot.ServiceByID("two"); exists {
+	if _, exists := snapshot.ServiceByModel("two"); exists {
 		t.Fatal("运行时失败后内存配置不应改变")
 	}
-	if _, exists := repository.config.ServiceByID("two"); exists {
+	if _, exists := repository.config.ServiceByModel("two"); exists {
 		t.Fatal("运行时失败后磁盘配置应回滚")
 	}
 	if notifications.updates != 2 {

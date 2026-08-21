@@ -46,7 +46,6 @@ function timelineSlot(startTimestamp, status, overrides = {}) {
 function service(overrides = {}) {
   const last = { ts: 355, started_at: 350, ok: true, latency_ms: 12 };
   return {
-    id: 'service-1',
     name: 'Primary Model',
     provider: 'OpenAI',
     model: 'gpt-5',
@@ -133,10 +132,10 @@ test('状态数据返回前立即显示独立取得的页面配置', async () =>
   poller.stop();
 });
 
-test('监控命令的模型统一使用参数色，不映射服务可用性', () => {
-  const healthy = service({ id: 'healthy', model: 'gpt-5.6' });
+test('监控命令显示名称并统一使用参数色，不映射服务可用性', () => {
+  const healthy = service({ name: 'GPT 5.6', model: 'gpt-5.6' });
   const failing = service({
-    id: 'failing',
+    name: 'GPT 5.4 Mini',
     model: 'gpt-5.4-mini',
     last: { ts: 355, started_at: 350, ok: false, latency_ms: 12 },
   });
@@ -146,7 +145,7 @@ test('监控命令的模型统一使用参数色，不映射服务可用性', ()
   });
   const commandModels = document.getElementById('cmd-models');
 
-  assert.equal(commandModels.textContent, ' gpt-5.6 gpt-5.4-mini');
+  assert.equal(commandModels.textContent, ' GPT 5.6 GPT 5.4 Mini');
   assert.ok(commandModels.children.every(model => model.classList.contains('str')));
   assert.equal(
     commandModels.children.some(model => model.classList.contains('ok') || model.classList.contains('bad')),

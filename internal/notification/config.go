@@ -156,13 +156,14 @@ type Config struct {
 
 // Subscription 描述一组模型共享的 Telegram 接收目标和模板。
 type Subscription struct {
-	ID         string   `yaml:"id" json:"id"`
-	Name       string   `yaml:"name" json:"name"`
-	Enabled    bool     `yaml:"enabled" json:"enabled"`
-	ChatID     string   `yaml:"chat_id" json:"chat_id"`
-	Language   string   `yaml:"language" json:"language"`
-	ServiceIDs []string `yaml:"service_ids" json:"service_ids"`
-	Template   string   `yaml:"template" json:"template"`
+	ID               string   `yaml:"id" json:"id"`
+	Name             string   `yaml:"name" json:"name"`
+	Enabled          bool     `yaml:"enabled" json:"enabled"`
+	ChatID           string   `yaml:"chat_id" json:"chat_id"`
+	Language         string   `yaml:"language" json:"language"`
+	ServiceUIDs      []string `yaml:"service_uids" json:"service_uids"`
+	LegacyServiceIDs []string `yaml:"service_ids,omitempty" json:"-"`
+	Template         string   `yaml:"template" json:"template"`
 }
 
 type compiledSubscription struct {
@@ -185,7 +186,7 @@ func (config runtimeConfig) equivalent(other runtimeConfig) bool {
 		right := other.subscriptions[index].Subscription
 		if left.ID != right.ID || left.Name != right.Name || left.Enabled != right.Enabled ||
 			left.ChatID != right.ChatID || left.Language != right.Language ||
-			left.Template != right.Template || !slices.Equal(left.ServiceIDs, right.ServiceIDs) {
+			left.Template != right.Template || !slices.Equal(left.ServiceUIDs, right.ServiceUIDs) {
 			return false
 		}
 	}
@@ -239,8 +240,8 @@ func normalizeSubscription(subscription *Subscription) {
 	if templateText == "" || legacyBuiltIn || (originalLanguage == "" && templateText == strings.TrimSpace(EnglishTemplate)) {
 		subscription.Template = TemplateForLanguage(subscription.Language)
 	}
-	for j := range subscription.ServiceIDs {
-		subscription.ServiceIDs[j] = strings.TrimSpace(subscription.ServiceIDs[j])
+	for j := range subscription.ServiceUIDs {
+		subscription.ServiceUIDs[j] = strings.TrimSpace(subscription.ServiceUIDs[j])
 	}
 }
 
@@ -274,7 +275,7 @@ func compileConfig(config Config) (runtimeConfig, error) {
 	seen := make(map[string]struct{}, len(config.Subscriptions))
 	for _, subscription := range config.Subscriptions {
 		// 配置编译结果必须拥有自己的切片，调用方后续修改不能改变运行时筛选。
-		subscription.ServiceIDs = append([]string(nil), subscription.ServiceIDs...)
+		subscription.ServiceUIDs = append([]string(nil), subscription.ServiceUIDs...)
 		normalizeSubscription(&subscription)
 		if subscription.ID == "" {
 			return runtimeConfig{}, errors.New("Telegram 订阅 id 不能为空")
@@ -306,19 +307,19 @@ func compileConfig(config Config) (runtimeConfig, error) {
 }
 
 func subscriptionFingerprint(botToken string, subscription Subscription) string {
-	serviceIDs := append([]string(nil), subscription.ServiceIDs...)
-	sort.Strings(serviceIDs)
-	serviceIDs = slices.Compact(serviceIDs)
+	serviceUIDs := append([]string(nil), subscription.ServiceUIDs...)
+	sort.Strings(serviceUIDs)
+	serviceUIDs = slices.Compact(serviceUIDs)
 	identity := struct {
-		BotToken   string
-		ID         string
-		ChatID     string
-		Language   string
-		ServiceIDs []string
-		Template   string
+		BotToken    string
+		ID          string
+		ChatID      string
+		Language    string
+		ServiceUIDs []string
+		Template    string
 	}{
 		BotToken: botToken, ID: subscription.ID, ChatID: subscription.ChatID,
-		Language: subscription.Language, ServiceIDs: serviceIDs, Template: subscription.Template,
+		Language: subscription.Language, ServiceUIDs: serviceUIDs, Template: subscription.Template,
 	}
 	encoded, _ := json.Marshal(identity) // 字段类型固定，编码不会失败。
 	return fmt.Sprintf("%x", sha256.Sum256(encoded))

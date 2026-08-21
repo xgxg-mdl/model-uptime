@@ -152,14 +152,14 @@
           <div class="subwindow-body">
             <form id="svc-form">
             <div class="field">
-              <label>ID（留空自动生成）</label>
-              <input id="f-id-input" placeholder="auto" autocomplete="off" />
-              <span class="hint">唯一标识，创建后不可修改</span>
-            </div>
-            <div class="field">
               <label>Name *</label>
               <input id="f-name" data-window-initial-focus required autocomplete="off" />
               <span class="hint">状态页显示的模型名</span>
+            </div>
+            <div class="field">
+              <label>Model *</label>
+              <input id="f-model" required placeholder="gpt-4o" autocomplete="off" />
+              <span class="hint">模型唯一标识，可修改且不可重复</span>
             </div>
             <div class="field">
               <label>Protocol *</label>
@@ -179,10 +179,6 @@
               <label>Notification order</label>
               <input id="f-sort-order" type="number" min="1" step="1" placeholder="auto" />
               <span class="hint">Lower numbers appear first; new services default to the end.</span>
-            </div>
-            <div class="field llm">
-              <label>Model</label>
-              <input id="f-model" placeholder="gpt-4o" autocomplete="off" />
             </div>
             <div class="field full">
               <label>Base URL *</label>
@@ -370,7 +366,7 @@
               <div class="template-help">
                 Summary: <code>{{.ChangedAt}}</code> <code>{{.ChangedTime}}</code> <code>{{.DownCount}}</code> <code>{{.RecoveryCount}}</code> <code>{{.TotalChanges}}</code><br />
                 Lists: <code>{{range .DownModels}}…{{end}}</code> <code>{{range .RecoveredModels}}…{{end}}</code> <code>{{range .Changes}}…{{end}}</code><br />
-                Model fields inside a list: <code>{{.ServiceID}}</code> <code>{{.SortOrder}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code> <code>{{.OutageDurationSec}}</code> <code>{{.TodayUpSec}}</code> <code>{{.TodayDownSec}}</code> <code>{{.TodayDownCount}}</code> <code>{{.TodayUptimePct}}</code><br />
+                Model fields inside a list: <code>{{.SortOrder}}</code> <code>{{.Model}}</code> <code>{{.Provider}}</code> <code>{{.Protocol}}</code> <code>{{.Status}}</code> <code>{{.PreviousStatus}}</code> <code>{{.LatencyMS}}</code> <code>{{.Error}}</code> <code>{{.UptimePct}}</code> <code>{{.Samples}}</code> <code>{{.LastTS}}</code> <code>{{.OutageDurationSec}}</code> <code>{{.TodayUpSec}}</code> <code>{{.TodayDownSec}}</code> <code>{{.TodayDownCount}}</code> <code>{{.TodayUptimePct}}</code><br />
                 Helpers: <code>{{formatBeijing .LastTS}}</code> <code>{{beijingDate .LastTS}}</code> <code>{{durationCN .TodayUpSec}}</code> <code>{{durationEN .TodayUpSec}}</code>
               </div>
             </div>

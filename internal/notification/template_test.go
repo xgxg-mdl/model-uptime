@@ -13,8 +13,8 @@ func TestRenderTemplateSeparatesStatusCardsAndEscapes(t *testing.T) {
 	t.Parallel()
 	confirmedAt := time.Date(2026, 8, 15, 10, 50, 2, 0, time.FixedZone("UTC+8", 8*60*60)).Unix()
 	context := NewTemplateContext(time.Date(2026, 8, 15, 2, 50, 2, 0, time.UTC), []model.StatusChange{
-		{ServiceID: "a", Model: "alpha <fast>", Provider: "vendor & co", Error: "timeout <5s", Status: "down", PreviousStatus: "up", LastTS: confirmedAt, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
-		{ServiceID: "b", Model: "beta", OK: true, LatencyMS: 42, Status: "up", PreviousStatus: "down", LastTS: confirmedAt, OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
+		{ServiceUID: "a", Model: "alpha <fast>", Provider: "vendor & co", Error: "timeout <5s", Status: "down", PreviousStatus: "up", LastTS: confirmedAt, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
+		{ServiceUID: "b", Model: "beta", OK: true, LatencyMS: 42, Status: "up", PreviousStatus: "down", LastTS: confirmedAt, OutageDurationSec: 474, TodayUpSec: 34740, TodayDownSec: 4200, TodayDownCount: 4, TodayUptimePct: 89.20},
 	})
 	if context.ChangedAt != "2026-08-15 10:50:02" {
 		t.Fatalf("ChangedAt 未使用北京时间: %q", context.ChangedAt)
@@ -65,8 +65,8 @@ func TestRenderTemplateRejectsLongMessage(t *testing.T) {
 func TestNewTemplateContextDropsNetUnchangedModel(t *testing.T) {
 	t.Parallel()
 	context := NewTemplateContext(time.Now(), []model.StatusChange{
-		{ServiceID: "a", Model: "alpha", Status: "down", PreviousStatus: "up"},
-		{ServiceID: "a", Model: "alpha", Status: "up", PreviousStatus: "down"},
+		{ServiceUID: "a", Model: "alpha", Status: "down", PreviousStatus: "up"},
+		{ServiceUID: "a", Model: "alpha", Status: "up", PreviousStatus: "down"},
 	})
 	if context.TotalChanges != 0 {
 		t.Fatalf("窗口开始与结束状态相同时不应通知: %+v", context)

@@ -20,8 +20,8 @@ func TestBuildDeliveriesAggregatesPerSubscription(t *testing.T) {
 	config, err := compileConfig(Config{
 		BotToken: "token",
 		Subscriptions: []Subscription{
-			{ID: "ops", Enabled: true, ChatID: "-100", ServiceIDs: []string{"a", "b"}, Template: `{{.TotalChanges}}|{{range .DownModels}}D:{{.Model}};{{end}}{{range .RecoveredModels}}R:{{.Model}};{{end}}`},
-			{ID: "other", Enabled: true, ChatID: "200", ServiceIDs: []string{"c"}, Template: `{{.TotalChanges}}`},
+			{ID: "ops", Enabled: true, ChatID: "-100", ServiceUIDs: []string{"a", "b"}, Template: `{{.TotalChanges}}|{{range .DownModels}}D:{{.Model}};{{end}}{{range .RecoveredModels}}R:{{.Model}};{{end}}`},
+			{ID: "other", Enabled: true, ChatID: "200", ServiceUIDs: []string{"c"}, Template: `{{.TotalChanges}}`},
 		},
 	})
 	if err != nil {
@@ -30,10 +30,10 @@ func TestBuildDeliveriesAggregatesPerSubscription(t *testing.T) {
 	deliveries, err := buildDeliveries(config, deliveryBatch{
 		StatusPageURL: "https://status.example.com/?model=a&view=full",
 		Changes: []model.StatusChange{
-			{ServiceID: "a", Model: "alpha-old", Status: "down", PreviousStatus: "up"},
-			{ServiceID: "a", Model: "alpha-middle", OK: true, Status: "up", PreviousStatus: "down"},
-			{ServiceID: "a", Model: "alpha", Status: "down", PreviousStatus: "up"},
-			{ServiceID: "b", Model: "beta", OK: true, Status: "up", PreviousStatus: "down"},
+			{ServiceUID: "a", Model: "alpha-old", Status: "down", PreviousStatus: "up"},
+			{ServiceUID: "a", Model: "alpha-middle", OK: true, Status: "up", PreviousStatus: "down"},
+			{ServiceUID: "a", Model: "alpha", Status: "down", PreviousStatus: "up"},
+			{ServiceUID: "b", Model: "beta", OK: true, Status: "up", PreviousStatus: "down"},
 		}}, func(subscriptionID string, _ time.Time, shardIndex int, _ []model.StatusChange) string {
 		return fmt.Sprintf("%s-%d", subscriptionID, shardIndex)
 	})
@@ -62,12 +62,12 @@ func TestBuildDeliveriesAggregatesPerSubscription(t *testing.T) {
 
 func TestSortChangesForDeliveryUsesConfiguredOrder(t *testing.T) {
 	changes := []model.StatusChange{
-		{ServiceID: "a", SortOrder: 20, Model: "alpha"},
-		{ServiceID: "z", SortOrder: 10, Model: "zeta"},
-		{ServiceID: "b", SortOrder: 20, Model: "beta"},
+		{ServiceUID: "a", SortOrder: 20, Model: "alpha"},
+		{ServiceUID: "z", SortOrder: 10, Model: "zeta"},
+		{ServiceUID: "b", SortOrder: 20, Model: "beta"},
 	}
 	sortChangesForDelivery(changes)
-	got := []string{changes[0].ServiceID, changes[1].ServiceID, changes[2].ServiceID}
+	got := []string{changes[0].ServiceUID, changes[1].ServiceUID, changes[2].ServiceUID}
 	want := []string{"z", "a", "b"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("状态变化排序 = %v，期望 %v", got, want)
@@ -128,7 +128,7 @@ func TestPendingDeliveryUsesOneCurrentRoutingSnapshot(t *testing.T) {
 func TestResolveDeliveryReappliesCurrentServiceFilter(t *testing.T) {
 	t.Parallel()
 	config := validConfig("token", "new-chat")
-	config.Subscriptions[0].ServiceIDs = []string{"b"}
+	config.Subscriptions[0].ServiceUIDs = []string{"b"}
 	config.Subscriptions[0].Template = `{{range .Changes}}{{.Model}} {{end}}`
 	notifier, err := New(Options{Repository: NewMemoryOutbox(), Logger: discardLogger()}, config)
 	if err != nil {
@@ -139,8 +139,8 @@ func TestResolveDeliveryReappliesCurrentServiceFilter(t *testing.T) {
 	delivery := &Delivery{SubscriptionID: "ops", Text: "stale", RenderPayload: &RenderPayload{
 		ChangedAt: time.Now(),
 		Changes: []model.StatusChange{
-			{ServiceID: "a", Model: "alpha", PreviousStatus: "up", Status: "down"},
-			{ServiceID: "b", Model: "beta", PreviousStatus: "up", Status: "down"},
+			{ServiceUID: "a", Model: "alpha", PreviousStatus: "up", Status: "down"},
+			{ServiceUID: "b", Model: "beta", PreviousStatus: "up", Status: "down"},
 		},
 	}}
 	job, active, err := notifier.resolveDelivery(delivery)
@@ -201,7 +201,7 @@ func TestUnrelatedSubscriptionUpdateDoesNotResetPermanentFailure(t *testing.T) {
 	t.Parallel()
 	config := validConfig("token", "ops-chat")
 	config.Subscriptions = append(config.Subscriptions, Subscription{
-		ID: "other", Enabled: true, ChatID: "other-chat", ServiceIDs: []string{"b"}, Template: "other",
+		ID: "other", Enabled: true, ChatID: "other-chat", ServiceUIDs: []string{"b"}, Template: "other",
 	})
 	compiled, err := compileConfig(config)
 	if err != nil {
@@ -344,7 +344,7 @@ func TestPermanentTelegramFailureCanRecoverAfterConfigUpdate(t *testing.T) {
 		AvailableAt: time.Now(), RenderPayload: &RenderPayload{
 			ChangedAt: changedAt,
 			Changes: []model.StatusChange{{
-				ServiceID: "a", Model: "alpha", Status: "down", PreviousStatus: "up",
+				ServiceUID: "a", Model: "alpha", Status: "down", PreviousStatus: "up",
 			}},
 		},
 	}}); err != nil {

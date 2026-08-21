@@ -32,8 +32,14 @@ func TestStatusEndpoint(t *testing.T) {
 		t.Fatalf("services = %v", out["services"])
 	}
 	svc := svcs[0].(map[string]any)
-	if svc["model"] != "svc-one" {
+	if svc["model"] != "s1" {
 		t.Errorf("model = %v", svc["model"])
+	}
+	if svc["name"] != "svc-one" {
+		t.Errorf("name = %v", svc["name"])
+	}
+	if _, exists := svc["id"]; exists {
+		t.Errorf("公开状态不应暴露内部 uid/id: %v", svc)
 	}
 	if svc["uptime_pct"] == nil {
 		t.Error("缺少 uptime_pct")

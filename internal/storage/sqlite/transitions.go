@@ -29,13 +29,13 @@ func (s *Store) RecordProbeResult(
 	var payload []byte
 	if transition != nil {
 		normalized := *transition
-		if normalized.Change.ServiceID == "" {
-			normalized.Change.ServiceID = serviceID
+		if normalized.Change.ServiceUID == "" {
+			normalized.Change.ServiceUID = serviceID
 		}
-		if normalized.Change.ServiceID != serviceID {
+		if normalized.Change.ServiceUID != serviceID {
 			return fmt.Errorf(
 				"状态变化服务 ID %q 与探测结果服务 ID %q 不一致",
-				normalized.Change.ServiceID,
+				normalized.Change.ServiceUID,
 				serviceID,
 			)
 		}
@@ -183,14 +183,14 @@ func (s *Store) ClaimTransitions(
 		if err := json.Unmarshal(item.payload, &item.transition); err != nil {
 			return nil, "", fmt.Errorf("解析状态变化事件 %d 失败: %w", item.id, err)
 		}
-		if item.transition.Change.ServiceID == "" {
-			item.transition.Change.ServiceID = item.serviceID
+		if item.transition.Change.ServiceUID == "" {
+			item.transition.Change.ServiceUID = item.serviceID
 		}
-		if item.transition.Change.ServiceID != item.serviceID {
+		if item.transition.Change.ServiceUID != item.serviceID {
 			return nil, "", fmt.Errorf(
 				"状态变化事件 %d 的服务 ID %q 与索引服务 ID %q 不一致",
 				item.id,
-				item.transition.Change.ServiceID,
+				item.transition.Change.ServiceUID,
 				item.serviceID,
 			)
 		}

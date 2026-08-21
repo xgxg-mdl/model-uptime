@@ -17,7 +17,7 @@ export function normalizeTelegramSubscription(subscription, templates = {}) {
     enabled: subscription.enabled !== false,
     chat_id: String(subscription.chat_id || ''),
     language,
-    service_ids: Array.isArray(subscription.service_ids) ? subscription.service_ids.slice() : [],
+    service_uids: Array.isArray(subscription.service_uids) ? subscription.service_uids.slice() : [],
     template: subscription.template || templates[language],
   };
 }
@@ -70,31 +70,31 @@ export function createTelegramController({
     else element(id).classList.add('hidden');
   };
 
-  function selectedServiceIDs() {
+  function selectedServiceUIDs() {
     return Array.from(documentRef.querySelectorAll('#tg-model-picker input:checked')).map(input => input.value);
   }
 
   function selectionForServiceRefresh() {
     const choices = documentRef.querySelectorAll('#tg-model-picker input');
-    if (choices.length || editingIndex === null) return selectedServiceIDs();
-    return config.subscriptions[editingIndex]?.service_ids || [];
+    if (choices.length || editingIndex === null) return selectedServiceUIDs();
+    return config.subscriptions[editingIndex]?.service_uids || [];
   }
 
-  function renderModelPicker(selectedIDs = []) {
+  function renderModelPicker(selectedUIDs = []) {
     const picker = element('tg-model-picker');
-    const selected = new Set(selectedIDs);
+    const selected = new Set(selectedUIDs);
     if (!services.length) {
       picker.innerHTML = '<div class="empty" style="grid-column:1/-1;">no models available</div>';
       return;
     }
     picker.innerHTML = services
       .map(service => {
-        const displayModel = service.model || service.name || service.id;
+        const displayModel = service.model || service.name;
         const detail = service.name && service.name !== displayModel ? ` · ${service.name}` : '';
         const disabled = service.enabled ? '' : ' · disabled';
         return `<label class="check-row ${service.enabled ? '' : 'disabled-label'}">
-        <input type="checkbox" value="${escapeHTML(service.id)}" ${selected.has(service.id) ? 'checked' : ''} />
-        <span class="model-label"><b>${escapeHTML(displayModel)}</b>${escapeHTML(detail)} <span class="tag">#${escapeHTML(service.id)}</span>${disabled}</span>
+        <input type="checkbox" value="${escapeHTML(service.uid)}" ${selected.has(service.uid) ? 'checked' : ''} />
+        <span class="model-label"><b>${escapeHTML(displayModel)}</b>${escapeHTML(detail)}${disabled}</span>
       </label>`;
       })
       .join('');
@@ -114,7 +114,7 @@ export function createTelegramController({
     }
     list.innerHTML = config.subscriptions
       .map((subscription, index) => {
-        const serviceCount = subscription.service_ids ? subscription.service_ids.length : 0;
+        const serviceCount = subscription.service_uids ? subscription.service_uids.length : 0;
         return `<div class="subscription-row">
         <div class="subscription-meta">
           <b><span class="dot ${subscription.enabled ? 'on' : 'off'}"></span>${escapeHTML(subscription.name || subscription.id)}</b>
@@ -183,7 +183,7 @@ export function createTelegramController({
     element('tg-enabled').checked = subscription.enabled;
     element('tg-template').value = subscription.template || templates[subscription.language];
     element('tg-test-result').className = 'test-result feedback-in hidden';
-    renderModelPicker(subscription.service_ids);
+    renderModelPicker(subscription.service_uids);
     showWindow('tg-editor');
   }
 
@@ -200,7 +200,7 @@ export function createTelegramController({
         enabled: element('tg-enabled').checked,
         chat_id: element('tg-chat-id').value.trim(),
         language: element('tg-language').value,
-        service_ids: selectedServiceIDs(),
+        service_uids: selectedServiceUIDs(),
         template: element('tg-template').value.trim(),
       },
       templates,
@@ -208,7 +208,7 @@ export function createTelegramController({
     if (!subscription.id || !subscription.name || !subscription.chat_id || !subscription.template) {
       throw new Error('ID, name, chat ID, and template are required');
     }
-    if (!subscription.service_ids.length) throw new Error('Select at least one model');
+    if (!subscription.service_uids.length) throw new Error('Select at least one model');
     const duplicateIndex = config.subscriptions.findIndex(item => item.id === subscription.id);
     if (duplicateIndex !== -1 && duplicateIndex !== editingIndex) {
       throw new Error('Subscription ID must be unique');
@@ -325,7 +325,7 @@ export function createTelegramController({
         bot_token: config.bot_token,
         subscriptions: config.subscriptions.map(subscription => ({
           ...subscription,
-          service_ids: subscription.service_ids.slice(),
+          service_uids: subscription.service_uids.slice(),
         })),
       };
     },

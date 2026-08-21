@@ -27,16 +27,16 @@ export const SERVICE_ACTIONS = [
   },
 ];
 
-export function serviceActionButton(action, id) {
-  return `<button class="btn icon-btn${action.destructive ? ' bad' : ''}" type="button" data-act="${action.id}" data-id="${id}" title="${action.label}" aria-label="${action.label}">
+export function serviceActionButton(action, uid) {
+  return `<button class="btn icon-btn${action.destructive ? ' bad' : ''}" type="button" data-act="${action.id}" data-uid="${uid}" title="${action.label}" aria-label="${action.label}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${action.icon}</svg>
   </button>`;
 }
 
 export function serviceActionsMarkup(service) {
-  const id = escapeHTML(service.id);
-  const buttons = SERVICE_ACTIONS.map(action => serviceActionButton(action, id)).join('');
-  return `<div class="actions">${buttons}</div><div class="service-test-result feedback-in hidden" data-service-test-status="${id}" role="status" aria-live="polite" aria-atomic="true"></div>`;
+  const uid = escapeHTML(service.uid);
+  const buttons = SERVICE_ACTIONS.map(action => serviceActionButton(action, uid)).join('');
+  return `<div class="actions">${buttons}</div><div class="service-test-result feedback-in hidden" data-service-test-status="${uid}" role="status" aria-live="polite" aria-atomic="true"></div>`;
 }
 
 export function compareServiceOrder(left, right) {
@@ -44,14 +44,14 @@ export function compareServiceOrder(left, right) {
   if (orderDifference) return orderDifference;
   return (
     String(left.name || '').localeCompare(String(right.name || '')) ||
-    String(left.id || '').localeCompare(String(right.id || ''))
+    String(left.model || '').localeCompare(String(right.model || ''))
   );
 }
 
 export function renderServiceTableRow(service) {
   return `<tr data-service-row>
-    <td><input type="checkbox" class="row-check" data-id="${escapeHTML(service.id)}" aria-label="select ${escapeHTML(service.name)}" /></td>
-    <td class="service-primary"><b>${escapeHTML(service.name)}</b> <span class="tag">#${escapeHTML(service.id)}</span></td>
+    <td><input type="checkbox" class="row-check" data-uid="${escapeHTML(service.uid)}" aria-label="select ${escapeHTML(service.name)}" /></td>
+    <td class="service-primary"><b>${escapeHTML(service.name)}</b></td>
     <td>${escapeHTML(service.protocol)}</td>
     <td>${escapeHTML(service.model || '—')}</td>
     <td>${escapeHTML(service.provider || '—')}</td>
@@ -68,9 +68,9 @@ export function renderServiceListItem(service) {
     .join(' · ');
   return `<li class="service-item" data-service-row>
     <label class="service-item-select">
-      <input type="checkbox" class="row-check" data-id="${escapeHTML(service.id)}" aria-label="select ${escapeHTML(service.name)}" />
+      <input type="checkbox" class="row-check" data-uid="${escapeHTML(service.uid)}" aria-label="select ${escapeHTML(service.name)}" />
     </label>
-    <div class="service-item-title" title="${escapeHTML(service.name)} #${escapeHTML(service.id)}"><b>${escapeHTML(service.name)}</b> <span class="service-item-id">#${escapeHTML(service.id)}</span></div>
+    <div class="service-item-title" title="${escapeHTML(service.name)}"><b>${escapeHTML(service.name)}</b></div>
     <div class="service-item-status"><span class="dot ${service.enabled ? 'on' : 'off'}"></span>${service.enabled ? 'on' : 'off'}</div>
     <div class="service-item-meta" title="${escapeHTML(metadata)}">${escapeHTML(metadata)}</div>
     <div class="service-item-interval">${service.interval_sec || 60}s</div>
@@ -81,23 +81,23 @@ export function renderServiceListItem(service) {
 /** Keeps late saves from mutating a subsequently opened editor session. */
 export function createEditorSessionState() {
   let version = 0;
-  let editingID = null;
+  let editingUID = null;
   let savingVersion = null;
   return {
-    open(serviceID) {
+    open(serviceUID) {
       version++;
-      editingID = serviceID;
+      editingUID = serviceUID;
       return version;
     },
     close() {
       version++;
-      editingID = null;
+      editingUID = null;
       return version;
     },
     beginSave() {
       if (savingVersion === version) return null;
       savingVersion = version;
-      return { version, serviceID: editingID };
+      return { version, serviceUID: editingUID };
     },
     finishSave(sessionVersion) {
       if (savingVersion === sessionVersion) savingVersion = null;
@@ -108,8 +108,8 @@ export function createEditorSessionState() {
     get version() {
       return version;
     },
-    get editingID() {
-      return editingID;
+    get editingUID() {
+      return editingUID;
     },
     get saving() {
       return savingVersion === version;
@@ -117,7 +117,7 @@ export function createEditorSessionState() {
   };
 }
 
-export async function showServiceTestResult({ api, id, result, button }) {
+export async function showServiceTestResult({ api, uid, result, button }) {
   const baseClass = result.className.includes('service-test-result')
     ? 'service-test-result feedback-in'
     : 'test-result feedback-in';
@@ -126,7 +126,7 @@ export async function showServiceTestResult({ api, id, result, button }) {
   result.textContent = 'probing…';
   button.disabled = true;
   try {
-    const response = await api(`/api/admin/services/${encodeURIComponent(id)}/test`, { method: 'POST' });
+    const response = await api(`/api/admin/services/${encodeURIComponent(uid)}/test`, { method: 'POST' });
     result.className = `${baseClass} ${response.ok ? 'ok' : 'bad'}`;
     result.innerHTML = `${response.ok ? '✓ OK' : '✗ FAIL'} · <span class="mute">${response.latency_ms}ms</span>${response.error ? ` · ${escapeHTML(response.error)}` : ''}`;
     return response;
@@ -162,15 +162,15 @@ export function createServicesController({
     else element(id).classList.add('hidden');
   };
 
-  function selectedIDs() {
+  function selectedUIDs() {
     return Array.from(
-      new Set(Array.from(documentRef.querySelectorAll('.row-check:checked')).map(checkbox => checkbox.dataset.id)),
+      new Set(Array.from(documentRef.querySelectorAll('.row-check:checked')).map(checkbox => checkbox.dataset.uid)),
     );
   }
 
   function updateBulkBar() {
-    const ids = selectedIDs();
-    const count = ids.length;
+    const uids = selectedUIDs();
+    const count = uids.length;
     element('bulk-count').textContent = `${count} selected`;
     ['bulk-enable', 'bulk-disable', 'bulk-settings'].forEach(id => {
       element(id).disabled = count === 0;
@@ -184,24 +184,24 @@ export function createServicesController({
 
   function mirrorSelection(checkbox) {
     documentRef.querySelectorAll('.row-check').forEach(peer => {
-      if (peer.dataset.id === checkbox.dataset.id) peer.checked = checkbox.checked;
+      if (peer.dataset.uid === checkbox.dataset.uid) peer.checked = checkbox.checked;
     });
     updateBulkBar();
   }
 
   function dispatchServiceAction(actionID, service, button) {
     if (actionID === 'edit') openEditor(service);
-    else if (actionID === 'copy') duplicateService(service.id);
+    else if (actionID === 'copy') duplicateService(service.uid);
     else if (actionID === 'test') {
       const result = button.closest('[data-service-row]').querySelector('[data-service-test-status]');
-      void showServiceTestResult({ api, id: service.id, result, button });
-    } else if (actionID === 'del') deleteService(service.id);
+      void showServiceTestResult({ api, uid: service.uid, result, button });
+    } else if (actionID === 'del') deleteService(service.uid);
   }
 
   function bindServiceControls(root, renderedServices) {
     root.querySelectorAll('button[data-act]').forEach(button => {
       button.addEventListener('click', () => {
-        const service = renderedServices.find(item => item.id === button.dataset.id);
+        const service = renderedServices.find(item => item.uid === button.dataset.uid);
         if (service) dispatchServiceAction(button.dataset.act, service, button);
       });
     });
@@ -216,7 +216,7 @@ export function createServicesController({
     try {
       const data = await api('/api/admin/services');
       services = (data.services || []).slice().sort(compareServiceOrder);
-      if (editorState.editingID && !services.some(service => service.id === editorState.editingID)) closeEditor();
+      if (editorState.editingUID && !services.some(service => service.uid === editorState.editingUID)) closeEditor();
       onServicesChanged(services);
       if (!services.length) {
         table.innerHTML = '<tr><td colspan="9" class="empty">no services yet — add one below</td></tr>';
@@ -241,20 +241,20 @@ export function createServicesController({
     }
   }
 
-  async function bulkUpdate(ids, patch) {
+  async function bulkUpdate(uids, patch) {
     return api('/api/admin/services', {
       method: 'PATCH',
-      body: JSON.stringify({ ids, patch }),
+      body: JSON.stringify({ uids, patch }),
     });
   }
 
   async function bulkSetEnabled(enabled) {
-    const ids = selectedIDs();
-    if (!ids.length) return;
+    const uids = selectedUIDs();
+    if (!uids.length) return;
     try {
-      await bulkUpdate(ids, { enabled });
+      await bulkUpdate(uids, { enabled });
       toast(
-        `${ids.length} ${ids.length === 1 ? 'service' : 'services'} ${enabled ? 'enabled' : 'disabled'}`,
+        `${uids.length} ${uids.length === 1 ? 'service' : 'services'} ${enabled ? 'enabled' : 'disabled'}`,
         'success',
       );
       await load();
@@ -265,8 +265,8 @@ export function createServicesController({
 
   async function applyBulkSettings(event) {
     event.preventDefault();
-    const ids = selectedIDs();
-    if (!ids.length) {
+    const uids = selectedUIDs();
+    if (!uids.length) {
       toast('Select at least one service', 'warning');
       return;
     }
@@ -285,8 +285,8 @@ export function createServicesController({
       return;
     }
     try {
-      await bulkUpdate(ids, patch);
-      toast(`Updated ${ids.length} ${ids.length === 1 ? 'service' : 'services'}`, 'success');
+      await bulkUpdate(uids, patch);
+      toast(`Updated ${uids.length} ${uids.length === 1 ? 'service' : 'services'}`, 'success');
       closeBulkEditor();
       await load();
     } catch (error) {
@@ -294,13 +294,14 @@ export function createServicesController({
     }
   }
 
-  async function deleteService(id) {
-    if (!confirmAction(`删除服务 ${id}？此操作不可恢复。`)) return;
+  async function deleteService(uid) {
+    const service = services.find(item => item.uid === uid);
+    if (!confirmAction(`删除服务 ${service?.model || service?.name || ''}？此操作不可恢复。`)) return;
     try {
-      await api(`/api/admin/services/${encodeURIComponent(id)}`, {
+      await api(`/api/admin/services/${encodeURIComponent(uid)}`, {
         method: 'DELETE',
       });
-      if (editorState.editingID === id) closeEditor();
+      if (editorState.editingUID === uid) closeEditor();
       toast('Service deleted', 'success');
       await Promise.all([load(), onServiceDeleted()]);
     } catch (error) {
@@ -308,9 +309,9 @@ export function createServicesController({
     }
   }
 
-  async function duplicateService(id) {
+  async function duplicateService(uid) {
     try {
-      await api(`/api/admin/services/${encodeURIComponent(id)}/duplicate`, {
+      await api(`/api/admin/services/${encodeURIComponent(uid)}/duplicate`, {
         method: 'POST',
       });
       toast('Service duplicated', 'success');
@@ -325,8 +326,8 @@ export function createServicesController({
     documentRef.querySelectorAll('.http').forEach(field => field.classList.toggle('hidden', protocol !== 'http'));
   }
 
-  function beginEditor(serviceID) {
-    editorState.open(serviceID);
+  function beginEditor(serviceUID) {
+    editorState.open(serviceUID);
     element('save-btn').disabled = false;
   }
 
@@ -338,10 +339,8 @@ export function createServicesController({
   }
 
   function openEditor(service) {
-    beginEditor(service.id);
-    element('editor-title').textContent = `edit service · ${service.id}`;
-    element('f-id-input').value = service.id;
-    element('f-id-input').disabled = true;
+    beginEditor(service.uid);
+    element('editor-title').textContent = `edit service · ${service.model}`;
     element('f-name').value = service.name || '';
     element('f-provider').value = service.provider || '';
     element('f-sort-order').value = service.sort_order || '';
@@ -367,8 +366,6 @@ export function createServicesController({
   function openNew() {
     beginEditor(null);
     element('editor-title').textContent = 'new service';
-    element('f-id-input').value = '';
-    element('f-id-input').disabled = false;
     ['f-name', 'f-provider', 'f-model', 'f-base', 'f-key', 'f-path', 'f-headers', 'f-body'].forEach(id => {
       element(id).value = '';
     });
@@ -398,11 +395,10 @@ export function createServicesController({
     }
     const protocol = element('f-protocol').value;
     return {
-      id: element('f-id-input').value.trim(),
       name: element('f-name').value.trim(),
       provider: element('f-provider').value.trim(),
       protocol,
-      model: protocol === 'http' ? '' : element('f-model').value.trim(),
+      model: element('f-model').value.trim(),
       base_url: element('f-base').value.trim(),
       api_key: element('f-key').value,
       path: protocol === 'http' ? '' : element('f-path').value.trim(),
@@ -433,8 +429,8 @@ export function createServicesController({
     const saveButton = element('save-btn');
     saveButton.disabled = true;
     try {
-      if (session.serviceID) {
-        await api(`/api/admin/services/${encodeURIComponent(session.serviceID)}`, {
+      if (session.serviceUID) {
+        await api(`/api/admin/services/${encodeURIComponent(session.serviceUID)}`, {
           method: 'PUT',
           body: JSON.stringify(service),
         });
@@ -473,7 +469,7 @@ export function createServicesController({
       element(id).value = '';
     });
     element('b-stream').value = '';
-    element('bulk-editor-count').textContent = selectedIDs().length;
+    element('bulk-editor-count').textContent = selectedUIDs().length;
     showWindow('bulk-editor');
   });
   function closeBulkEditor() {
@@ -487,14 +483,14 @@ export function createServicesController({
   element('new-btn').addEventListener('click', openNew);
   element('cancel-btn').addEventListener('click', closeEditor);
   element('test-btn').addEventListener('click', () => {
-    const id = editorState.editingID;
-    if (!id) {
+    const uid = editorState.editingUID;
+    if (!uid) {
       toast('Save the service before testing', 'warning');
       return;
     }
     void showServiceTestResult({
       api,
-      id,
+      uid,
       result: element('test-result'),
       button: element('test-btn'),
     });
@@ -510,7 +506,7 @@ export function createServicesController({
     closeEditor,
     closeBulkEditor,
     saveService,
-    selectedIDs,
+    selectedUIDs,
     updateBulkBar,
     get services() {
       return services.slice();

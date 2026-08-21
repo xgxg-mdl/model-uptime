@@ -9,7 +9,7 @@ import (
 	"github.com/xgxg-mdl/model-uptime/internal/timeline"
 )
 
-// Reload 保留同 ID 服务的观测历史；启用状态切换被视为暂停或恢复，而非新生命周期，
+// Reload 保留同 UID 服务的观测历史；启用状态切换被视为暂停或恢复，而非新生命周期，
 // 因此 last/history 与持久化记录始终保留。仅当服务从配置中移除时才终止观测并删除其历史。
 func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) error {
 	s.reloadMu.Lock()
@@ -46,23 +46,23 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 				intervalSec = 60
 			}
 			window := timeline.CompletedWindow(now, intervalSec, page.HistoryLen)
-			history, err := s.store.LoadResultsStartedBetween(ctx, service.ID, window.Start, now)
+			history, err := s.store.LoadResultsStartedBetween(ctx, service.UID, window.Start, now)
 			if err != nil {
-				return fmt.Errorf("恢复服务 %q 状态页时间窗失败: %w", service.ID, err)
+				return fmt.Errorf("恢复服务 %q 状态页时间窗失败: %w", service.Model, err)
 			}
-			histories[service.ID] = history
-			observedSince, err := s.store.LoadObservationStart(ctx, service.ID)
+			histories[service.UID] = history
+			observedSince, err := s.store.LoadObservationStart(ctx, service.UID)
 			if err != nil {
-				return fmt.Errorf("恢复服务 %q 观测起点失败: %w", service.ID, err)
+				return fmt.Errorf("恢复服务 %q 观测起点失败: %w", service.Model, err)
 			}
-			observationStarts[service.ID] = observedSince
-			lastHistory, err := s.store.LoadHistory(ctx, service.ID, 1)
+			observationStarts[service.UID] = observedSince
+			lastHistory, err := s.store.LoadHistory(ctx, service.UID, 1)
 			if err != nil {
-				return fmt.Errorf("恢复服务 %q 最新状态失败: %w", service.ID, err)
+				return fmt.Errorf("恢复服务 %q 最新状态失败: %w", service.Model, err)
 			}
 			if len(lastHistory) > 0 {
 				last := lastHistory[0]
-				lastResults[service.ID] = &last
+				lastResults[service.UID] = &last
 			}
 		}
 	}
@@ -71,12 +71,12 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 	order := make([]string, 0, len(services))
 	seen := make(map[string]struct{}, len(services))
 	for _, service := range services {
-		seen[service.ID] = struct{}{}
-		state, exists := current[service.ID]
+		seen[service.UID] = struct{}{}
+		state, exists := current[service.UID]
 		if !exists {
 			nextGeneration++
-			history := histories[service.ID]
-			observedSince := observationStarts[service.ID]
+			history := histories[service.UID]
+			observedSince := observationStarts[service.UID]
 			if observedSince == 0 {
 				observedSince = now
 			}
@@ -87,7 +87,7 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 			if !service.IsEnabled() {
 				state.pauses = append(state.pauses, model.PauseSpan{From: now})
 			}
-			if last := lastResults[service.ID]; last != nil {
+			if last := lastResults[service.UID]; last != nil {
 				copy := *last
 				state.last = &copy
 			} else if len(history) > 0 {
@@ -117,19 +117,19 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 			}
 			state.svc = service
 			if s.store != nil {
-				state.history = append([]model.ProbeResult(nil), histories[service.ID]...)
-				if observedSince := observationStarts[service.ID]; observedSince > 0 &&
+				state.history = append([]model.ProbeResult(nil), histories[service.UID]...)
+				if observedSince := observationStarts[service.UID]; observedSince > 0 &&
 					(state.observedSince == 0 || observedSince < state.observedSince) {
 					state.observedSince = observedSince
 				}
-				if last := lastResults[service.ID]; last != nil {
+				if last := lastResults[service.UID]; last != nil {
 					copy := *last
 					state.last = &copy
 				}
 			}
 		}
-		next[service.ID] = state
-		order = append(order, service.ID)
+		next[service.UID] = state
+		order = append(order, service.UID)
 	}
 
 	removed := make([]string, 0, len(current))

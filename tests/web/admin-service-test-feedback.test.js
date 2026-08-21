@@ -18,7 +18,7 @@ test('服务测试立即显示进度并保留成功结果', async () => {
 
   const request = showServiceTestResult({
     api,
-    id: 'service-1',
+    uid: 'service-1',
     result,
     button,
   });
@@ -44,7 +44,7 @@ test('服务测试转义探测错误并保留失败反馈', async () => {
       latency_ms: 25,
       error: '<img src=x onerror=alert(1)>',
     }),
-    id: 'service-1',
+    uid: 'service-1',
     result,
     button,
   });
@@ -56,7 +56,7 @@ test('服务测试转义探测错误并保留失败反馈', async () => {
     api: async () => {
       throw new Error('connection refused');
     },
-    id: 'service-1',
+    uid: 'service-1',
     result,
     button,
   });

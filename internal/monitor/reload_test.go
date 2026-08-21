@@ -29,8 +29,8 @@ func TestReloadPreservesHistory(t *testing.T) {
 		t.Fatalf("服务数 = %d", len(snap.Services))
 	}
 	svc := snap.Services[0]
-	if svc.Model != "renamed" {
-		t.Errorf("Model = %q，期望 renamed", svc.Model)
+	if svc.Name != "renamed" {
+		t.Errorf("Name = %q，期望 renamed", svc.Name)
 	}
 	if len(svc.History) != 2 {
 		t.Errorf("历史应保留 2 条，got %d", len(svc.History))
@@ -43,6 +43,33 @@ func TestReloadPreservesHistory(t *testing.T) {
 	}
 	if snap.AllOK {
 		t.Error("存在失败服务时 all_ok 应为 false")
+	}
+}
+
+func TestReloadEditedModelPreservesUIDHistory(t *testing.T) {
+	store := openTestStore(t)
+	s := New(store, nil)
+	service := testSvc("stable-uid", true)
+	service.Model = "old-model"
+	if err := s.Reload([]model.Service{service}, defaultPage()); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	s.record("stable-uid", model.ProbeResult{OK: true, TS: now, StartedAt: now})
+
+	updated := service
+	updated.Model = "new-model"
+	if err := s.Reload([]model.Service{updated}, defaultPage()); err != nil {
+		t.Fatal(err)
+	}
+
+	state := s.states["stable-uid"]
+	if state == nil || state.svc.Model != "new-model" || len(state.history) != 1 {
+		t.Fatalf("修改 model 后应沿用 UID 运行态与历史: %+v", state)
+	}
+	history, err := store.LoadHistory(context.Background(), "stable-uid", 10)
+	if err != nil || len(history) != 1 {
+		t.Fatalf("修改 model 后持久化历史应保留: history=%+v err=%v", history, err)
 	}
 }
 
@@ -396,7 +423,7 @@ func TestReloadFailurePreservesPreviousRuntimeState(t *testing.T) {
 		t.Fatal("持久化历史删除失败时 Reload 应失败")
 	}
 	snapshot := s.Snapshot()
-	if len(snapshot.Services) != 2 || snapshot.Services[0].ID != "s1" || snapshot.Services[1].ID != "s2" {
+	if len(snapshot.Services) != 2 || snapshot.Services[0].Model != "s1" || snapshot.Services[1].Model != "s2" {
 		t.Fatalf("Reload 失败后应保留原运行状态: %+v", snapshot.Services)
 	}
 }
