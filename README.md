@@ -206,7 +206,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 
 所有修改原子写回配置文件并即时热重载，无需重启。
 
-状态页按每个服务自己的 `interval_sec` 展示当前 interval 之前最近 `history_len` 个完整等宽时间桶。桶边界与 interval 固定对齐，只在进入下一个 interval 时推进；每次已完成探测覆盖从请求开始到请求完成或正常调度周期结束的观测区间，因此页面刷新、不同服务的启动相位和模型请求耗时不会制造空桶。`coverage` 表示已有探测结果或正在探测的观测桶数量；配置字段仍为 `show_samples`，以兼容已有配置。跨过完整桶仍在等待模型响应时显示 `probing`，启动前显示 `not started`，当前进程记录到的明确禁用期间显示 `paused`，完整 interval 内没有任何观测覆盖才显示 `no data`；这些非结果状态都不计为探测失败。
+状态页按每个服务自己的 `interval_sec` 展示当前 interval 之前最近 `history_len` 个完整等宽时间桶。桶边界与 interval 固定对齐，只在进入下一个 interval 时推进；每次已完成探测覆盖从请求开始到请求完成或正常调度周期结束的观测区间，因此页面刷新、不同服务的启动相位和模型请求耗时不会制造空桶。`/api/status` 通过 `services[].timeline` 在服务端统一生成权威时间线，浏览器只负责渲染；原有 `history`、`pauses`、`observed_since` 和 `current_probe_started_at` 字段继续保留。`coverage` 表示已有探测结果或正在探测的观测桶数量；配置字段仍为 `show_samples`，以兼容已有配置。跨过完整桶仍在等待模型响应时显示 `probing`，启动前显示 `not started`，当前进程记录到的明确禁用期间显示 `paused`，完整 interval 内没有任何观测覆盖才显示 `no data`；这些非结果状态都不计为探测失败。
 
 热力图先要求时间格达到 50% 探测覆盖率，再按聚合结果判定状态：失败率达到 20% 为 `failing`；失败或慢响应合计达到 5%，或成功请求的 p95 延迟超过服务的 `warning_sec`，为 `warning`；其余为 `healthy`。低覆盖率显示 `insufficient`，没有观测显示 `unobserved`。
 
@@ -217,7 +217,7 @@ Telegram 通知与探针的 `enabled` 开关独立：订阅可以选择配置中
 | 端点 | 方法 | 认证 | 说明 |
 |---|---|---|---|
 | `/healthz` | GET | 公开 | 轻量进程健康检查（`204 No Content`） |
-| `/api/status` | GET | 公开 | 状态页数据（保持状态 API 的稳定数据结构） |
+| `/api/status` | GET | 公开 | 状态页数据（新增服务端聚合 `timeline`，保留原有字段） |
 | `/api/heatmap?range=1d\|7d\|30d` | GET | 公开 | 按北京时间自然日聚合的健康状态热力图；默认 `7d`，兼容 `day`/`week`/`month` 旧参数 |
 | `/api/admin/setup-status` | GET | 公开 | 管理密码是否已配置（前端选择登录/设置视图） |
 | `/api/admin/setup` | POST | — | 首次设置管理密码（仅未配置时可用） |
@@ -256,11 +256,12 @@ internal/
   httpserver/           HTTP 路由、认证与静态资源服务
     web/                状态页、配置页、样式、脚本与字体
   model/                领域模型（服务定义、探测结果、页面配置）
-  monitor/              探测调度、并发控制、历史窗口与状态快照
+  monitor/              探测调度、并发控制与一致状态快照
     probe/              协议探针适配器（chat / response / message / http）
   notification/         Telegram 聚合模板、outbox 与可靠投递
   settings/             YAML 配置加载、校验、归一化与原子写回
   storage/sqlite/       SQLite 历史、状态变化 ledger 与通知 outbox
+  timeline/             完整观测时间窗与权威状态时间线投影
   update/               稳定版本检查、镜像确认与容器更新触发
 tests/
   integration/          跨内部模块的 Go 行为测试

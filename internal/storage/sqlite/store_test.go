@@ -102,7 +102,7 @@ func TestLoadResultsBetweenUsesHalfOpenRange(t *testing.T) {
 func TestLoadResultsStartedBetweenUsesCompletedWindowBoundaries(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	for _, startedAt := range []int64{40, 100, 100, 160, 220, 280} {
+	for _, startedAt := range []int64{40, 40, 100, 100, 160, 220, 280} {
 		result := model.ProbeResult{OK: true, TS: startedAt + 5, StartedAt: startedAt}
 		if err := s.AppendResult(ctx, "svc-a", result); err != nil {
 			t.Fatal(err)
@@ -112,7 +112,7 @@ func TestLoadResultsStartedBetweenUsesCompletedWindowBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 6 || results[0].StartedAt != 40 || results[1].StartedAt != 100 || results[2].StartedAt != 100 || results[5].StartedAt != 280 {
+	if len(results) != 7 || results[0].StartedAt != 40 || results[1].StartedAt != 40 || results[2].StartedAt != 100 || results[3].StartedAt != 100 || results[6].StartedAt != 280 {
 		t.Fatalf("完整时间窗边界错误: %+v", results)
 	}
 	observedSince, err := s.LoadObservationStart(ctx, "svc-a")

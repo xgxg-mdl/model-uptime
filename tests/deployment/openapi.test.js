@@ -91,3 +91,34 @@ test('OpenAPI distinguishes setup validation from login authentication', () => {
   assert.equal(contract.components.schemas.SetupTokenRequest.properties.token.minLength, 8);
   assert.equal(contract.components.schemas.LoginTokenRequest.properties.token.minLength, 1);
 });
+
+test('OpenAPI defines the server-generated status timeline contract', () => {
+  const serviceSchema = contract.components.schemas.StatusService;
+  const slotSchema = contract.components.schemas.StatusTimelineSlot;
+
+  assert.deepEqual(serviceSchema.required, [
+    'id',
+    'model',
+    'interval_sec',
+    'warning_sec',
+    'uptime_pct',
+    'last',
+    'history',
+    'timeline',
+  ]);
+  assert.equal(serviceSchema.properties.timeline.items.$ref, '#/components/schemas/StatusTimelineSlot');
+  assert.equal(serviceSchema.properties.timeline.minItems, 1);
+  assert.equal(serviceSchema.properties.timeline.maxItems, 200);
+  assert.deepEqual(slotSchema.required, ['start_ts', 'end_ts', 'status', 'observation_count']);
+  assert.equal(slotSchema.properties.observation_count.minimum, 0);
+  assert.deepEqual(slotSchema.properties.status.enum, [
+    'healthy',
+    'slow',
+    'failing',
+    'probing',
+    'paused',
+    'unobserved',
+    'not-started',
+  ]);
+  assert.equal(slotSchema.properties.result.$ref, '#/components/schemas/ProbeResult');
+});

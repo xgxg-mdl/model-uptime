@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+var statusTimelineStates = map[string]bool{
+	"healthy":     true,
+	"slow":        true,
+	"failing":     true,
+	"probing":     true,
+	"paused":      true,
+	"unobserved":  true,
+	"not-started": true,
+}
+
 func TestStatusEndpoint(t *testing.T) {
 	ts := newIntegrationServer(t)
 	code, out := doJSON(t, ts, http.MethodGet, "/api/status", "", nil)
@@ -33,6 +43,36 @@ func TestStatusEndpoint(t *testing.T) {
 	}
 	if got, ok := svc["warning_sec"].(float64); !ok || got != 30 {
 		t.Errorf("warning_sec = %v，期望 30", svc["warning_sec"])
+	}
+	if _, ok := svc["last"]; !ok {
+		t.Error("缺少兼容字段 last")
+	}
+	if _, ok := svc["history"].([]any); !ok {
+		t.Errorf("history 应为数组，got %T", svc["history"])
+	}
+	timeline, ok := svc["timeline"].([]any)
+	if !ok || len(timeline) != 60 {
+		t.Fatalf("timeline 长度 = %d，期望 60；原始值 = %v", len(timeline), svc["timeline"])
+	}
+	for index, item := range timeline {
+		slot, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("timeline[%d] = %T，期望对象", index, item)
+		}
+		start, startOK := slot["start_ts"].(float64)
+		end, endOK := slot["end_ts"].(float64)
+		status, statusOK := slot["status"].(string)
+		_, countOK := slot["observation_count"].(float64)
+		if !startOK || !endOK || !statusOK || !countOK {
+			t.Errorf("timeline[%d] 缺少基础字段或字段类型错误: %v", index, slot)
+			continue
+		}
+		if start >= end {
+			t.Errorf("timeline[%d] 时间范围无效: start_ts=%v, end_ts=%v", index, start, end)
+		}
+		if !statusTimelineStates[status] {
+			t.Errorf("timeline[%d].status = %q", index, status)
+		}
 	}
 	if _, ok := out["page"]; ok {
 		t.Errorf("状态数据不应混入 page 配置: %v", out["page"])

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/model"
+	"github.com/xgxg-mdl/model-uptime/internal/timeline"
 )
 
 const transitionAggregationDelay = 3 * time.Second
@@ -63,16 +64,22 @@ func (s *Scheduler) recordGenerationContext(ctx context.Context, id string, gene
 	history = append(history, r)
 	statsHistory := history
 	if historyLimit > 0 {
-		windowEnd := completedWindowEnd(r.StartedAt, service.IntervalSec)
-		cutoff := windowEnd - int64(historyLimit)*int64(service.IntervalSec)
+		cutoff := timeline.CompletedWindow(r.StartedAt, service.IntervalSec, historyLimit).Start
 		first := 0
 		for first < len(history) && probeStartedAt(history[first]) <= cutoff {
 			first++
 		}
 		statsHistory = history[first:]
-		// 保留窗口起点前最后一次结果，前端需要它判断上一观测周期是否覆盖左边界。
-		if first > 1 {
-			history = append([]model.ProbeResult(nil), history[first-1:]...)
+		// 同一启动时间可能有多次手动探测；整组保留才能稳定聚合最严重结果。
+		retainFrom := first
+		if first > 0 {
+			predecessorStartedAt := probeStartedAt(history[first-1])
+			for retainFrom > 0 && probeStartedAt(history[retainFrom-1]) == predecessorStartedAt {
+				retainFrom--
+			}
+		}
+		if retainFrom > 0 {
+			history = append([]model.ProbeResult(nil), history[retainFrom:]...)
 		}
 	}
 	var change *model.StatusChange

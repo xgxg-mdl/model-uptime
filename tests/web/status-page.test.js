@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import {
   axisLabels,
-  buildTimeBuckets,
   createStatusPoller,
   createStatusRenderer,
   resultStatus,
@@ -34,7 +33,18 @@ function statusData(service) {
   };
 }
 
+function timelineSlot(startTimestamp, status, overrides = {}) {
+  return {
+    start_ts: startTimestamp,
+    end_ts: startTimestamp + 60,
+    status,
+    observation_count: 0,
+    ...overrides,
+  };
+}
+
 function service(overrides = {}) {
+  const last = { ts: 355, started_at: 350, ok: true, latency_ms: 12 };
   return {
     id: 'service-1',
     name: 'Primary Model',
@@ -42,11 +52,15 @@ function service(overrides = {}) {
     model: 'gpt-5',
     interval_sec: 60,
     warning_sec: 30,
-    observed_since: 100,
     uptime_pct: 99.9,
-    history: [{ ts: 355, started_at: 350, ok: true, latency_ms: 12 }],
-    pauses: [],
-    last: { ts: 355, started_at: 350, ok: true, latency_ms: 12 },
+    timeline: [
+      timelineSlot(120, 'unobserved'),
+      timelineSlot(180, 'unobserved'),
+      timelineSlot(240, 'unobserved'),
+      timelineSlot(300, 'healthy', { observation_count: 1, result: last }),
+      timelineSlot(360, 'healthy', { observation_count: 1, result: last }),
+    ],
+    last,
     ...overrides,
   };
 }
@@ -62,122 +76,7 @@ function render(data, page = pageConfig()) {
   return { document, renderer };
 }
 
-test('完整时间桶使用固定边界并接收不同启动相位的观测周期', () => {
-  const buckets = buildTimeBuckets(
-    service({
-      observed_since: 145,
-      history: [145, 205, 265, 325, 385].map(startedAt => ({
-        ts: startedAt + 5,
-        started_at: startedAt,
-        ok: true,
-        latency_ms: 10,
-      })),
-    }),
-    5,
-    420,
-  );
-
-  assert.deepEqual(
-    buckets.map(bucket => bucket.kind),
-    ['ok', 'ok', 'ok', 'ok', 'ok'],
-  );
-  assert.deepEqual(
-    buckets.map(bucket => [bucket.from, bucket.to]),
-    [
-      [120, 180],
-      [180, 240],
-      [240, 300],
-      [300, 360],
-      [360, 420],
-    ],
-  );
-});
-
-test('当前 interval 内刷新时保持完整时间桶边界固定', () => {
-  const early = buildTimeBuckets(service(), 5, 421);
-  const late = buildTimeBuckets(service(), 5, 479);
-  assert.deepEqual(
-    early.map(bucket => [bucket.from, bucket.to]),
-    late.map(bucket => [bucket.from, bucket.to]),
-  );
-});
-
-test('完整时间桶区分启动前、暂停、缺失并聚合同桶最严重结果', () => {
-  const buckets = buildTimeBuckets(
-    service({
-      observed_since: 170,
-      history: [
-        { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
-        { ts: 255, started_at: 250, ok: true, latency_ms: 20 },
-        { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
-      ],
-      pauses: [{ from: 300, to: 360 }],
-    }),
-    5,
-    420,
-  );
-
-  assert.deepEqual(
-    buckets.map(bucket => bucket.kind),
-    ['not-started', 'ok', 'bad', 'paused', 'unobserved'],
-  );
-  assert.equal(buckets[2].results.length, 3);
-  assert.equal(buckets[2].result.ok, false);
-});
-
-test('跨过完整桶的在途请求覆盖上一结果的尾部并显示 probing', () => {
-  const buckets = buildTimeBuckets(
-    service({
-      history: [{ ts: 421, started_at: 359, ok: true, latency_ms: 62_000 }],
-      current_probe_started_at: 421,
-    }),
-    5,
-    480,
-  );
-
-  assert.equal(buckets.at(-1).results.length, 1);
-  assert.equal(buckets.at(-1).kind, 'probing');
-  assert.equal(buckets.at(-1).probeStartedAt, 421);
-});
-
-test('已完成探测覆盖请求耗时和正常调度间隔，不制造空桶', () => {
-  const buckets = buildTimeBuckets(
-    service({
-      observed_since: 120,
-      history: [
-        { ts: 190, started_at: 120, ok: true, latency_ms: 70_000 },
-        { ts: 260, started_at: 191, ok: true, latency_ms: 69_000 },
-        { ts: 330, started_at: 261, ok: true, latency_ms: 69_000 },
-        { ts: 400, started_at: 331, ok: true, latency_ms: 69_000 },
-      ],
-    }),
-    5,
-    420,
-  );
-
-  assert.ok(buckets.every(bucket => bucket.kind !== 'unobserved'));
-});
-
-test('完整 interval 没有观测覆盖时仍保留真正的 no data', () => {
-  const buckets = buildTimeBuckets(
-    service({
-      observed_since: 120,
-      history: [
-        { ts: 130, started_at: 120, ok: true, latency_ms: 10_000 },
-        { ts: 310, started_at: 300, ok: true, latency_ms: 10_000 },
-      ],
-    }),
-    5,
-    420,
-  );
-
-  assert.deepEqual(
-    buckets.map(bucket => bucket.kind),
-    ['ok', 'unobserved', 'unobserved', 'ok', 'unobserved'],
-  );
-});
-
-test('底部刻度按固定 60 个时间桶显示相对分钟或小时', () => {
+test('状态页底部刻度按 timeline slot 数显示相对分钟或小时', () => {
   assert.deepEqual(axisLabels(60, 60), ['-1h', '-45m', '-30m', '-15m', 'now']);
   assert.deepEqual(axisLabels(60, 300), ['-5h', '-3.8h', '-2.5h', '-1.3h', 'now']);
 });
@@ -239,7 +138,6 @@ test('监控命令的模型统一使用参数色，不映射服务可用性', ()
   const failing = service({
     id: 'failing',
     model: 'gpt-5.4-mini',
-    history: [{ ts: 355, started_at: 350, ok: false, latency_ms: 12 }],
     last: { ts: 355, started_at: 350, ok: false, latency_ms: 12 },
   });
   const { document } = render({
@@ -256,10 +154,11 @@ test('监控命令的模型统一使用参数色，不映射服务可用性', ()
   );
 });
 
-test('慢响应在服务状态、历史条、耗时和总览中显示 warning', () => {
+test('慢响应在服务状态、timeline 状态条、耗时和总览中显示 warning', () => {
+  const slowResult = { ts: 355, started_at: 350, ok: true, latency_ms: 30_001 };
   const slow = service({
-    history: [{ ts: 355, started_at: 350, ok: true, latency_ms: 30_001 }],
-    last: { ts: 355, started_at: 350, ok: true, latency_ms: 30_001 },
+    timeline: [timelineSlot(360, 'slow', { observation_count: 1, result: slowResult })],
+    last: slowResult,
   });
   const { document } = render(statusData(slow));
   const output = document.getElementById('svc-out');
@@ -276,61 +175,92 @@ test('慢响应在服务状态、历史条、耗时和总览中显示 warning', 
   assert.match(document.getElementById('tip').textContent, /WARNING/);
 });
 
-test('状态页严格渲染完整时间桶并按观测覆盖统计 coverage', () => {
-  const partial = service({
-    observed_since: 170,
-    history: [
-      { ts: 195, started_at: 190, ok: true, latency_ms: 10 },
-      { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
+test('状态页适配服务端 timeline 状态并按实际 slot 数统计 coverage', () => {
+  const healthyResult = { ts: 195, started_at: 190, ok: true, latency_ms: 10 };
+  const slowResult = { ts: 255, started_at: 250, ok: true, latency_ms: 30_001 };
+  const failingResult = { ts: 315, started_at: 310, ok: false, latency_ms: 20 };
+  const projected = service({
+    timeline: [
+      timelineSlot(120, 'not-started'),
+      timelineSlot(180, 'healthy', { observation_count: 1, result: healthyResult }),
+      timelineSlot(240, 'slow', { observation_count: 2, result: slowResult }),
+      timelineSlot(300, 'failing', { observation_count: 1, result: failingResult }),
+      timelineSlot(360, 'probing', { probe_started_at: 381 }),
+      timelineSlot(420, 'paused'),
+      timelineSlot(480, 'unobserved'),
     ],
-    pauses: [{ from: 300, to: 360 }],
-    last: { ts: 255, started_at: 250, ok: false, latency_ms: 20 },
+    last: failingResult,
   });
-  const { document } = render(statusData(partial));
+  const { document } = render(statusData(projected));
   const bars = findAll(document.getElementById('svc-out'), element => element.classList.contains('bar'));
   assert.deepEqual(
     bars.map(bar => bar.className),
-    ['bar not-started', 'bar ok', 'bar bad', 'bar paused', 'bar unobserved'],
+    ['bar not-started', 'bar ok', 'bar warning', 'bar bad', 'bar probing', 'bar paused', 'bar unobserved'],
   );
-  assert.match(document.getElementById('svc-out').textContent, /coverage 2\/5/);
+  assert.match(document.getElementById('svc-out').textContent, /coverage 4\/7/);
 
   bars[4].dispatchEvent({ type: 'focus' });
+  assert.match(document.getElementById('tip').textContent, /PROBING/);
+
+  bars[6].dispatchEvent({ type: 'focus' });
   assert.match(document.getElementById('tip').textContent, /NO DATA/);
 });
 
-test('慢请求跨越多个完整桶时 coverage 统计被覆盖桶而非请求数', () => {
-  const slow = service({
-    observed_since: 120,
-    history: [{ ts: 245, started_at: 120, ok: true, latency_ms: 125_000 }],
-    last: { ts: 245, started_at: 120, ok: true, latency_ms: 125_000 },
+test('历史结果不会代替服务端 timeline 生成状态条', () => {
+  const projected = service({
+    timeline: [timelineSlot(300, 'unobserved'), timelineSlot(360, 'unobserved')],
+    history: [{ ts: 355, started_at: 120, ok: false, latency_ms: 235_000 }],
   });
-  const { document } = render(statusData(slow));
+  const { document } = render(statusData(projected));
+  const output = document.getElementById('svc-out');
+  const bars = findAll(output, element => element.classList.contains('bar'));
 
-  assert.match(document.getElementById('svc-out').textContent, /coverage 3\/5/);
+  assert.deepEqual(
+    bars.map(bar => bar.className),
+    ['bar unobserved', 'bar unobserved'],
+  );
+  assert.match(output.textContent, /coverage 0\/2/);
+});
+
+test('未知 timeline 状态安全回退为 unobserved', () => {
+  const projected = service({
+    timeline: [
+      timelineSlot(300, 'constructor', {
+        observation_count: 1,
+        result: { ts: 355, ok: false, latency_ms: 10 },
+      }),
+      timelineSlot(360, '__proto__'),
+    ],
+  });
+  const { document } = render(statusData(projected));
+  const output = document.getElementById('svc-out');
+  const bars = findAll(output, element => element.classList.contains('bar'));
+
+  assert.deepEqual(
+    bars.map(bar => bar.className),
+    ['bar unobserved', 'bar unobserved'],
+  );
+  assert.match(output.textContent, /coverage 0\/2/);
+  bars[0].dispatchEvent({ type: 'focus' });
+  assert.match(document.getElementById('tip').textContent, /NO DATA/);
+  assert.doesNotMatch(document.getElementById('tip').textContent, /10ms/);
 });
 
 test('状态页把服务字段和错误详情作为纯文本渲染', () => {
   const injectedName = '<img src=x onerror="globalThis.pwned=true">';
   const injectedError = '<script>globalThis.pwned=true</script>';
+  const failingResult = {
+    ts: 355,
+    started_at: 350,
+    ok: false,
+    latency_ms: 18,
+    error: injectedError,
+  };
   const failing = service({
     name: injectedName,
     model: injectedName,
-    history: [
-      {
-        ts: 355,
-        started_at: 350,
-        ok: false,
-        latency_ms: 18,
-        error: injectedError,
-      },
-    ],
-    last: {
-      ts: 355,
-      started_at: 350,
-      ok: false,
-      latency_ms: 18,
-      error: injectedError,
-    },
+    timeline: [timelineSlot(360, 'failing', { observation_count: 1, result: failingResult })],
+    last: failingResult,
   });
   const { document } = render(statusData(failing));
   const output = document.getElementById('svc-out');

@@ -83,6 +83,33 @@ func TestHistoryWindowTruncatesByTimeInsteadOfSampleCount(t *testing.T) {
 	}
 }
 
+func TestReloadInitiallyDisabledServiceRecordsPause(t *testing.T) {
+	s := New(nil, nil)
+	if err := s.Reload([]model.Service{testSvc("s1", false)}, defaultPage()); err != nil {
+		t.Fatal(err)
+	}
+
+	pauses := s.states["s1"].pauses
+	if len(pauses) != 1 || pauses[0].From == 0 || pauses[0].To != 0 {
+		t.Fatalf("初始禁用服务应记录进行中的暂停区间: %+v", pauses)
+	}
+	windowEnd := time.Now().Unix()
+	windowEnd -= windowEnd % 60
+	s.states["s1"].pauses[0].From = windowEnd - 60
+
+	if err := s.Reload([]model.Service{testSvc("s1", true)}, defaultPage()); err != nil {
+		t.Fatal(err)
+	}
+	pauses = s.states["s1"].pauses
+	if len(pauses) != 1 || pauses[0].To < pauses[0].From {
+		t.Fatalf("首次启用应闭合初始暂停区间: %+v", pauses)
+	}
+	timeline := s.snapshotAt(windowEnd).Services[0].Timeline
+	if slot := timeline[len(timeline)-1]; slot.Status != model.StatusTimelinePaused {
+		t.Fatalf("初始禁用期间应投影为 paused: %+v", slot)
+	}
+}
+
 func TestReloadPauseAndResumePreservesHistoryAndDropsOldProbe(t *testing.T) {
 	s := New(nil, nil)
 	started := make(chan struct{})

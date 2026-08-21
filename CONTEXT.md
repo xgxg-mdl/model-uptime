@@ -9,7 +9,7 @@ A per-service two-dimensional time grid showing each period as healthy, slow, fa
 _Avoid_: Cross-service status matrix, latency heatmap, uptime chart
 
 **Heatmap Cell**:
-An aggregate health state for one time bucket with at least 50% of its expected samples. Green tolerates slow samples below 20%, yellow represents slow samples at or above 20% or failures below 20%, red represents failures at or above 20%, and gray means unobserved or insufficiently observed.
+An aggregate health state for one time bucket with at least 50% of its expected samples. Green represents less than 5% combined failing and slow samples, yellow represents at least 5% combined impact or successful p95 latency above the service warning threshold, red represents at least 20% failing samples, and gray means unobserved or insufficiently observed.
 _Avoid_: Probe result, raw sample
 
 **Status Timeline Slot**:

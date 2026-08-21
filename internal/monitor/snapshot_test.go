@@ -3,10 +3,12 @@ package monitor
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/model"
+	"github.com/xgxg-mdl/model-uptime/internal/timeline"
 )
+
+const snapshotTestNow int64 = 1_700_002_800
 
 func TestPendingAndDisabled(t *testing.T) {
 	s := New(nil, nil)
@@ -20,6 +22,9 @@ func TestPendingAndDisabled(t *testing.T) {
 	svc := snap.Services[0]
 	if svc.Last != nil {
 		t.Errorf("pending 服务 Last 应为 nil: %+v", svc.Last)
+	}
+	if svc.History == nil {
+		t.Error("pending 服务 history 应为空数组而非 nil")
 	}
 	if svc.ObservedSince == 0 {
 		t.Error("pending 服务应携带观测生命周期起点")
@@ -83,7 +88,7 @@ func TestSnapshotUptimeExcludesHistoryBeforeCurrentWindow(t *testing.T) {
 	if err := s.Reload([]model.Service{service}, page); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().Unix()
+	now := snapshotTestNow
 	s.mu.Lock()
 	s.states["s1"].history = []model.ProbeResult{
 		{OK: false, TS: now - 180, StartedAt: now - 180},
@@ -91,7 +96,7 @@ func TestSnapshotUptimeExcludesHistoryBeforeCurrentWindow(t *testing.T) {
 	}
 	s.mu.Unlock()
 
-	if got := s.Snapshot().Services[0].UptimePct; got != 100 {
+	if got := s.snapshotAt(now).Services[0].UptimePct; got != 100 {
 		t.Fatalf("窗口起点前的延续记录不应进入 uptime，got %v", got)
 	}
 }
@@ -105,7 +110,7 @@ func TestSnapshotUptimeExcludesCurrentPartialInterval(t *testing.T) {
 	if err := s.Reload([]model.Service{service}, page); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().Unix()
+	now := snapshotTestNow
 	windowEnd := now - now%60
 	s.mu.Lock()
 	s.states["s1"].history = []model.ProbeResult{
@@ -114,7 +119,7 @@ func TestSnapshotUptimeExcludesCurrentPartialInterval(t *testing.T) {
 	}
 	s.mu.Unlock()
 
-	if got := s.Snapshot().Services[0].UptimePct; got != 100 {
+	if got := s.snapshotAt(now).Services[0].UptimePct; got != 100 {
 		t.Fatalf("当前未完成 interval 的结果不应进入 uptime，got %v", got)
 	}
 }
@@ -128,7 +133,8 @@ func TestSnapshotUptimeIncludesFailureAtCompletedWindowStart(t *testing.T) {
 	if err := s.Reload([]model.Service{service}, page); err != nil {
 		t.Fatal(err)
 	}
-	windowEnd := completedWindowEnd(time.Now().Unix(), service.IntervalSec)
+	now := snapshotTestNow
+	windowEnd := timeline.CompletedWindow(now, service.IntervalSec, page.HistoryLen).End
 	s.mu.Lock()
 	s.states["s1"].history = []model.ProbeResult{
 		{OK: false, TS: windowEnd - 2*int64(service.IntervalSec), StartedAt: windowEnd - 2*int64(service.IntervalSec)},
@@ -136,7 +142,7 @@ func TestSnapshotUptimeIncludesFailureAtCompletedWindowStart(t *testing.T) {
 	}
 	s.mu.Unlock()
 
-	if got := s.Snapshot().Services[0].UptimePct; got != 50 {
+	if got := s.snapshotAt(now).Services[0].UptimePct; got != 50 {
 		t.Fatalf("完整窗口首桶边界的失败结果应进入 uptime，got %v", got)
 	}
 }

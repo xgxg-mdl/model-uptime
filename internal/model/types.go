@@ -238,27 +238,51 @@ func (p *PageConfig) Validate() error {
 	return nil
 }
 
-// PauseSpan 表示一段暂停区间，用于状态页显式渲染禁用空档。
+// PauseSpan 表示一段半开暂停区间，用于状态页显式渲染禁用空档。
 // 区间在运行时由 monitor 记录，不持久化：重启后历史样本本身已表达那段时间的状态。
 type PauseSpan struct {
 	From int64 `json:"from"` // 暂停起始 unix 秒
-	To   int64 `json:"to"`   // 恢复 unix 秒（闭区间右边界）
+	To   int64 `json:"to"`   // 恢复 unix 秒（半开区间右边界）；0 表示仍在暂停
+}
+
+// StatusTimelineState 是完整观测时间桶的权威状态。
+type StatusTimelineState string
+
+const (
+	StatusTimelineHealthy    StatusTimelineState = "healthy"
+	StatusTimelineSlow       StatusTimelineState = "slow"
+	StatusTimelineFailing    StatusTimelineState = "failing"
+	StatusTimelineProbing    StatusTimelineState = "probing"
+	StatusTimelinePaused     StatusTimelineState = "paused"
+	StatusTimelineUnobserved StatusTimelineState = "unobserved"
+	StatusTimelineNotStarted StatusTimelineState = "not-started"
+)
+
+// StatusTimelineSlot 是一个服务在完整 interval 内的聚合观测投影。
+type StatusTimelineSlot struct {
+	StartTS          int64               `json:"start_ts"`
+	EndTS            int64               `json:"end_ts"`
+	Status           StatusTimelineState `json:"status"`
+	ObservationCount int                 `json:"observation_count"`
+	Result           *ProbeResult        `json:"result,omitempty"`
+	ProbeStartedAt   int64               `json:"probe_started_at,omitempty"`
 }
 
 // ServiceView 是状态 API 中单个服务的表示，保持稳定的公开状态 API 结构。
 type ServiceView struct {
-	ID             string        `json:"id"`
-	Model          string        `json:"model"`
-	Provider       string        `json:"provider,omitempty"`
-	SortOrder      int           `json:"-"`
-	IntervalSec    int           `json:"interval_sec"`
-	WarningSec     int           `json:"warning_sec"`
-	ObservedSince  int64         `json:"observed_since,omitempty"`
-	ProbeStartedAt int64         `json:"current_probe_started_at,omitempty"`
-	UptimePct      float64       `json:"uptime_pct"`
-	Last           *ProbeResult  `json:"last"`
-	History        []ProbeResult `json:"history"`
-	Pauses         []PauseSpan   `json:"pauses,omitempty"` // 运行时记录的暂停区间
+	ID             string               `json:"id"`
+	Model          string               `json:"model"`
+	Provider       string               `json:"provider,omitempty"`
+	SortOrder      int                  `json:"-"`
+	IntervalSec    int                  `json:"interval_sec"`
+	WarningSec     int                  `json:"warning_sec"`
+	ObservedSince  int64                `json:"observed_since,omitempty"`
+	ProbeStartedAt int64                `json:"current_probe_started_at,omitempty"`
+	UptimePct      float64              `json:"uptime_pct"`
+	Timeline       []StatusTimelineSlot `json:"timeline"`
+	Last           *ProbeResult         `json:"last"`
+	History        []ProbeResult        `json:"history"`
+	Pauses         []PauseSpan          `json:"pauses,omitempty"` // 运行时记录的暂停区间
 }
 
 // ServiceViewLess 定义公开页面统一使用的模型顺序：显式 order 优先，

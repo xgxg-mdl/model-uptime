@@ -63,6 +63,35 @@ func TestRecordChangeKeepsNotificationSampleLimitAtAlignedBoundary(t *testing.T)
 	}
 }
 
+func TestRecordKeepsEveryBoundaryResultForTimelineProjection(t *testing.T) {
+	s := New(nil, nil)
+	page := defaultPage()
+	page.HistoryLen = 2
+	service := testSvc("s1", true)
+	service.IntervalSec = 60
+	if err := s.Reload([]model.Service{service}, page); err != nil {
+		t.Fatal(err)
+	}
+	generation := s.states["s1"].generation
+	for _, result := range []model.ProbeResult{
+		{OK: false, TS: 65, StartedAt: 60},
+		{OK: true, TS: 66, StartedAt: 60},
+		{OK: true, TS: 125, StartedAt: 120},
+		{OK: true, TS: 185, StartedAt: 180},
+	} {
+		s.recordGeneration("s1", generation, result)
+	}
+
+	serviceView := s.snapshotAt(180).Services[0]
+	if len(serviceView.History) != 4 {
+		t.Fatalf("窗口边界的同启动结果未完整保留: %+v", serviceView.History)
+	}
+	first := serviceView.Timeline[0]
+	if first.Status != model.StatusTimelineFailing || first.ObservationCount != 2 {
+		t.Fatalf("窗口边界应聚合全部同启动结果并选择失败状态: %+v", first)
+	}
+}
+
 func claimTransitionBatch(t *testing.T, store *sqlite.Store) *model.TransitionBatch {
 	t.Helper()
 	now := time.Now().Add(transitionAggregationDelay + time.Second)

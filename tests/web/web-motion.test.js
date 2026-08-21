@@ -24,8 +24,15 @@ function service(id, ok) {
     model: 'same-model',
     interval_sec: 60,
     uptime_pct: ok ? 100 : 90,
-    history: [result],
-    pauses: [],
+    timeline: [
+      {
+        start_ts: 60,
+        end_ts: 120,
+        status: ok ? 'healthy' : 'failing',
+        observation_count: 1,
+        result,
+      },
+    ],
     last: result,
   };
 }

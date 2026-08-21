@@ -760,10 +760,32 @@ components:
         to:
           type: integer
           format: int64
+    StatusTimelineSlot:
+      type: object
+      additionalProperties: false
+      required: [start_ts, end_ts, status, observation_count]
+      properties:
+        start_ts:
+          type: integer
+          format: int64
+        end_ts:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [healthy, slow, failing, probing, paused, unobserved, not-started]
+        observation_count:
+          type: integer
+          minimum: 0
+        result:
+          $ref: '#/components/schemas/ProbeResult'
+        probe_started_at:
+          type: integer
+          format: int64
     StatusService:
       type: object
       additionalProperties: false
-      required: [id, model, interval_sec, warning_sec, uptime_pct, last, history]
+      required: [id, model, interval_sec, warning_sec, uptime_pct, last, history, timeline]
       properties:
         id:
           type: string
@@ -791,6 +813,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProbeResult'
+        timeline:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/StatusTimelineSlot'
         pauses:
           type: array
           items:

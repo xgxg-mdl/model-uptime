@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xgxg-mdl/model-uptime/internal/model"
+	"github.com/xgxg-mdl/model-uptime/internal/timeline"
 )
 
 // Reload 保留同 ID 服务的观测历史；启用状态切换被视为暂停或恢复，而非新生命周期，
@@ -44,9 +45,8 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 			if intervalSec <= 0 {
 				intervalSec = 60
 			}
-			windowEnd := completedWindowEnd(now, intervalSec)
-			windowStart := windowEnd - int64(page.HistoryLen)*int64(intervalSec)
-			history, err := s.store.LoadResultsStartedBetween(ctx, service.ID, windowStart, now)
+			window := timeline.CompletedWindow(now, intervalSec, page.HistoryLen)
+			history, err := s.store.LoadResultsStartedBetween(ctx, service.ID, window.Start, now)
 			if err != nil {
 				return fmt.Errorf("恢复服务 %q 状态页时间窗失败: %w", service.ID, err)
 			}
@@ -83,6 +83,9 @@ func (s *Scheduler) Reload(services []model.Service, page model.PageConfig) erro
 			state = &serviceState{
 				svc: service, history: append([]model.ProbeResult(nil), history...),
 				observedSince: observedSince, generation: nextGeneration,
+			}
+			if !service.IsEnabled() {
+				state.pauses = append(state.pauses, model.PauseSpan{From: now})
 			}
 			if last := lastResults[service.ID]; last != nil {
 				copy := *last
