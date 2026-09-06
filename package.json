@@ -12,8 +12,8 @@
   "devDependencies": {
     "@apidevtools/swagger-parser": "12.1.0",
     "@eslint/js": "10.0.1",
-    "eslint": "10.8.1",
-    "globals": "17.11.0",
+    "eslint": "10.9.1",
+    "globals": "17.12.0",
     "prettier": "3.9.6",
     "yaml": "2.9.0"
   }
